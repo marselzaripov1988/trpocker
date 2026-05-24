@@ -156,15 +156,23 @@ public class Tournament {
     
 
     
-    public void start() {
-        validateCanStart();
-        
+    /**
+     * Transitions to RUNNING without creating tables (used by bulk start service).
+     */
+    public void markRunningAtStart() {
+        if (status != TournamentStatus.REGISTERING && status != TournamentStatus.STARTING) {
+            throw new IllegalStateException("Tournament not in REGISTERING or STARTING status");
+        }
         this.status = TournamentStatus.RUNNING;
         this.startTime = Instant.now();
         this.levelStartTime = Instant.now();
         this.currentLevel = 1;
-        
-        
+    }
+
+    public void start() {
+        validateCanStart();
+        markRunningAtStart();
+
         registrations.forEach(reg -> {
             reg.setChips(startingChips);
             reg.startPlaying();

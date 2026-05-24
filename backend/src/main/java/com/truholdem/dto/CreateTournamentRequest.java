@@ -27,7 +27,7 @@ public record CreateTournamentRequest(
     int minPlayers,
     
     @Min(value = 2, message = "Maximum players must be at least 2")
-    @Max(value = 1000, message = "Maximum players cannot exceed 1,000")
+    @Max(value = 10000, message = "Maximum players cannot exceed 10,000")
     int maxPlayers,
     
     @Min(value = 0, message = "Buy-in cannot be negative")

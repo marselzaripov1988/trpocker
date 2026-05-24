@@ -4,6 +4,7 @@ import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
 import com.truholdem.model.TournamentType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -52,4 +53,8 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
     long countActiveTournaments();
     
     Optional<Tournament> findByIdAndStatus(UUID id, TournamentStatus status);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Tournament t SET t.status = :status WHERE t.id = :id")
+    int updateStatus(@Param("id") UUID id, @Param("status") TournamentStatus status);
 }

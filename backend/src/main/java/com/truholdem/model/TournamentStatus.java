@@ -5,6 +5,9 @@ public enum TournamentStatus {
     
     
     REGISTERING,
+
+    /** Tables and seating are being created (large-field MTT). */
+    STARTING,
     
     
     LATE_REGISTRATION,
@@ -41,5 +44,9 @@ public enum TournamentStatus {
     
     public boolean isTerminal() {
         return this == COMPLETED || this == CANCELLED;
+    }
+
+    public boolean isStarting() {
+        return this == STARTING;
     }
 }

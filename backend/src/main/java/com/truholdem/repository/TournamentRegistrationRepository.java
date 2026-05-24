@@ -2,7 +2,10 @@ package com.truholdem.repository;
 
 import com.truholdem.model.RegistrationStatus;
 import com.truholdem.model.TournamentRegistration;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,11 +32,35 @@ public interface TournamentRegistrationRepository extends JpaRepository<Tourname
     @Query("SELECT r FROM TournamentRegistration r WHERE r.tournament.id = :tournamentId ORDER BY r.currentChips DESC")
     List<TournamentRegistration> findByTournamentIdOrderByChipsDesc(@Param("tournamentId") UUID tournamentId);
 
+    @Query("SELECT r FROM TournamentRegistration r WHERE r.tournament.id = :tournamentId ORDER BY r.currentChips DESC")
+    Page<TournamentRegistration> findByTournamentIdOrderByChipsDesc(
+            @Param("tournamentId") UUID tournamentId, Pageable pageable);
+
+    @Query("SELECT r.playerId FROM TournamentRegistration r WHERE r.tournament.id = :tournamentId "
+            + "AND r.status IN ('REGISTERED', 'PLAYING') ORDER BY r.registeredAt ASC")
+    List<UUID> findPlayerIdsForSeating(@Param("tournamentId") UUID tournamentId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE tournament_registrations
+            SET status = 'PLAYING',
+                current_chips = :startingChips,
+                started_playing_at = CURRENT_TIMESTAMP
+            WHERE tournament_id = :tournamentId AND status = 'REGISTERED'
+            """, nativeQuery = true)
+    int markAllAsPlaying(@Param("tournamentId") UUID tournamentId, @Param("startingChips") int startingChips);
+
+    void deleteByTournamentIdAndPlayerId(UUID tournamentId, UUID playerId);
+
     @Query("SELECT COUNT(r) FROM TournamentRegistration r WHERE r.tournament.id = :tournamentId")
     int countByTournamentId(@Param("tournamentId") UUID tournamentId);
 
     @Query("SELECT COUNT(r) FROM TournamentRegistration r WHERE r.tournament.id = :tournamentId AND r.status IN ('REGISTERED', 'PLAYING')")
     int countActiveByTournamentId(@Param("tournamentId") UUID tournamentId);
+
+    @Query("SELECT COALESCE(SUM(r.currentChips), 0) FROM TournamentRegistration r "
+            + "WHERE r.tournament.id = :tournamentId AND r.status IN ('REGISTERED', 'PLAYING')")
+    long sumActiveChipsByTournamentId(@Param("tournamentId") UUID tournamentId);
 
     boolean existsByTournamentIdAndPlayerName(UUID tournamentId, String playerName);
     

@@ -32,6 +32,10 @@ public class AppProperties {
     @NotNull
     private final Game game = new Game();
 
+    @Valid
+    @NotNull
+    private final Tournament tournament = new Tournament();
+
     
     public Jwt getJwt() {
         return jwt;
@@ -47,6 +51,10 @@ public class AppProperties {
 
     public Game getGame() {
         return game;
+    }
+
+    public Tournament getTournament() {
+        return tournament;
     }
 
     public static class Jwt {
@@ -211,6 +219,56 @@ public class AppProperties {
 
         public void setBotThinkTime(long botThinkTime) {
             this.botThinkTime = botThinkTime;
+        }
+    }
+
+    public static class Tournament {
+        /** Hard cap for maxPlayers on create/register. */
+        @Min(2)
+        private int maxPlayersLimit = 10_000;
+
+        /** Use async table creation when registered count is at or above this value. */
+        @Min(2)
+        private int asyncStartThreshold = 500;
+
+        /** Batch size for persisting tables during tournament start. */
+        @Min(10)
+        private int startBatchSize = 200;
+
+        /** Default page size for paginated registration/leaderboard APIs. */
+        @Min(1)
+        private int defaultPageSize = 50;
+
+        public int getMaxPlayersLimit() {
+            return maxPlayersLimit;
+        }
+
+        public void setMaxPlayersLimit(int maxPlayersLimit) {
+            this.maxPlayersLimit = maxPlayersLimit;
+        }
+
+        public int getAsyncStartThreshold() {
+            return asyncStartThreshold;
+        }
+
+        public void setAsyncStartThreshold(int asyncStartThreshold) {
+            this.asyncStartThreshold = asyncStartThreshold;
+        }
+
+        public int getStartBatchSize() {
+            return startBatchSize;
+        }
+
+        public void setStartBatchSize(int startBatchSize) {
+            this.startBatchSize = startBatchSize;
+        }
+
+        public int getDefaultPageSize() {
+            return defaultPageSize;
+        }
+
+        public void setDefaultPageSize(int defaultPageSize) {
+            this.defaultPageSize = defaultPageSize;
         }
     }
 }

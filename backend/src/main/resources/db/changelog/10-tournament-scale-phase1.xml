@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2003/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Phase 1: scale indexes and uniqueness for large MTT registration -->
+    <changeSet id="10-tournament-scale-001" author="truholdem">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="tournament_registrations" indexName="idx_reg_tournament_player"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="tournament_registrations" indexName="idx_reg_tournament_player" unique="true">
+            <column name="tournament_id"/>
+            <column name="player_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="10-tournament-scale-002" author="truholdem">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="tournament_registrations" indexName="idx_reg_tournament_status"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="tournament_registrations" indexName="idx_reg_tournament_status">
+            <column name="tournament_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="10-tournament-scale-003" author="truholdem">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="tournament_registrations" indexName="idx_reg_tournament_chips"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="tournament_registrations" indexName="idx_reg_tournament_chips">
+            <column name="tournament_id"/>
+            <column name="current_chips" descending="true"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

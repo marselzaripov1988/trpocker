@@ -1,5 +1,6 @@
 package com.truholdem.service;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.*;
 import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.exception.ResourceNotFoundException;
@@ -20,12 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.TaskScheduler;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ScheduledFuture;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,13 +46,16 @@ class TournamentServiceTest {
     
     @Mock
     private ApplicationEventPublisher eventPublisher;
-    
+
     @Mock
-    private TaskScheduler taskScheduler;
-    
+    private TournamentStartService tournamentStartService;
+
     @Mock
-    private ScheduledFuture<?> scheduledFuture;
-    
+    private AppProperties appProperties;
+
+    @Mock
+    private AppProperties.Tournament tournamentProperties;
+
     @Captor
     private ArgumentCaptor<TournamentEvent> eventCaptor;
     
@@ -63,12 +63,18 @@ class TournamentServiceTest {
     
     @BeforeEach
     void setUp() {
+        when(appProperties.getTournament()).thenReturn(tournamentProperties);
+        when(tournamentProperties.getMaxPlayersLimit()).thenReturn(10_000);
+        when(tournamentProperties.getAsyncStartThreshold()).thenReturn(500);
+        when(tournamentProperties.getDefaultPageSize()).thenReturn(50);
+
         tournamentService = new TournamentService(
             tournamentRepository,
             registrationRepository,
             tableRepository,
             eventPublisher,
-            taskScheduler
+            tournamentStartService,
+            appProperties
         );
     }
     
@@ -229,10 +235,14 @@ class TournamentServiceTest {
                 .players(2, 9)
                 .buyIn(100)
                 .build();
-            
+            setTournamentId(tournament, tournamentId);
+
             when(tournamentRepository.findById(tournamentId))
                 .thenReturn(Optional.of(tournament));
-            when(tournamentRepository.save(any(Tournament.class)))
+            when(registrationRepository.countByTournamentId(tournamentId)).thenReturn(0);
+            lenient().when(registrationRepository.existsByTournamentIdAndPlayerId(eq(tournamentId), any()))
+                .thenReturn(false);
+            when(registrationRepository.save(any(TournamentRegistration.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
         }
         
@@ -246,7 +256,7 @@ class TournamentServiceTest {
             
             assertThat(result.getPlayerId()).isEqualTo(playerId);
             assertThat(result.getPlayerName()).isEqualTo("Hero");
-            assertThat(tournament.getRegistrations()).hasSize(1);
+            verify(registrationRepository).save(any(TournamentRegistration.class));
         }
         
         @Test
@@ -264,8 +274,9 @@ class TournamentServiceTest {
         @DisplayName("should reject duplicate registration")
         void shouldRejectDuplicateRegistration() {
             UUID playerId = UUID.randomUUID();
-            tournament.registerPlayer(playerId, "Hero");
-            
+            when(registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId))
+                .thenReturn(true);
+
             assertThatThrownBy(() -> 
                 tournamentService.registerPlayer(tournamentId, playerId, "Hero2"))
                 .isInstanceOf(IllegalStateException.class)
@@ -275,11 +286,8 @@ class TournamentServiceTest {
         @Test
         @DisplayName("should reject registration when tournament is full")
         void shouldRejectWhenFull() {
-            
-            for (int i = 0; i < 9; i++) {
-                tournament.registerPlayer(UUID.randomUUID(), "Player" + i);
-            }
-            
+            when(registrationRepository.countByTournamentId(tournamentId)).thenReturn(9);
+
             assertThatThrownBy(() -> 
                 tournamentService.registerPlayer(tournamentId, UUID.randomUUID(), "Extra"))
                 .isInstanceOf(IllegalStateException.class);
@@ -298,35 +306,33 @@ class TournamentServiceTest {
             // Set the tournament ID
             setTournamentId(sng, sngId);
 
-            when(tournamentRepository.findById(sngId)).thenReturn(Optional.of(sng));
-            when(tournamentRepository.save(any(Tournament.class))).thenAnswer(inv -> inv.getArgument(0));
-            doReturn(scheduledFuture).when(taskScheduler)
-                .scheduleAtFixedRate(any(Runnable.class), any(Instant.class), any(Duration.class));
-            // Add missing mock for tableRepository
-            when(tableRepository.findActiveTablesByTournament(sngId))
-                .thenAnswer(inv -> new ArrayList<>(sng.getActiveTables()));
-            when(tableRepository.saveAll(anyList()))
-                .thenAnswer(inv -> inv.getArgument(0));
-
-
             sng.registerPlayer(UUID.randomUUID(), "Player1");
             sng.registerPlayer(UUID.randomUUID(), "Player2");
 
+            when(tournamentRepository.findById(sngId)).thenReturn(Optional.of(sng));
+            when(registrationRepository.countByTournamentId(sngId)).thenReturn(2, 3);
+            lenient().when(registrationRepository.existsByTournamentIdAndPlayerId(eq(sngId), any()))
+                .thenReturn(false);
+            when(registrationRepository.save(any(TournamentRegistration.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+            when(tournamentStartService.shouldStartAsynchronously(anyInt())).thenReturn(false);
+
             tournamentService.registerPlayer(sngId, UUID.randomUUID(), "Player3");
 
-
-            verify(eventPublisher, atLeast(2)).publishEvent(any(TournamentEvent.class));
+            verify(tournamentStartService).completeStart(sngId);
+            verify(eventPublisher).publishEvent(any(TournamentPlayerRegistered.class));
         }
         
         @Test
         @DisplayName("should unregister player before start")
         void shouldUnregisterPlayer() {
             UUID playerId = UUID.randomUUID();
-            tournament.registerPlayer(playerId, "Hero");
-            
+            when(registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId))
+                .thenReturn(true);
+
             tournamentService.unregisterPlayer(tournamentId, playerId);
-            
-            assertThat(tournament.getRegistrations()).isEmpty();
+
+            verify(registrationRepository).deleteByTournamentIdAndPlayerId(tournamentId, playerId);
         }
         
         @Test
@@ -362,16 +368,17 @@ class TournamentServiceTest {
 
             when(tournamentRepository.findById(tournamentId))
                 .thenReturn(Optional.of(tournament));
-            // Use lenient() for stubs that may not be used in all tests
-            lenient().when(tournamentRepository.save(any(Tournament.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
-            lenient().doReturn(scheduledFuture).when(taskScheduler)
-                .scheduleAtFixedRate(any(Runnable.class), any(Instant.class), any(Duration.class));
-            // Add tableRepository mocks for tournament start
-            lenient().when(tableRepository.findActiveTablesByTournament(tournamentId))
-                .thenAnswer(inv -> new ArrayList<>(tournament.getActiveTables()));
-            lenient().when(tableRepository.saveAll(anyList()))
-                .thenAnswer(inv -> inv.getArgument(0));
+            when(registrationRepository.countByTournamentId(tournamentId))
+                .thenAnswer(inv -> tournament.getRegistrations().size());
+            when(tournamentStartService.shouldStartAsynchronously(anyInt())).thenReturn(false);
+            lenient().doAnswer(inv -> {
+                tournament.start();
+                return new TournamentStartResult(
+                        tournament,
+                        tournament.getRegistrations().size(),
+                        tournament.getTables().size(),
+                        tournament.getTables());
+            }).when(tournamentStartService).completeStart(tournamentId);
         }
 
         @Test
@@ -382,8 +389,7 @@ class TournamentServiceTest {
             
             tournamentService.startTournament(tournamentId);
             
-            assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.RUNNING);
-            verify(eventPublisher).publishEvent(any(TournamentStarted.class));
+            verify(tournamentStartService).completeStart(tournamentId);
         }
         
         @Test
@@ -394,23 +400,18 @@ class TournamentServiceTest {
             
             tournamentService.startTournament(tournamentId);
             
-            assertThat(tournament.getTables()).isNotEmpty();
-            verify(eventPublisher).publishEvent(any(TournamentTableCreated.class));
+            verify(tournamentStartService).completeStart(tournamentId);
         }
         
         @Test
-        @DisplayName("should schedule blind increases")
-        void shouldScheduleBlindIncreases() {
+        @DisplayName("should delegate start to tournament start service")
+        void shouldDelegateStartToStartService() {
             tournament.registerPlayer(UUID.randomUUID(), "Player1");
             tournament.registerPlayer(UUID.randomUUID(), "Player2");
-            
+
             tournamentService.startTournament(tournamentId);
-            
-            verify(taskScheduler).scheduleAtFixedRate(
-                any(Runnable.class), 
-                any(Instant.class), 
-                any(Duration.class)
-            );
+
+            verify(tournamentStartService).completeStart(tournamentId);
         }
         
         @Test
@@ -437,24 +438,15 @@ class TournamentServiceTest {
         }
         
         @Test
-        @DisplayName("should publish TournamentStarted event with correct data")
-        void shouldPublishStartedEventWithCorrectData() {
+        @DisplayName("should start when three players registered")
+        void shouldStartWithThreePlayers() {
             tournament.registerPlayer(UUID.randomUUID(), "Player1");
             tournament.registerPlayer(UUID.randomUUID(), "Player2");
             tournament.registerPlayer(UUID.randomUUID(), "Player3");
-            
+
             tournamentService.startTournament(tournamentId);
-            
-            verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
-            
-            TournamentStarted startedEvent = eventCaptor.getAllValues().stream()
-                .filter(e -> e instanceof TournamentStarted)
-                .map(e -> (TournamentStarted) e)
-                .findFirst()
-                .orElseThrow();
-            
-            assertThat(startedEvent.getPlayerCount()).isEqualTo(3);
-            assertThat(startedEvent.getPrizePool()).isEqualTo(300); 
+
+            verify(tournamentStartService).completeStart(tournamentId);
         }
     }
     
@@ -490,38 +482,10 @@ class TournamentServiceTest {
         }
         
         @Test
-        @DisplayName("should advance blind level")
-        void shouldAdvanceBlindLevel() {
-            int initialLevel = tournament.getCurrentLevel();
-            
+        @DisplayName("should delegate blind level advance")
+        void shouldDelegateBlindLevelAdvance() {
             tournamentService.advanceLevel(tournamentId);
-            
-            assertThat(tournament.getCurrentLevel()).isEqualTo(initialLevel + 1);
-        }
-        
-        @Test
-        @DisplayName("should publish TournamentLevelAdvanced event")
-        void shouldPublishLevelAdvancedEvent() {
-            tournamentService.advanceLevel(tournamentId);
-            
-            verify(eventPublisher).publishEvent(eventCaptor.capture());
-            assertThat(eventCaptor.getValue()).isInstanceOf(TournamentLevelAdvanced.class);
-            
-            TournamentLevelAdvanced event = (TournamentLevelAdvanced) eventCaptor.getValue();
-            assertThat(event.getNewLevel()).isEqualTo(2);
-        }
-        
-        @Test
-        @DisplayName("should include correct blind values in event")
-        void shouldIncludeCorrectBlindValues() {
-            tournamentService.advanceLevel(tournamentId);
-            
-            verify(eventPublisher).publishEvent(eventCaptor.capture());
-            TournamentLevelAdvanced event = (TournamentLevelAdvanced) eventCaptor.getValue();
-            
-            BlindLevel expectedLevel = tournament.getCurrentBlindLevel();
-            assertThat(event.getSmallBlind()).isEqualTo(expectedLevel.getSmallBlind());
-            assertThat(event.getBigBlind()).isEqualTo(expectedLevel.getBigBlind());
+            verify(tournamentStartService).advanceLevel(tournamentId);
         }
     }
     

@@ -1,9 +1,12 @@
 package com.truholdem.controller;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.*;
 import com.truholdem.model.*;
 import com.truholdem.service.TournamentService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -34,9 +37,11 @@ public class TournamentController {
     private static final Logger log = LoggerFactory.getLogger(TournamentController.class);
 
     private final TournamentService tournamentService;
+    private final AppProperties appProperties;
 
-    public TournamentController(TournamentService tournamentService) {
+    public TournamentController(TournamentService tournamentService, AppProperties appProperties) {
         this.tournamentService = tournamentService;
+        this.appProperties = appProperties;
     }
 
     
@@ -55,7 +60,7 @@ public class TournamentController {
         Tournament tournament = tournamentService.createTournament(request);
         
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(TournamentDetailResponse.from(tournament));
+            .body(tournamentService.getTournamentDetail(tournament.getId()));
     }
 
     
@@ -91,10 +96,7 @@ public class TournamentController {
             @PathVariable UUID id) {
         
         log.debug("Fetching tournament: {}", id);
-        
-        Tournament tournament = tournamentService.getTournament(id);
-        
-        return ResponseEntity.ok(TournamentDetailResponse.from(tournament));
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
     
@@ -116,10 +118,7 @@ public class TournamentController {
                  request.playerName(), request.playerId(), id);
         
         tournamentService.registerPlayer(id, request.playerId(), request.playerName());
-        
-        Tournament tournament = tournamentService.getTournament(id);
-        
-        return ResponseEntity.ok(TournamentDetailResponse.from(tournament));
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
     @DeleteMapping("/{id}/register/{playerId}")
@@ -158,10 +157,11 @@ public class TournamentController {
         log.info("Starting tournament: {}", id);
         
         tournamentService.startTournament(id);
-        
-        Tournament tournament = tournamentService.getTournament(id);
-        
-        return ResponseEntity.ok(TournamentDetailResponse.from(tournament));
+        TournamentDetailResponse detail = tournamentService.getTournamentDetail(id);
+        if (detail.status() == TournamentStatus.STARTING) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(detail);
+        }
+        return ResponseEntity.ok(detail);
     }
 
     @PostMapping("/{id}/pause")
@@ -178,10 +178,7 @@ public class TournamentController {
         log.info("Pausing tournament: {}", id);
         
         tournamentService.pauseTournament(id);
-        
-        Tournament tournament = tournamentService.getTournament(id);
-        
-        return ResponseEntity.ok(TournamentDetailResponse.from(tournament));
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
     
@@ -234,18 +231,26 @@ public class TournamentController {
         @ApiResponse(responseCode = "200", description = "Leaderboard entries"),
         @ApiResponse(responseCode = "404", description = "Tournament not found")
     })
-    public ResponseEntity<List<LeaderboardEntryDto>> getLeaderboard(
+    public ResponseEntity<?> getLeaderboard(
             @Parameter(description = "Tournament ID")
-            @PathVariable UUID id) {
-        
-        log.debug("Fetching leaderboard for tournament: {}", id);
-        
+            @PathVariable UUID id,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+
+        log.debug("Fetching leaderboard for tournament: {} (page={}, size={})", id, page, size);
+
+        if (page != null || size != null) {
+            int pageIndex = page != null ? page : 0;
+            int pageSize = size != null ? size : appProperties.getTournament().getDefaultPageSize();
+            Page<TournamentRegistration> registrations = tournamentService.getLeaderboard(
+                    id, PageRequest.of(pageIndex, pageSize));
+            return ResponseEntity.ok(TournamentRegistrationPageResponse.from(registrations));
+        }
+
         List<TournamentRegistration> registrations = tournamentService.getLeaderboard(id);
-        
         List<LeaderboardEntryDto> leaderboard = IntStream.range(0, registrations.size())
-            .mapToObj(i -> LeaderboardEntryDto.from(registrations.get(i), i + 1))
-            .toList();
-        
+                .mapToObj(i -> LeaderboardEntryDto.from(registrations.get(i), i + 1))
+                .toList();
         return ResponseEntity.ok(leaderboard);
     }
 

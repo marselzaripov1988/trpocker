@@ -1,7 +1,9 @@
 package com.truholdem.service;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.*;
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.TournamentDetailResponse;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.*;
 import com.truholdem.repository.TournamentRegistrationRepository;
@@ -11,15 +13,15 @@ import com.truholdem.repository.TournamentTableRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.scheduling.TaskScheduler;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledFuture;
 import java.util.stream.Collectors;
 
 
@@ -36,21 +38,21 @@ public class TournamentService {
     private final TournamentRegistrationRepository registrationRepository;
     private final TournamentTableRepository tableRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final TaskScheduler taskScheduler;
-    
-    
-    private final Map<UUID, ScheduledFuture<?>> scheduledLevelIncreases = new ConcurrentHashMap<>();
+    private final TournamentStartService tournamentStartService;
+    private final AppProperties.Tournament tournamentProperties;
 
     public TournamentService(TournamentRepository tournamentRepository,
                              TournamentRegistrationRepository registrationRepository,
                              TournamentTableRepository tableRepository,
                              ApplicationEventPublisher eventPublisher,
-                             TaskScheduler taskScheduler) {
+                             TournamentStartService tournamentStartService,
+                             AppProperties appProperties) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
         this.eventPublisher = eventPublisher;
-        this.taskScheduler = taskScheduler;
+        this.tournamentStartService = tournamentStartService;
+        this.tournamentProperties = appProperties.getTournament();
     }
 
     
@@ -82,88 +84,60 @@ public class TournamentService {
     
     public TournamentRegistration registerPlayer(UUID tournamentId, UUID playerId, String playerName) {
         log.info("Registering player {} for tournament {}", playerName, tournamentId);
-        
+
         Tournament tournament = findTournamentOrThrow(tournamentId);
-        
-        validateCanRegister(tournament, playerId);
-        
-        TournamentRegistration registration = tournament.registerPlayer(playerId, playerName);
-        tournamentRepository.save(tournament);
-        
-        int currentCount = tournament.getRegistrations().size();
-        
+        int registeredBefore = registrationRepository.countByTournamentId(tournamentId);
+
+        validateCanRegister(tournament, playerId, registeredBefore);
+
+        TournamentRegistration registration = new TournamentRegistration(tournament, playerId, playerName);
+        registration = registrationRepository.save(registration);
+
+        int currentCount = registeredBefore + 1;
+
         publishEvent(new TournamentPlayerRegistered(
-            tournamentId,
-            playerId,
-            playerName,
-            currentCount,
-            tournament.getMaxPlayers()
-        ));
-        
-        
-        if (shouldAutoStart(tournament)) {
+                tournamentId,
+                playerId,
+                playerName,
+                currentCount,
+                tournament.getMaxPlayers()));
+
+        if (shouldAutoStart(tournament, currentCount)) {
             log.info("Tournament {} is full, auto-starting", tournamentId);
             startTournament(tournamentId);
         }
-        
+
         return registration;
     }
 
     
     public void unregisterPlayer(UUID tournamentId, UUID playerId) {
         log.info("Unregistering player {} from tournament {}", playerId, tournamentId);
-        
+
         Tournament tournament = findTournamentOrThrow(tournamentId);
-        
-        if (!tournament.unregisterPlayer(playerId)) {
+        if (tournament.getStatus() != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException("Can only unregister during REGISTERING status");
+        }
+        if (!registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId)) {
             throw new IllegalStateException("Player not found in tournament");
         }
-        
-        tournamentRepository.save(tournament);
+
+        registrationRepository.deleteByTournamentIdAndPlayerId(tournamentId, playerId);
     }
 
     
     public void startTournament(UUID tournamentId) {
         log.info("Starting tournament {}", tournamentId);
-        
+
         Tournament tournament = findTournamentOrThrow(tournamentId);
-        
-        validateCanStart(tournament);
-        
-        
-        tournament.start();
-        
-        
-        tournament = tournamentRepository.save(tournament);
-        
-        // Note: Players are already seated by Tournament.start() -> createInitialTables()
-        // Do NOT call seatPlayersRandomly() here - it would cause "Player already seated" errors
-        
-        
-        scheduleLevelIncrease(tournament);
-        
-        
-        publishEvent(new TournamentStarted(
-            tournamentId,
-            tournament.getRegistrations().size(),
-            tournament.getActiveTables().size(),
-            tournament.getPrizePool()
-        ));
-        
-        
-        for (TournamentTable table : tournament.getActiveTables()) {
-            publishEvent(new TournamentTableCreated(
-                tournamentId,
-                table.getId(),
-                table.getTableNumber(),
-                table.getPlayerIds(),
-                table.isFinalTable()
-            ));
+        int registeredCount = registrationRepository.countByTournamentId(tournamentId);
+        validateCanStart(tournament, registeredCount);
+
+        if (tournamentStartService.shouldStartAsynchronously(registeredCount)) {
+            tournamentStartService.requestAsyncStart(tournamentId);
+        } else {
+            tournamentStartService.completeStart(tournamentId);
         }
-        
-        log.info("Tournament {} started with {} players at {} tables",
-                 tournamentId, tournament.getRegistrations().size(), 
-                 tournament.getActiveTables().size());
     }
 
     
@@ -176,10 +150,7 @@ public class TournamentService {
             throw new IllegalStateException("Tournament is not in a playable state");
         }
         
-        cancelScheduledLevelIncrease(tournamentId);
-        
-        
-        
+        tournamentStartService.cancelScheduledLevelIncrease(tournamentId);
         tournamentRepository.save(tournament);
     }
 
@@ -335,67 +306,10 @@ public class TournamentService {
     
 
     
-    void scheduleLevelIncrease(Tournament tournament) {
-        int durationMinutes = tournament.getBlindStructure().getLevelDurationMinutes();
-        Duration levelDuration = Duration.ofMinutes(durationMinutes);
-        
-        Runnable task = () -> {
-            try {
-                advanceLevel(tournament.getId());
-            } catch (Exception e) {
-                log.error("Error advancing level for tournament {}", tournament.getId(), e);
-            }
-        };
-        
-        ScheduledFuture<?> future = taskScheduler.scheduleAtFixedRate(
-            task, 
-            Instant.now().plus(levelDuration), 
-            levelDuration
-        );
-        
-        scheduledLevelIncreases.put(tournament.getId(), future);
-        log.debug("Scheduled level increases every {} minutes for tournament {}", 
-                  durationMinutes, tournament.getId());
-    }
-
-    
     @Transactional
     public void advanceLevel(UUID tournamentId) {
         log.info("Advancing blind level for tournament {}", tournamentId);
-        
-        Tournament tournament = findTournamentOrThrow(tournamentId);
-        
-        if (!tournament.getStatus().isPlayable()) {
-            cancelScheduledLevelIncrease(tournamentId);
-            return;
-        }
-        
-        tournament.advanceLevel();
-        tournamentRepository.save(tournament);
-        
-        BlindLevel newLevel = tournament.getCurrentBlindLevel();
-        
-        publishEvent(new TournamentLevelAdvanced(
-            tournamentId,
-            tournament.getCurrentLevel(),
-            newLevel.getSmallBlind(),
-            newLevel.getBigBlind(),
-            newLevel.getAnte(),
-            tournament.getPlayersRemaining()
-        ));
-        
-        log.info("Tournament {} advanced to level {} ({}/{})", 
-                 tournamentId, tournament.getCurrentLevel(),
-                 newLevel.getSmallBlind(), newLevel.getBigBlind());
-    }
-
-    
-    void cancelScheduledLevelIncrease(UUID tournamentId) {
-        ScheduledFuture<?> future = scheduledLevelIncreases.remove(tournamentId);
-        if (future != null) {
-            future.cancel(false);
-            log.debug("Cancelled scheduled level increases for tournament {}", tournamentId);
-        }
+        tournamentStartService.advanceLevel(tournamentId);
     }
 
     
@@ -469,8 +383,8 @@ public class TournamentService {
         Tournament tournament = findTournamentOrThrow(tournamentId);
         
         
-        cancelScheduledLevelIncrease(tournamentId);
-        
+        tournamentStartService.cancelScheduledLevelIncrease(tournamentId);
+
         // Check if winner is already determined (tournament auto-completed when last player eliminated)
         TournamentRegistration winner = tournament.getRegistrations().stream()
             .filter(r -> r.getFinishPosition() != null && r.getFinishPosition() == 1)
@@ -530,6 +444,48 @@ public class TournamentService {
         return findTournamentOrThrow(tournamentId);
     }
 
+    @Transactional(readOnly = true)
+    public TournamentDetailResponse getTournamentDetail(UUID tournamentId) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        int registered = registrationRepository.countByTournamentId(tournamentId);
+        int remaining = registrationRepository.countActiveByTournamentId(tournamentId);
+        int tableCount = tableRepository.countActiveTablesByTournament(tournamentId);
+
+        String chipLeaderName = null;
+        int chipLeaderStack = 0;
+        Page<TournamentRegistration> leaders = registrationRepository.findByTournamentIdOrderByChipsDesc(
+                tournamentId, PageRequest.of(0, 1));
+        if (leaders.hasContent()) {
+            TournamentRegistration leader = leaders.getContent().get(0);
+            chipLeaderName = leader.getPlayerName();
+            chipLeaderStack = leader.getCurrentChips();
+        }
+
+        int averageStack = 0;
+        if (remaining > 0) {
+            averageStack = (int) (registrationRepository.sumActiveChipsByTournamentId(tournamentId) / remaining);
+        }
+
+        int prizePool = tournament.getBuyIn() * registered;
+        List<TournamentDetailResponse.TableSummary> tables = List.of();
+        if (tableCount > 0 && tableCount <= 100) {
+            tables = tableRepository.findActiveTablesByTournament(tournamentId).stream()
+                    .map(TournamentDetailResponse.TableSummary::from)
+                    .toList();
+        }
+
+        return TournamentDetailResponse.fromSummary(
+                tournament,
+                registered,
+                remaining,
+                tableCount,
+                tables,
+                chipLeaderName,
+                chipLeaderStack,
+                averageStack,
+                prizePool);
+    }
+
     
     @Transactional(readOnly = true)
     public List<Tournament> getOpenTournaments() {
@@ -552,6 +508,12 @@ public class TournamentService {
     @Transactional(readOnly = true)
     public List<TournamentRegistration> getLeaderboard(UUID tournamentId) {
         return registrationRepository.findByTournamentIdOrderByChipsDesc(tournamentId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<TournamentRegistration> getLeaderboard(UUID tournamentId, Pageable pageable) {
+        findTournamentOrThrow(tournamentId);
+        return registrationRepository.findByTournamentIdOrderByChipsDesc(tournamentId, pageable);
     }
 
     
@@ -625,26 +587,37 @@ public class TournamentService {
         if (request.minPlayers() > request.maxPlayers()) {
             throw new IllegalArgumentException("Min players cannot exceed max players");
         }
+        if (request.maxPlayers() > tournamentProperties.getMaxPlayersLimit()) {
+            throw new IllegalArgumentException(
+                    "Maximum players cannot exceed " + tournamentProperties.getMaxPlayersLimit());
+        }
     }
 
-    private void validateCanRegister(Tournament tournament, UUID playerId) {
-        if (!tournament.canRegister()) {
+    private void validateCanRegister(Tournament tournament, UUID playerId, int registeredCount) {
+        if (!tournament.getStatus().allowsRegistration()) {
             throw new IllegalStateException("Tournament is not accepting registrations");
         }
-        if (tournament.isPlayerRegistered(playerId)) {
+        if (registeredCount >= tournament.getMaxPlayers()) {
+            throw new IllegalStateException("Tournament is full");
+        }
+        if (registrationRepository.existsByTournamentIdAndPlayerId(tournament.getId(), playerId)) {
             throw new IllegalStateException("Player already registered");
         }
     }
 
-    private void validateCanStart(Tournament tournament) {
-        if (!tournament.canStart()) {
-            throw new IllegalStateException("Tournament cannot start: insufficient players or wrong state");
+    private void validateCanStart(Tournament tournament, int registeredCount) {
+        if (tournament.getStatus() != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException("Tournament cannot start: wrong status " + tournament.getStatus());
+        }
+        if (registeredCount < tournament.getMinPlayers()) {
+            throw new IllegalStateException(
+                    "Tournament cannot start: insufficient players (" + registeredCount + ")");
         }
     }
 
-    private boolean shouldAutoStart(Tournament tournament) {
+    private boolean shouldAutoStart(Tournament tournament, int registeredCount) {
         return tournament.getTournamentType() == TournamentType.SIT_AND_GO
-            && tournament.getRegistrations().size() >= tournament.getMaxPlayers();
+                && registeredCount >= tournament.getMaxPlayers();
     }
 
     private Tournament buildTournament(CreateTournamentRequest request) {

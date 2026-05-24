@@ -48,62 +48,76 @@ public record TournamentDetailResponse(
     String duration
 ) {
     
+  /** @deprecated Prefer {@link #fromSummary} for large fields to avoid loading all registrations. */
+    @Deprecated
     public static TournamentDetailResponse from(Tournament tournament) {
+        return fromSummary(
+                tournament,
+                tournament.getRegistrations().size(),
+                tournament.getPlayersRemaining(),
+                tournament.getActiveTables().size(),
+                tournament.getActiveTables().stream().map(TableSummary::from).toList(),
+                tournament.getChipLeader().map(TournamentRegistration::getPlayerName).orElse(null),
+                tournament.getChipLeader().map(TournamentRegistration::getCurrentChips).orElse(0),
+                tournament.getAverageStack(),
+                tournament.getPrizePool());
+    }
+
+    /**
+     * Builds a detail view using aggregate counts (no need to load full registration/table lists).
+     */
+    public static TournamentDetailResponse fromSummary(
+            Tournament tournament,
+            int registeredPlayers,
+            int playersRemaining,
+            int tableCount,
+            List<TableSummary> tables,
+            String chipLeaderName,
+            int chipLeaderStack,
+            int averageStack,
+            int prizePool) {
         BlindLevel current = tournament.getCurrentBlindLevel();
         BlindLevel next = tournament.getBlindStructure().getLevelAt(tournament.getCurrentLevel() + 1);
-        
+
         long secondsToNext = 0;
-        if (tournament.getLevelStartTime() != null) {
+        if (tournament.getLevelStartTime() != null && tournament.getStatus().isPlayable()) {
             long elapsed = Duration.between(tournament.getLevelStartTime(), Instant.now()).toSeconds();
             long levelDuration = tournament.getBlindStructure().getLevelDurationMinutes() * 60L;
             secondsToNext = Math.max(0, levelDuration - elapsed);
         }
-        
-        String chipLeaderName = null;
-        int chipLeaderStack = 0;
-        var chipLeader = tournament.getChipLeader();
-        if (chipLeader.isPresent()) {
-            chipLeaderName = chipLeader.get().getPlayerName();
-            chipLeaderStack = chipLeader.get().getCurrentChips();
-        }
-        
+
         String durationStr = null;
         if (tournament.getStartTime() != null) {
             Duration d = Duration.between(tournament.getStartTime(), Instant.now());
             durationStr = String.format("%d:%02d:%02d", d.toHours(), d.toMinutesPart(), d.toSecondsPart());
         }
-        
-        List<TableSummary> tableSummaries = tournament.getActiveTables().stream()
-            .map(TableSummary::from)
-            .toList();
-        
+
         return new TournamentDetailResponse(
-            tournament.getId(),
-            tournament.getName(),
-            tournament.getTournamentType(),
-            tournament.getStatus(),
-            tournament.getRegistrations().size(),
-            tournament.getPlayersRemaining(),
-            tournament.getMinPlayers(),
-            tournament.getMaxPlayers(),
-            tournament.getCurrentLevel(),
-            BlindLevelInfo.from(current, tournament.getCurrentLevel()),
-            BlindLevelInfo.from(next, tournament.getCurrentLevel() + 1),
-            secondsToNext,
-            tournament.getStartingChips(),
-            tournament.getAverageStack(),
-            chipLeaderStack,
-            chipLeaderName,
-            tournament.getBuyIn(),
-            tournament.getPrizePool(),
-            tournament.getPayoutStructure(),
-            tournament.getPaidPositions(),
-            tournament.getActiveTables().size(),
-            tableSummaries,
-            tournament.getCreatedAt(),
-            tournament.getStartTime(),
-            durationStr
-        );
+                tournament.getId(),
+                tournament.getName(),
+                tournament.getTournamentType(),
+                tournament.getStatus(),
+                registeredPlayers,
+                playersRemaining,
+                tournament.getMinPlayers(),
+                tournament.getMaxPlayers(),
+                tournament.getCurrentLevel(),
+                BlindLevelInfo.from(current, tournament.getCurrentLevel()),
+                BlindLevelInfo.from(next, tournament.getCurrentLevel() + 1),
+                secondsToNext,
+                tournament.getStartingChips(),
+                averageStack,
+                chipLeaderStack,
+                chipLeaderName,
+                tournament.getBuyIn(),
+                prizePool,
+                tournament.getPayoutStructure(),
+                tournament.getPaidPositions(),
+                tableCount,
+                tables,
+                tournament.getCreatedAt(),
+                tournament.getStartTime(),
+                durationStr);
     }
     
     
