@@ -149,10 +149,11 @@ export class StatisticsService {
   }
 
   formatCurrency(amount: number): string {
+    const formatted = Math.abs(amount).toLocaleString('en-US');
     if (amount < 0) {
-      return `-$${Math.abs(amount).toLocaleString()}`;
+      return `-$${formatted}`;
     }
-    return `$${amount.toLocaleString()}`;
+    return `$${formatted}`;
   }
 
   formatAggressionFactor(af: number): string {
