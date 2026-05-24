@@ -9,11 +9,15 @@ import {
 import { Game } from '../model/game';
 import { Player } from '../model/player';
 import { environment } from '../../environments/environment';
+import { WebSocketService } from '../services/websocket.service';
+import { of } from 'rxjs';
 
 describe('GameStore', () => {
   let store: GameStore;
   let httpMock: HttpTestingController;
+  let wsServiceMock: jasmine.SpyObj<WebSocketService>;
   const apiUrl = `${environment.apiUrl}/poker`;
+  const gameApiV1Url = `${environment.apiUrl}/v1/poker/game`;
 
 
 
@@ -56,9 +60,24 @@ describe('GameStore', () => {
   } as Game);
 
   beforeEach(() => {
+    wsServiceMock = jasmine.createSpyObj('WebSocketService', [
+      'connect',
+      'disconnect',
+      'subscribeToGame',
+      'unsubscribeFromGame',
+      'isConnected'
+    ], {
+      gameUpdates$: of(),
+      connectionStatus$: of(false)
+    });
+    wsServiceMock.isConnected.and.returnValue(false);
+
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
-      providers: [GameStore]
+      providers: [
+        GameStore,
+        { provide: WebSocketService, useValue: wsServiceMock }
+      ]
     });
 
     store = TestBed.inject(GameStore);
@@ -1025,6 +1044,55 @@ describe('GameStore', () => {
 
 
 
+
+  describe('Tournament game mode', () => {
+    it('connectToTournamentGame should load game from v1 API', fakeAsync(() => {
+      const game = createMockGame({ id: 'tournament-game-1' });
+
+      store.connectToTournamentGame('tournament-game-1');
+      tick();
+
+      const req = httpMock.expectOne(`${gameApiV1Url}/tournament-game-1`);
+      expect(req.request.method).toBe('GET');
+      req.flush(game);
+
+      tick();
+
+      store.game$.subscribe(g => {
+        expect(g?.id).toBe('tournament-game-1');
+      });
+
+      if (environment.enableWebSocket) {
+        expect(wsServiceMock.subscribeToGame).toHaveBeenCalledWith('tournament-game-1');
+      }
+
+      flush();
+    }));
+
+    it('playerAction should POST to v1 endpoint in tournament mode', fakeAsync(() => {
+      const game = createMockGame({ id: 'tournament-game-2' });
+
+      store.connectToTournamentGame('tournament-game-2');
+      tick();
+      httpMock.expectOne(`${gameApiV1Url}/tournament-game-2`).flush(game);
+      tick();
+
+      store.playerAction({ playerId: 'human-1', action: 'CALL' });
+      tick();
+
+      const actionReq = httpMock.expectOne(
+        `${gameApiV1Url}/tournament-game-2/player/human-1/action`
+      );
+      expect(actionReq.request.method).toBe('POST');
+      expect(actionReq.request.body).toEqual(
+        expect.objectContaining({ playerId: 'human-1', action: 'CALL', amount: 0 })
+      );
+      actionReq.flush(createMockGame({ id: 'tournament-game-2', currentPot: 120 }));
+
+      tick();
+      flush();
+    }));
+  });
 
   describe('Edge Cases', () => {
     it('should handle game with empty players', (done) => {

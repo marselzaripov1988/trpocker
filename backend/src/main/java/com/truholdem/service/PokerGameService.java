@@ -29,6 +29,8 @@ import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.game.GameStateService;
+import com.truholdem.service.tournament.TournamentChipSyncService;
+import com.truholdem.service.tournament.TournamentTableShardService;
 
 @Service
 @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -43,6 +45,8 @@ public class PokerGameService {
     private final GameNotificationService notificationService;
     private final AdvancedBotAIService botAIService;
     private final GameMetricsService metricsService;
+    private final TournamentTableShardService tournamentTableShardService;
+    private final TournamentChipSyncService tournamentChipSyncService;
 
     public PokerGameService(
             GameStateService gameStateService,
@@ -51,7 +55,9 @@ public class PokerGameService {
             PlayerStatisticsService playerStatisticsService,
             GameNotificationService notificationService,
             AdvancedBotAIService botAIService,
-            GameMetricsService metricsService) {
+            GameMetricsService metricsService,
+            TournamentTableShardService tournamentTableShardService,
+            TournamentChipSyncService tournamentChipSyncService) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
@@ -59,6 +65,8 @@ public class PokerGameService {
         this.notificationService = notificationService;
         this.botAIService = botAIService;
         this.metricsService = metricsService;
+        this.tournamentTableShardService = tournamentTableShardService;
+        this.tournamentChipSyncService = tournamentChipSyncService;
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -1031,9 +1039,20 @@ public class PokerGameService {
     private Game persistAfterAction(Game game) {
         if (game.isFinished()) {
             playerStatisticsService.flushBufferedActionsForGame(game);
-            return gameStateService.persistFull(game);
+            Game saved = gameStateService.persistFull(game);
+            syncTournamentChipsAfterHand(saved);
+            return saved;
         }
         return gameStateService.afterPlayerAction(game);
+    }
+
+    private void syncTournamentChipsAfterHand(Game game) {
+        if (game.getId() == null) {
+            return;
+        }
+        tournamentTableShardService.findTableForGame(game.getId())
+                .ifPresent(table -> tournamentChipSyncService.syncAfterHand(
+                        table.getTournament().getId(), game));
     }
 
     private Player findPlayerInGame(Game game, UUID playerId) {

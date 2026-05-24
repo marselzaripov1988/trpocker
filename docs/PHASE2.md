@@ -8,7 +8,8 @@ Reduce PostgreSQL load during active play by keeping authoritative in-hand state
 
 | Component | Role |
 |-----------|------|
-| `GameStateService` | Routes load/save between Redis and PostgreSQL |
+| `GameStateCoordinator` | Core routing: load/save between Redis and PostgreSQL |
+| `GameStateService` | Spring `@Service` facade over `GameStateCoordinator` |
 | `RedisGameStateStore` | JSON snapshot at `truholdem:game:state:{id}` (24h TTL) |
 | `PlayerStatisticsService` | Optional buffer for per-action stats until hand end |
 

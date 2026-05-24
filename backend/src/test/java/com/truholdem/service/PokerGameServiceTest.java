@@ -35,6 +35,8 @@ import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
 import com.truholdem.repository.GameRepository;
 import com.truholdem.service.game.GameStateService;
+import com.truholdem.service.tournament.TournamentChipSyncService;
+import com.truholdem.service.tournament.TournamentTableShardService;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -64,6 +66,12 @@ class PokerGameServiceTest {
 
     @Mock
     private GameMetricsService metricsService;
+
+    @Mock
+    private TournamentTableShardService tournamentTableShardService;
+
+    @Mock
+    private TournamentChipSyncService tournamentChipSyncService;
 
     private PokerGameService pokerGameService;
 
@@ -95,7 +103,9 @@ class PokerGameServiceTest {
                 playerStatisticsService,
                 notificationService,
                 botAIService,
-                metricsService);
+                metricsService,
+                tournamentTableShardService,
+                tournamentChipSyncService);
     }
 
     

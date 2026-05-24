@@ -5,7 +5,9 @@ import com.truholdem.config.TestSecurityConfig;
 import com.truholdem.dto.*;
 import com.truholdem.model.*;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.TournamentTableGameService;
 import com.truholdem.exception.ResourceNotFoundException;
+import com.truholdem.model.Game;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -45,6 +47,9 @@ class TournamentControllerIT {
 
     @MockitoBean
     private TournamentService tournamentService;
+
+    @MockitoBean
+    private TournamentTableGameService tableGameService;
 
     private Tournament testTournament;
     private UUID tournamentId;
@@ -455,30 +460,54 @@ class TournamentControllerIT {
         }
 
         @Test
-        @DisplayName("Should get specific table - returns 200")
+        @DisplayName("Should get specific table detail - returns 200")
         void getSpecificTable_ValidRequest_Returns200() throws Exception {
-            TournamentTable table = createMockTable(tableId, 1, 6, true);
-            when(tournamentService.getTournamentTable(tournamentId, tableId)).thenReturn(table);
+            TableDetailResponse detail = new TableDetailResponse(
+                    tableId, 1, List.of(), 6, true, true, null);
+            when(tournamentService.getTableDetail(tournamentId, tableId)).thenReturn(detail);
 
             mockMvc.perform(get(BASE_URL + "/{id}/tables/{tableId}", tournamentId, tableId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(tableId.toString()))
-                .andExpect(jsonPath("$.isFinalTable").value(true));
+                .andExpect(jsonPath("$.isFinalTable").value(true))
+                .andExpect(jsonPath("$.players").isArray());
         }
 
         @Test
         @DisplayName("Should return 404 for non-existing table")
         void getSpecificTable_NotFound_Returns404() throws Exception {
             UUID nonExistentTableId = UUID.randomUUID();
-            when(tournamentService.getTournamentTable(tournamentId, nonExistentTableId))
+            when(tournamentService.getTableDetail(tournamentId, nonExistentTableId))
                 .thenThrow(new ResourceNotFoundException("Table not found"));
 
             mockMvc.perform(get(BASE_URL + "/{id}/tables/{tableId}", tournamentId, nonExistentTableId))
                 .andExpect(status().isNotFound());
         }
-    }
 
-    
+        @Test
+        @DisplayName("Should start or resume table hand - returns 200")
+        void getOrStartTableHand_ValidRequest_Returns200() throws Exception {
+            Game game = new Game();
+            UUID gameId = UUID.randomUUID();
+            game.setId(gameId);
+            when(tableGameService.getOrStartTableHand(tournamentId, tableId)).thenReturn(game);
+
+            mockMvc.perform(post(BASE_URL + "/{id}/tables/{tableId}/hand", tournamentId, tableId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(gameId.toString()));
+        }
+
+        @Test
+        @DisplayName("Should return 404 when table hand cannot be started")
+        void getOrStartTableHand_TableNotFound_Returns404() throws Exception {
+            UUID missingTableId = UUID.randomUUID();
+            when(tableGameService.getOrStartTableHand(tournamentId, missingTableId))
+                .thenThrow(new ResourceNotFoundException("Table not found"));
+
+            mockMvc.perform(post(BASE_URL + "/{id}/tables/{tableId}/hand", tournamentId, missingTableId))
+                .andExpect(status().isNotFound());
+        }
+    }
 
     @Nested
     @DisplayName("Blinds - GET /api/tournaments/{id}/blinds")

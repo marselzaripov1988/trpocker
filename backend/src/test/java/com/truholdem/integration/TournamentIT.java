@@ -74,6 +74,9 @@ class TournamentIT {
     private PokerGameService pokerGameService;
 
     @Autowired
+    private TournamentTableGameService tableGameService;
+
+    @Autowired
     private TournamentRepository tournamentRepository;
 
     @Autowired
@@ -783,6 +786,91 @@ class TournamentIT {
             assertThat(leaderboard.get(0).getCurrentChips()).isEqualTo(3000);
             assertThat(leaderboard.get(1).getCurrentChips()).isEqualTo(2500);
             assertThat(leaderboard.get(5).getCurrentChips()).isEqualTo(0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Tournament table hand play (Phase 4a)")
+    class TableHandPlayTests {
+
+        @Test
+        @DisplayName("Should start or resume a hand on an active table")
+        void shouldStartTableHandWithSeatedPlayers() {
+            tournament = createSitAndGoTournament(4, 100);
+            tournamentId = tournament.getId();
+            registerPlayers(4);
+
+            tournament = tournamentService.getTournament(tournamentId);
+            assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.RUNNING);
+
+            TournamentTable table = tournament.getActiveTables().stream()
+                    .filter(TournamentTable::isActive)
+                    .findFirst()
+                    .orElseThrow();
+
+            Game game = tableGameService.getOrStartTableHand(tournamentId, table.getId());
+
+            assertThat(game.getId()).isNotNull();
+            assertThat(game.getPlayers()).hasSizeGreaterThanOrEqualTo(2);
+            assertThat(game.isFinished()).isFalse();
+        }
+
+        @Test
+        @DisplayName("Registration chips may differ from live game while hand is in progress")
+        void shouldAllowChipDriftDuringActiveHand() {
+            tournament = createSitAndGoTournament(2, 100);
+            tournamentId = tournament.getId();
+            registerPlayers(2);
+
+            tournament = tournamentService.getTournament(tournamentId);
+            TournamentTable table = tournament.getActiveTables().get(0);
+            UUID seatedPlayerId = table.getPlayerIds().get(0);
+
+            Game game = tableGameService.getOrStartTableHand(tournamentId, table.getId());
+            Player gamePlayer = game.getPlayers().stream()
+                    .filter(p -> seatedPlayerId.equals(p.getId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            TournamentRegistration registration = registrationRepository
+                    .findByTournamentIdAndPlayerId(tournamentId, seatedPlayerId)
+                    .orElseThrow();
+
+            assertThat(registration.getCurrentChips()).isEqualTo(tournament.getStartingChips());
+
+            if (gamePlayer.getChips() != tournament.getStartingChips()) {
+                assertThat(registration.getCurrentChips()).isNotEqualTo(gamePlayer.getChips());
+            }
+        }
+
+        @Test
+        @DisplayName("Finishing a table hand syncs registration chips automatically (Phase 4b)")
+        void shouldSyncRegistrationChipsWhenHandFinishes() {
+            tournament = createSitAndGoTournament(2, 100);
+            tournamentId = tournament.getId();
+            registerPlayers(2);
+
+            tournament = tournamentService.getTournament(tournamentId);
+            TournamentTable table = tournament.getActiveTables().get(0);
+
+            Game game = tableGameService.getOrStartTableHand(tournamentId, table.getId());
+            Player folder = game.getCurrentPlayer();
+            assertThat(folder).isNotNull();
+
+            Game finished = pokerGameService.playerAct(game.getId(), folder.getId(), PlayerAction.FOLD, 0);
+            assertThat(finished.isFinished()).isTrue();
+
+            for (Player gamePlayer : finished.getPlayers()) {
+                if (gamePlayer.getId() == null) {
+                    continue;
+                }
+                TournamentRegistration registration = registrationRepository
+                        .findByTournamentIdAndPlayerId(tournamentId, gamePlayer.getId())
+                        .orElseThrow();
+                assertThat(registration.getCurrentChips())
+                        .as("chips for player %s", gamePlayer.getName())
+                        .isEqualTo(gamePlayer.getChips());
+            }
         }
     }
 }

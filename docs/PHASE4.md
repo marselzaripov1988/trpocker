@@ -27,8 +27,19 @@ Connect tournament table UI to a real poker hand: shared player IDs, tournament 
 - `GameStore` tournament mode — v1 REST for actions and bot turns
 - `TournamentTableComponent` — wires store effects on `:id/play` route
 
-## Next (4b+)
+## Tests
 
-- Sync registration chip counts after each hand
+- `TournamentControllerIT` — `POST .../hand`
+- `TournamentIT.TableHandPlayTests` — start hand on running tournament
+- `TournamentChipSyncService` + `TournamentChipSyncServiceTest` — chip sync after finished hand (wire in 4b)
+- `tournament.store.spec` — `myTable`, `ensureTableHand`
+- `game.store.spec` — `connectToTournamentGame`, v1 `playerAction`
+
+## Phase 4b — Chip sync after hand
+
+- `TournamentChipSyncService.syncAfterHand` copies stacks from a finished `Game` into `TournamentRegistration`
+- `PokerGameService.persistAfterAction` invokes sync when the game belongs to a tournament table (`TournamentTableShardService.findTableForGame`)
+
+## Next (4c+)
 - Tournament blind timer → auto level advance
 - Load tests (k6) for concurrent table actions

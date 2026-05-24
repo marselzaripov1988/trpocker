@@ -765,6 +765,94 @@ describe('TournamentStore', () => {
 
         flush();
       }));
+
+      it('should set myTable when human is seated at a table with players', fakeAsync(() => {
+        const humanPlayer = createMockTournamentPlayer({ id: 'human', isBot: false });
+        const table = createMockTournamentTable({
+          id: 'table-42',
+          tableNumber: 2,
+          players: [
+            humanPlayer,
+            createMockTournamentPlayer({ id: 'bot-1', isBot: true })
+          ]
+        });
+        const tournament = createMockTournament({
+          registeredPlayers: [humanPlayer],
+          tables: [table]
+        });
+
+        store.loadTournament('test-id');
+        tick();
+
+        const req = httpMock.expectOne(`${apiUrl}/test-id`);
+        req.flush(tournament);
+
+        tick();
+
+        store.myTable$.subscribe(tableResult => {
+          expect(tableResult?.id).toBe('table-42');
+          expect(tableResult?.tableNumber).toBe(2);
+        });
+
+        flush();
+      }));
+
+      it('should leave myTable null when tables have no players list', fakeAsync(() => {
+        const humanPlayer = createMockTournamentPlayer({ id: 'human', isBot: false });
+        const tournament = createMockTournament({
+          registeredPlayers: [humanPlayer],
+          tables: [{ ...createMockTournamentTable(), players: [] }]
+        });
+
+        store.loadTournament('test-id');
+        tick();
+
+        const req = httpMock.expectOne(`${apiUrl}/test-id`);
+        req.flush(tournament);
+
+        tick();
+
+        store.myTable$.subscribe(tableResult => {
+          expect(tableResult).toBeNull();
+        });
+
+        flush();
+      }));
+    });
+
+    describe('ensureTableHand', () => {
+      it('should POST hand and store game in tableHandGame', fakeAsync(() => {
+        const mockGame = {
+          id: 'game-99',
+          currentPot: 75,
+          players: [],
+          communityCards: [],
+          phase: 'PRE_FLOP',
+          currentBet: 50,
+          currentPlayerIndex: 0,
+          dealerPosition: 0,
+          minRaiseAmount: 50,
+          bigBlind: 50,
+          smallBlind: 25,
+          isFinished: false,
+          handNumber: 1
+        };
+
+        store.ensureTableHand({ tournamentId: 't-1', tableId: 'table-7' });
+        tick();
+
+        const req = httpMock.expectOne(`${apiUrl}/t-1/tables/table-7/hand`);
+        expect(req.request.method).toBe('POST');
+        req.flush(mockGame);
+
+        tick();
+
+        store.tableHandGame$.subscribe(game => {
+          expect(game?.id).toBe('game-99');
+        });
+
+        flush();
+      }));
     });
 
     describe('registerForTournament', () => {
