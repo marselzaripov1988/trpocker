@@ -11,12 +11,14 @@ import {
   exhaustMap,
   concatMap,
   delay,
-  filter
+  filter,
+  takeUntil
 } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { Game } from '../model/game';
 import { Player } from '../model/player';
 import { Card } from '../model/card';
+import { WebSocketService } from '../services/websocket.service';
 
 
 
@@ -112,10 +114,41 @@ const initialState: GameStoreState = {
 @Injectable()
 export class GameStore extends ComponentStore<GameStoreState> {
   private readonly http = inject(HttpClient);
+  private readonly wsService = inject(WebSocketService);
   private readonly apiUrl = `${environment.apiUrl}/poker`;
+  private readonly gameApiV1Url = `${environment.apiUrl}/v1/poker/game`;
+  private wsListenerReady = false;
+  private tournamentGameMode = false;
 
   constructor() {
     super(initialState);
+  }
+
+  private ensureWsListener(): void {
+    if (this.wsListenerReady) {
+      return;
+    }
+    this.wsListenerReady = true;
+    this.wsService.gameUpdates$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(update => {
+        const current = this.get().game;
+        if (update.gameState && current?.id === update.gameState.id) {
+          this.setGame(update.gameState);
+          this.maybeProcessBots(update.gameState);
+        }
+      });
+  }
+
+  private maybeProcessBots(game: Game): void {
+    const idx = game.currentPlayerIndex ?? -1;
+    if (idx < 0 || idx >= (game.players?.length ?? 0)) {
+      return;
+    }
+    const current = game.players[idx];
+    if (current?.isBot && !current.folded && !game.isFinished) {
+      setTimeout(() => this.processTournamentBots(), environment.botActionDelay || 800);
+    }
   }
 
   
@@ -525,6 +558,36 @@ export class GameStore extends ComponentStore<GameStoreState> {
   
 
   
+  readonly connectToTournamentGame = this.effect<string>(gameId$ =>
+    gameId$.pipe(
+      tap(() => {
+        this.tournamentGameMode = true;
+        this.setLoading(true);
+        this.clearError();
+        this.ensureWsListener();
+      }),
+      switchMap(gameId => {
+        if (environment.enableWebSocket && !this.wsService.isConnected()) {
+          this.wsService.connect();
+        }
+        return this.http.get<Game>(`${this.gameApiV1Url}/${gameId}`).pipe(
+          tapResponse(
+            game => {
+              this.setGame(game);
+              this.setConnectionStatus('connected');
+              this.setLoading(false);
+              if (environment.enableWebSocket) {
+                this.wsService.subscribeToGame(gameId);
+              }
+              this.maybeProcessBots(game);
+            },
+            (error: HttpErrorResponse) => this.handleError(error)
+          )
+        );
+      })
+    )
+  );
+
   readonly startGame = this.effect<PlayerInfo[] | void>(trigger$ =>
     trigger$.pipe(
       tap(() => {
@@ -637,8 +700,11 @@ export class GameStore extends ComponentStore<GameStoreState> {
   }>(action$ =>
     action$.pipe(
       tap(() => this.setActionInProgress(true)),
-      withLatestFrom(this.players$),
-      exhaustMap(([{ playerId, action, amount }, players]) => {
+      withLatestFrom(this.players$, this.game$),
+      exhaustMap(([{ playerId, action, amount }, players, game]) => {
+        if (this.tournamentGameMode && game?.id) {
+          return this.executeTournamentAction(game.id, playerId, action, amount ?? 0, players);
+        }
         const player = players.find(p => p.id === playerId);
         const playerName = player?.name ?? 'Unknown';
 
@@ -711,6 +777,46 @@ export class GameStore extends ComponentStore<GameStoreState> {
   );
 
   
+  readonly processTournamentBots = this.effect<void>(trigger$ =>
+    trigger$.pipe(
+      withLatestFrom(this.currentBot$, this.isGameFinished$, this.processingBots$, this.game$),
+      filter(([, currentBot, isGameFinished, alreadyProcessing, game]) => {
+        if (!this.tournamentGameMode || !game?.id) {
+          return false;
+        }
+        return !alreadyProcessing && !!currentBot && !isGameFinished;
+      }),
+      tap(() => this.setProcessingBots(true)),
+      delay(environment.botActionDelay || 800),
+      concatMap(([, currentBot, , , game]) => {
+        if (!currentBot || !game?.id) {
+          this.setProcessingBots(false);
+          return EMPTY;
+        }
+        return this.http.post<Game>(
+          `${this.gameApiV1Url}/${game.id}/bot/${currentBot.id}/action`,
+          {}
+        ).pipe(
+          tapResponse(
+            updated => {
+              this.setProcessingBots(false);
+              this.setGame(updated);
+              this.maybeProcessBots(updated);
+            },
+            (error: HttpErrorResponse) => {
+              this.handleError(error);
+              this.setProcessingBots(false);
+            }
+          ),
+          catchError(() => {
+            this.setProcessingBots(false);
+            return EMPTY;
+          })
+        );
+      })
+    )
+  );
+
   readonly processBots = this.effect<void>(trigger$ =>
     trigger$.pipe(
       withLatestFrom(this.currentBot$, this.isGameFinished$, this.processingBots$),
@@ -825,6 +931,43 @@ export class GameStore extends ComponentStore<GameStoreState> {
   
 
   
+  private executeTournamentAction(
+    gameId: string,
+    playerId: string,
+    action: PlayerActionType,
+    amount: number,
+    players: Player[]
+  ): Observable<Game> {
+    const player = players.find(p => p.id === playerId);
+    const playerName = player?.name ?? 'Unknown';
+
+    return this.http.post<Game>(
+      `${this.gameApiV1Url}/${gameId}/player/${playerId}/action`,
+      { playerId, action, amount }
+    ).pipe(
+      tap(() => {
+        this.recordAction({
+          type: action,
+          playerId,
+          playerName,
+          amount,
+          timestamp: Date.now()
+        });
+      }),
+      tapResponse(
+        game => {
+          this.setGame(game);
+          this.setActionInProgress(false);
+          this.maybeProcessBots(game);
+        },
+        (error: HttpErrorResponse) => {
+          this.handleError(error);
+          this.setActionInProgress(false);
+        }
+      )
+    );
+  }
+
   private performAction(action: string, params: Record<string, string>): Observable<string> {
     const queryParams = new URLSearchParams(params).toString();
     return this.http.post(

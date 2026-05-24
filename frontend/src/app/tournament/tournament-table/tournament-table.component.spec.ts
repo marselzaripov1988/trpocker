@@ -184,15 +184,20 @@ describe('TournamentTableComponent', () => {
     mockTournamentStore = jasmine.createSpyObj('TournamentStore', [
       'loadTournament',
       'subscribeTournamentUpdates',
+      'ensureTableHand',
       'ngOnDestroy'
     ], {
       tournamentTableVm$: vmSubject.asObservable(),
-      timeRemaining$: of(300000)
+      timeRemaining$: of(300000),
+      myTable$: of(null),
+      tableHandGame$: of(null)
     });
 
     mockGameStore = jasmine.createSpyObj('GameStore', [
       'playerAction',
       'processBots',
+      'processTournamentBots',
+      'connectToTournamentGame',
       'isPlayerTurn'
     ], {
       vm$: gameVmSubject.asObservable(),

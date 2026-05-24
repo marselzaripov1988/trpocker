@@ -4,7 +4,9 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.*;
 import com.truholdem.model.*;
+import com.truholdem.model.Game;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.TournamentTableGameService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,10 +39,15 @@ public class TournamentController {
     private static final Logger log = LoggerFactory.getLogger(TournamentController.class);
 
     private final TournamentService tournamentService;
+    private final TournamentTableGameService tableGameService;
     private final AppProperties appProperties;
 
-    public TournamentController(TournamentService tournamentService, AppProperties appProperties) {
+    public TournamentController(
+            TournamentService tournamentService,
+            TournamentTableGameService tableGameService,
+            AppProperties appProperties) {
         this.tournamentService = tournamentService;
+        this.tableGameService = tableGameService;
         this.appProperties = appProperties;
     }
 
@@ -218,9 +225,24 @@ public class TournamentController {
         
         log.debug("Fetching table {} for tournament {}", tableId, id);
         
-        TournamentTable table = tournamentService.getTournamentTable(id, tableId);
-        
-        return ResponseEntity.ok(TableDetailResponse.from(table));
+        return ResponseEntity.ok(tournamentService.getTableDetail(id, tableId));
+    }
+
+    @PostMapping("/{id}/tables/{tableId}/hand")
+    @Operation(
+            summary = "Get or start table hand",
+            description = "Returns the active poker game for this table, creating or advancing a hand when needed")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Game state for the table hand"),
+        @ApiResponse(responseCode = "404", description = "Tournament or table not found"),
+        @ApiResponse(responseCode = "409", description = "Cannot start hand in current state")
+    })
+    public ResponseEntity<Game> getOrStartTableHand(
+            @PathVariable UUID id,
+            @PathVariable UUID tableId) {
+        log.debug("Get or start hand for tournament {} table {}", id, tableId);
+        Game game = tableGameService.getOrStartTableHand(id, tableId);
+        return ResponseEntity.ok(game);
     }
 
     
@@ -295,27 +317,6 @@ public class TournamentController {
     }
 
     
-
-    
-    public record TableDetailResponse(
-        UUID id,
-        int tableNumber,
-        List<UUID> playerIds,
-        int playerCount,
-        boolean isFinalTable,
-        boolean isActive
-    ) {
-        public static TableDetailResponse from(TournamentTable table) {
-            return new TableDetailResponse(
-                table.getId(),
-                table.getTableNumber(),
-                table.getPlayerIds(),
-                table.getPlayerCount(),
-                table.isFinalTable(),
-                table.isActive()
-            );
-        }
-    }
 
     
     public record BlindInfoResponse(

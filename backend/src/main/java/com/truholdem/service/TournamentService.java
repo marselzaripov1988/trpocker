@@ -552,10 +552,33 @@ public class TournamentService {
     
     @Transactional(readOnly = true)
     public TournamentTable getTournamentTable(UUID tournamentId, UUID tableId) {
-        findTournamentOrThrow(tournamentId); 
+        findTournamentOrThrow(tournamentId);
         return tableRepository.findById(tableId)
             .filter(t -> t.getTournament().getId().equals(tournamentId))
             .orElseThrow(() -> new ResourceNotFoundException("Table not found: " + tableId));
+    }
+
+    @Transactional(readOnly = true)
+    public com.truholdem.dto.TableDetailResponse getTableDetail(UUID tournamentId, UUID tableId) {
+        findTournamentOrThrow(tournamentId);
+        TournamentTable table = tableRepository.findByIdAndTournamentIdWithDetails(tableId, tournamentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Table not found: " + tableId));
+
+        List<com.truholdem.dto.TableDetailResponse.TablePlayerInfo> players =
+                table.getPlayerIds().stream()
+                        .map(playerId -> registrationRepository.findByTournamentIdAndPlayerId(tournamentId, playerId)
+                                .orElseThrow(() -> new ResourceNotFoundException(
+                                        "Registration not found: " + playerId)))
+                        .map(reg -> new com.truholdem.dto.TableDetailResponse.TablePlayerInfo(
+                                reg.getPlayerId(),
+                                reg.getPlayerName(),
+                                reg.getCurrentChips(),
+                                reg.getPlayerName() != null
+                                        && reg.getPlayerName().regionMatches(true, 0, "bot", 0, 3)))
+                        .toList();
+
+        UUID currentGameId = table.getCurrentGame() != null ? table.getCurrentGame().getId() : null;
+        return com.truholdem.dto.TableDetailResponse.from(table, players, currentGameId);
     }
 
     

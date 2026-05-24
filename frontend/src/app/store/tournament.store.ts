@@ -19,6 +19,7 @@ import {
   Tournament,
   TournamentListItem,
   TournamentTable,
+  TournamentTableDetail,
   TournamentPlayer,
   TournamentUpdate,
   BlindLevel,
@@ -26,6 +27,7 @@ import {
   formatTimeRemaining,
   getNextBlindLevel
 } from '../model/tournament';
+import { Game } from '../model/game';
 import { TournamentMessage, WebSocketService } from '../services/websocket.service';
 
 
@@ -44,6 +46,7 @@ export interface TournamentStoreState {
 
   connectionStatus: 'connected' | 'disconnected' | 'reconnecting';
   lastUpdate: TournamentUpdate | null;
+  tableHandGame: Game | null;
 }
 
 
@@ -110,7 +113,8 @@ const initialState: TournamentStoreState = {
   error: null,
 
   connectionStatus: 'disconnected',
-  lastUpdate: null
+  lastUpdate: null,
+  tableHandGame: null
 };
 
 
@@ -144,6 +148,7 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
   readonly error$ = this.select(state => state.error);
   readonly connectionStatus$ = this.select(state => state.connectionStatus);
   readonly lastUpdate$ = this.select(state => state.lastUpdate);
+  readonly tableHandGame$ = this.select(state => state.tableHandGame);
 
 
 
@@ -391,6 +396,11 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     lastUpdate: update
   }));
 
+  readonly setTableHandGame = this.updater((state, game: Game | null) => ({
+    ...state,
+    tableHandGame: game
+  }));
+
   readonly updateTournamentState = this.updater((state, partialTournament: Partial<Tournament>) => ({
     ...state,
     activeTournament: state.activeTournament
@@ -507,6 +517,19 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     )
   );
 
+
+  readonly ensureTableHand = this.effect<{ tournamentId: string; tableId: string }>(params$ =>
+    params$.pipe(
+      switchMap(({ tournamentId, tableId }) =>
+        this.http.post<Game>(`${this.apiUrl}/${tournamentId}/tables/${tableId}/hand`, {}).pipe(
+          tapResponse(
+            game => this.setTableHandGame(game),
+            (error: HttpErrorResponse) => this.handleError(error)
+          )
+        )
+      )
+    )
+  );
 
   readonly subscribeTournamentUpdates = this.effect<string>(tournamentId$ =>
     tournamentId$.pipe(

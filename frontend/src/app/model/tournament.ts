@@ -26,6 +26,24 @@ export interface TournamentTable {
   currentHandNumber: number;
   dealerPosition: number;
   isActive: boolean;
+  currentGameId?: string | null;
+}
+
+export interface TournamentTableDetail {
+  id: string;
+  tableNumber: number;
+  players: TournamentTablePlayer[];
+  playerCount: number;
+  isFinalTable: boolean;
+  isActive: boolean;
+  currentGameId: string | null;
+}
+
+export interface TournamentTablePlayer {
+  id: string;
+  name: string;
+  chips: number;
+  isBot: boolean;
 }
 
 

@@ -9,7 +9,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Subject, takeUntil, filter, tap } from 'rxjs';
+import { Subject, takeUntil, filter, tap, distinctUntilChanged } from 'rxjs';
 
 import { TournamentStore } from '../../store/tournament.store';
 import { GameStore } from '../../store/game.store';
@@ -19,6 +19,7 @@ import { RaiseInputComponent } from '../../raise-input/raise-input.component';
 import { Player } from '../../model/player';
 import { UiStateService } from '../../services/ui-state.service';
 import { SoundService } from '../../services/sound.service';
+import { WebSocketService } from '../../services/websocket.service';
 
 @Component({
   selector: 'app-tournament-table',
@@ -647,6 +648,7 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly uiState = inject(UiStateService);
   private readonly soundService = inject(SoundService);
+  private readonly wsService = inject(WebSocketService);
 
   private readonly destroy$ = new Subject<void>();
 
@@ -724,7 +726,13 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   readonly breakTimeRemaining = computed(() => this.tournamentVm().formattedTimeRemaining);
 
   
-  readonly tablePlayers = computed(() => this.tournamentVm().table?.players ?? []);
+  readonly tablePlayers = computed(() => {
+    const gamePlayers = this.gameVm().game?.players;
+    if (gamePlayers && gamePlayers.length > 0) {
+      return gamePlayers;
+    }
+    return this.tournamentVm().table?.players ?? [];
+  });
   readonly communityCards = computed(() => this.gameVm().communityCards);
   readonly potSize = computed(() => this.gameVm().potSize);
   readonly canPlayerAct = computed(() => this.gameVm().canPlayerAct);
@@ -750,23 +758,36 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
     if (tournamentId) {
       this.tournamentStore.loadTournament(tournamentId);
       this.tournamentStore.subscribeTournamentUpdates(tournamentId);
+
+      this.tournamentStore.myTable$.pipe(
+        takeUntil(this.destroy$),
+        filter((table): table is NonNullable<typeof table> => table != null),
+        distinctUntilChanged((a, b) => a.id === b.id),
+        tap(table => this.tournamentStore.ensureTableHand({ tournamentId, tableId: table.id }))
+      ).subscribe();
+
+      this.tournamentStore.tableHandGame$.pipe(
+        takeUntil(this.destroy$),
+        filter((game): game is NonNullable<typeof game> & { id: string } => game?.id != null),
+        tap(game => this.gameStore.connectToTournamentGame(game.id))
+      ).subscribe();
     }
 
     this.setupSideEffects();
   }
 
   ngOnDestroy(): void {
+    this.wsService.unsubscribeFromGame();
     this.destroy$.next();
     this.destroy$.complete();
   }
 
   private setupSideEffects(): void {
-    
     this.gameStore.currentBot$.pipe(
       takeUntil(this.destroy$),
       filter(bot => bot !== null),
       tap(() => {
-        setTimeout(() => this.gameStore.processBots(), 800);
+        setTimeout(() => this.gameStore.processTournamentBots(), 800);
       })
     ).subscribe();
   }

@@ -1,5 +1,7 @@
 package com.truholdem.model;
 
+import java.util.UUID;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -20,6 +22,9 @@ public class PlayerInfo {
     @JsonProperty("isBot")
     private boolean isBot;
 
+    /** Optional stable id (e.g. tournament registration player id). */
+    private UUID playerId;
+
     public PlayerInfo() {
     }
 
@@ -27,6 +32,14 @@ public class PlayerInfo {
         this.name = name;
         this.startingChips = startingChips;
         this.isBot = isBot;
+    }
+
+    public UUID getPlayerId() {
+        return playerId;
+    }
+
+    public void setPlayerId(UUID playerId) {
+        this.playerId = playerId;
     }
 
     public String getName() {

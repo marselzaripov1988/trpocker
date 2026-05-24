@@ -62,6 +62,10 @@ public class PokerGameService {
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
+        return createNewGame(playersInfo, null, null);
+    }
+
+    public Game createNewGame(List<PlayerInfo> playersInfo, Integer smallBlind, Integer bigBlind) {
         return metricsService.timeGameCreation(() -> {
             validatePlayerCount(playersInfo);
 
@@ -73,12 +77,22 @@ public class PokerGameService {
             }
 
             Game game = new Game();
+            if (smallBlind != null && smallBlind > 0) {
+                game.setSmallBlind(smallBlind);
+            }
+            if (bigBlind != null && bigBlind > 0) {
+                game.setBigBlind(bigBlind);
+                game.setMinRaiseAmount(bigBlind);
+            }
             Deck deck = new Deck();
             deck.shuffle();
 
             for (int i = 0; i < playersInfo.size(); i++) {
                 PlayerInfo info = playersInfo.get(i);
                 Player player = new Player(info.getName(), info.getStartingChips(), info.isBot());
+                if (info.getPlayerId() != null) {
+                    player.setId(info.getPlayerId());
+                }
                 player.setSeatPosition(i);
                 game.addPlayer(player);
                 logger.info("Created player {} with isBot={}", player.getName(), player.isBot());

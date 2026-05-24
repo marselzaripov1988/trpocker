@@ -46,4 +46,14 @@ public interface TournamentTableRepository extends JpaRepository<TournamentTable
 
     @Query("SELECT t FROM TournamentTable t JOIN FETCH t.tournament WHERE t.currentGame.id = :gameId")
     Optional<TournamentTable> findByCurrentGameId(@Param("gameId") UUID gameId);
+
+    @Query("""
+            SELECT t FROM TournamentTable t
+            JOIN FETCH t.tournament
+            LEFT JOIN FETCH t.currentGame
+            WHERE t.id = :tableId AND t.tournament.id = :tournamentId
+            """)
+    Optional<TournamentTable> findByIdAndTournamentIdWithDetails(
+            @Param("tableId") UUID tableId,
+            @Param("tournamentId") UUID tournamentId);
 }

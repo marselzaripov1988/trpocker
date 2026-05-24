@@ -142,14 +142,17 @@ public record TournamentDetailResponse(
         UUID id,
         int tableNumber,
         int playerCount,
-        boolean isFinalTable
+        boolean isFinalTable,
+        UUID currentGameId
     ) {
         public static TableSummary from(TournamentTable table) {
+            UUID gameId = table.getCurrentGame() != null ? table.getCurrentGame().getId() : null;
             return new TableSummary(
                 table.getId(),
                 table.getTableNumber(),
                 table.getPlayerCount(),
-                table.isFinalTable()
+                table.isFinalTable(),
+                gameId
             );
         }
     }
