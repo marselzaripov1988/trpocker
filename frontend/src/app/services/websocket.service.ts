@@ -58,6 +58,13 @@ export interface GameStateSnapshot {
   sessionId?: string;
 }
 
+export interface TournamentMessage {
+  type: string;
+  tournamentId: string;
+  data: Record<string, unknown>;
+  timestamp?: string;
+}
+
 
 
 
@@ -90,6 +97,12 @@ export class WebSocketService {
   private userQueueSubscription: any = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private stateRecoverySubscription: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private tournamentSubscription: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private tournamentTableSubscription: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private tournamentShardSubscription: any = null;
 
   
   
@@ -98,6 +111,8 @@ export class WebSocketService {
   
   readonly connectionState = signal<ConnectionState>(ConnectionState.DISCONNECTED);
   readonly currentGameId = signal<string | null>(null);
+  readonly currentTournamentId = signal<string | null>(null);
+  readonly currentTournamentTableNumber = signal<number | null>(null);
   readonly lastEventSequence = signal<number>(0);
   readonly reconnectAttemptsRemaining = signal<number>(RECONNECT_CONFIG.MAX_ATTEMPTS);
   
@@ -116,6 +131,9 @@ export class WebSocketService {
   
   private gameUpdatesSubject = new Subject<GameUpdateMessage>();
   public gameUpdates$ = this.gameUpdatesSubject.asObservable();
+
+  private tournamentUpdatesSubject = new Subject<TournamentMessage>();
+  public tournamentUpdates$ = this.tournamentUpdatesSubject.asObservable();
 
   
   private stateSnapshotSubject = new Subject<GameStateSnapshot>();
@@ -244,8 +262,16 @@ export class WebSocketService {
 
     
     const gameId = this.currentGameId();
-    if (gameId && this.disconnectedAt) {
-      this.requestStateRecovery(gameId);
+    if (gameId) {
+      this.subscribeToGame(gameId);
+      if (this.disconnectedAt) {
+        this.requestStateRecovery(gameId);
+      }
+    }
+
+    const tournamentId = this.currentTournamentId();
+    if (tournamentId) {
+      this.subscribeToTournament(tournamentId, this.currentTournamentTableNumber());
     }
   }
 
@@ -362,26 +388,141 @@ export class WebSocketService {
 
   
   unsubscribeFromGame(): void {
-    this.cleanupSubscriptions();
+    if (this.gameSubscription) {
+      try { this.gameSubscription.unsubscribe(); } catch { /* ignore */ }
+      this.gameSubscription = null;
+    }
+    if (this.userQueueSubscription) {
+      try { this.userQueueSubscription.unsubscribe(); } catch { /* ignore */ }
+      this.userQueueSubscription = null;
+    }
+    if (this.stateRecoverySubscription) {
+      try { this.stateRecoverySubscription.unsubscribe(); } catch { /* ignore */ }
+      this.stateRecoverySubscription = null;
+    }
     this.currentGameId.set(null);
     this.lastEventSequence.set(0);
     this.lastKnownPhase = null;
     console.log('[WebSocket] Unsubscribed from game');
   }
 
+  subscribeToTournament(tournamentId: string, tableNumber?: number | null): void {
+    if (this.connectionState() !== ConnectionState.CONNECTED || !this.stompClient) {
+      console.warn('[WebSocket] Cannot subscribe to tournament: Not connected');
+      return;
+    }
+
+    const previousTournament = this.currentTournamentId();
+    if (previousTournament && previousTournament !== tournamentId) {
+      this.unsubscribeFromTournament();
+    }
+
+    if (previousTournament === tournamentId) {
+      this.cleanupTournamentTableSubscriptions();
+      if (this.tournamentSubscription) {
+        try { this.tournamentSubscription.unsubscribe(); } catch { /* ignore */ }
+        this.tournamentSubscription = null;
+      }
+    }
+
+    this.currentTournamentId.set(tournamentId);
+    this.currentTournamentTableNumber.set(tableNumber ?? null);
+
+    console.log(`[WebSocket] Subscribing to tournament ${tournamentId}`, tableNumber != null ? `table ${tableNumber}` : '');
+
+    this.tournamentSubscription = this.stompClient.subscribe(
+      `/topic/tournament/${tournamentId}`,
+      (message: { body: string }) => this.handleTournamentMessage(message)
+    );
+
+    if (tableNumber != null && tableNumber > 0) {
+      this.subscribeToTournamentTableTopics(tournamentId, tableNumber);
+    }
+  }
+
+  updateTournamentTableSubscription(tournamentId: string, tableNumber: number): void {
+    if (this.currentTournamentId() !== tournamentId) {
+      this.subscribeToTournament(tournamentId, tableNumber);
+      return;
+    }
+    if (this.currentTournamentTableNumber() === tableNumber) {
+      return;
+    }
+    this.cleanupTournamentTableSubscriptions();
+    this.currentTournamentTableNumber.set(tableNumber);
+    if (this.connectionState() === ConnectionState.CONNECTED && this.stompClient) {
+      this.subscribeToTournamentTableTopics(tournamentId, tableNumber);
+    }
+  }
+
+  unsubscribeFromTournament(): void {
+    this.cleanupTournamentSubscriptions();
+    this.currentTournamentId.set(null);
+    this.currentTournamentTableNumber.set(null);
+    console.log('[WebSocket] Unsubscribed from tournament');
+  }
+
+  private subscribeToTournamentTableTopics(tournamentId: string, tableNumber: number): void {
+    const tableDestination = `/topic/tournament/${tournamentId}/table/${tableNumber}`;
+    const shard = this.resolveShard(tableNumber);
+    const shardDestination = `/topic/tournament/${tournamentId}/shard/${shard}`;
+
+    this.tournamentTableSubscription = this.stompClient.subscribe(
+      tableDestination,
+      (message: { body: string }) => this.handleTournamentMessage(message)
+    );
+    this.tournamentShardSubscription = this.stompClient.subscribe(
+      shardDestination,
+      (message: { body: string }) => this.handleTournamentMessage(message)
+    );
+  }
+
+  private resolveShard(tableNumber: number): number {
+    const shardCount = environment.tournamentShardCount ?? 16;
+    return ((tableNumber - 1) % shardCount + shardCount) % shardCount;
+  }
+
+  private handleTournamentMessage(message: { body: string }): void {
+    try {
+      const parsed = JSON.parse(message.body) as TournamentMessage;
+      const tournamentId = parsed.tournamentId ?? (parsed as unknown as { tournamentId: string }).tournamentId;
+      if (!tournamentId) {
+        return;
+      }
+      this.tournamentUpdatesSubject.next({
+        type: parsed.type,
+        tournamentId: String(tournamentId),
+        data: parsed.data ?? {},
+        timestamp: parsed.timestamp
+      });
+    } catch (error: unknown) {
+      console.error('[WebSocket] Error parsing tournament message:', error);
+      this.errorSubject.next('Failed to parse tournament update');
+    }
+  }
+
+  private cleanupTournamentSubscriptions(): void {
+    if (this.tournamentSubscription) {
+      try { this.tournamentSubscription.unsubscribe(); } catch { /* ignore */ }
+      this.tournamentSubscription = null;
+    }
+    this.cleanupTournamentTableSubscriptions();
+  }
+
+  private cleanupTournamentTableSubscriptions(): void {
+    if (this.tournamentTableSubscription) {
+      try { this.tournamentTableSubscription.unsubscribe(); } catch { /* ignore */ }
+      this.tournamentTableSubscription = null;
+    }
+    if (this.tournamentShardSubscription) {
+      try { this.tournamentShardSubscription.unsubscribe(); } catch { /* ignore */ }
+      this.tournamentShardSubscription = null;
+    }
+  }
+
   private cleanupSubscriptions(): void {
-    if (this.gameSubscription) {
-      try { this.gameSubscription.unsubscribe(); } catch { /* ignore unsubscribe errors */ }
-      this.gameSubscription = null;
-    }
-    if (this.userQueueSubscription) {
-      try { this.userQueueSubscription.unsubscribe(); } catch { /* ignore unsubscribe errors */ }
-      this.userQueueSubscription = null;
-    }
-    if (this.stateRecoverySubscription) {
-      try { this.stateRecoverySubscription.unsubscribe(); } catch { /* ignore unsubscribe errors */ }
-      this.stateRecoverySubscription = null;
-    }
+    this.unsubscribeFromGame();
+    this.unsubscribeFromTournament();
   }
 
   

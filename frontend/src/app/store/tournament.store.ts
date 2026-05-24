@@ -10,6 +10,7 @@ import {
   catchError,
   takeUntil,
   map,
+  filter,
   distinctUntilChanged,
   shareReplay
 } from 'rxjs/operators';
@@ -25,7 +26,7 @@ import {
   formatTimeRemaining,
   getNextBlindLevel
 } from '../model/tournament';
-import { WebSocketService } from '../services/websocket.service';
+import { TournamentMessage, WebSocketService } from '../services/websocket.service';
 
 
 
@@ -121,10 +122,13 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
   private readonly http = inject(HttpClient);
   private readonly wsService = inject(WebSocketService);
 
-  private readonly apiUrl = `${environment.apiUrl}/tournament`;
+  private readonly apiUrl = `${environment.apiUrl}/v1/tournaments`;
+  private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private tournamentWsListenerReady = false;
 
   constructor() {
     super(initialState);
+    this.initTournamentWebSocketListener();
   }
 
 
@@ -359,10 +363,18 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     isLoading: false
   }));
 
-  readonly setMyTable = this.updater((state, table: TournamentTable | null) => ({
-    ...state,
-    myTable: table
-  }));
+  readonly setMyTable = this.updater((state, table: TournamentTable | null) => {
+    const tournamentId = state.activeTournament?.id;
+    const prevTableNumber = state.myTable?.tableNumber;
+    const nextTableNumber = table?.tableNumber;
+    if (tournamentId && nextTableNumber && prevTableNumber !== nextTableNumber) {
+      this.subscribeTournamentWebSocket(tournamentId, nextTableNumber);
+    }
+    return {
+      ...state,
+      myTable: table
+    };
+  });
 
   readonly setMyPlayer = this.updater((state, player: TournamentPlayer | null) => ({
     ...state,
@@ -386,7 +398,14 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
       : null
   }));
 
-  readonly reset = this.updater(() => initialState);
+  readonly reset = this.updater(() => {
+    this.wsService.unsubscribeFromTournament();
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+      this.refreshDebounceTimer = null;
+    }
+    return initialState;
+  });
 
 
 
@@ -397,7 +416,7 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     trigger$.pipe(
       tap(() => this.setLoading(true)),
       switchMap(() =>
-        this.http.get<TournamentListItem[]>(`${this.apiUrl}/list`).pipe(
+        this.http.get<TournamentListItem[]>(this.apiUrl).pipe(
           tapResponse(
             tournaments => this.setTournaments(tournaments),
             (error: HttpErrorResponse) => this.handleError(error)
@@ -493,42 +512,142 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     tournamentId$.pipe(
       tap(tournamentId => {
         this.setConnectionStatus('reconnecting');
-
-
-
-
-        this.startPolling(tournamentId);
+        this.subscribeTournamentWebSocket(tournamentId, this.get().myTable?.tableNumber);
+        this.startPollingFallback(tournamentId);
       })
     )
   );
 
+  private initTournamentWebSocketListener(): void {
+    if (this.tournamentWsListenerReady || !environment.enableWebSocket) {
+      return;
+    }
+    this.tournamentWsListenerReady = true;
 
-  private startPolling(tournamentId: string): void {
-    timer(0, 5000).pipe(
-      takeUntil(this.destroy$),
-      switchMap(() =>
-        this.http.get<Tournament>(`${this.apiUrl}/${tournamentId}`).pipe(
-          catchError(() => EMPTY)
-        )
-      )
-    ).subscribe(tournament => {
-      this.setActiveTournament(tournament);
-      this.setConnectionStatus('connected');
+    this.wsService.tournamentUpdates$.pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(message => {
+      const activeId = this.getCurrentTournamentId();
+      if (!activeId || message.tournamentId !== activeId) {
+        return;
+      }
+      this.handleTournamentWebSocketMessage(message);
+    });
 
-
-      const myPlayer = this.get().myPlayer;
-      if (myPlayer) {
-        const updatedPlayer = tournament.registeredPlayers.find(p => p.id === myPlayer.id);
-        if (updatedPlayer) {
-          this.setMyPlayer(updatedPlayer);
-        }
-
-        const myTable = tournament.tables.find(t =>
-          t.players.some(p => p.id === myPlayer.id)
-        );
-        this.setMyTable(myTable ?? null);
+    this.wsService.connectionStatus$.pipe(
+      takeUntil(this.destroy$)
+    ).subscribe(connected => {
+      const tournamentId = this.getCurrentTournamentId();
+      if (!tournamentId) {
+        return;
+      }
+      if (connected) {
+        this.setConnectionStatus('connected');
+        this.subscribeTournamentWebSocket(tournamentId, this.get().myTable?.tableNumber);
+      } else {
+        this.setConnectionStatus('disconnected');
       }
     });
+  }
+
+  private subscribeTournamentWebSocket(tournamentId: string, tableNumber?: number): void {
+    if (!environment.enableWebSocket) {
+      return;
+    }
+    if (!this.wsService.isConnected()) {
+      this.wsService.connect();
+      return;
+    }
+    if (tableNumber != null && tableNumber > 0) {
+      if (this.wsService.currentTournamentId() === tournamentId) {
+        this.wsService.updateTournamentTableSubscription(tournamentId, tableNumber);
+      } else {
+        this.wsService.subscribeToTournament(tournamentId, tableNumber);
+      }
+    } else {
+      this.wsService.subscribeToTournament(tournamentId);
+    }
+  }
+
+  private handleTournamentWebSocketMessage(message: TournamentMessage): void {
+    this.setConnectionStatus('connected');
+    const tournamentId = message.tournamentId;
+
+    switch (message.type) {
+      case 'BLIND_LEVEL_INCREASED': {
+        const newLevel = Number(message.data['newLevel']);
+        const active = this.get().activeTournament;
+        if (active && Number.isFinite(newLevel)) {
+          const blinds = active.config.blindLevels.find(b => b.level === newLevel);
+          if (blinds) {
+            this.updateTournamentState({
+              currentLevel: newLevel,
+              currentBlinds: blinds
+            });
+            return;
+          }
+        }
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      }
+      case 'PLAYER_ELIMINATED':
+      case 'TABLE_REBALANCED':
+      case 'TOURNAMENT_STARTED':
+      case 'TABLE_CREATED':
+      case 'PLAYER_REGISTERED':
+      case 'FINAL_TABLE_REACHED':
+      case 'TOURNAMENT_COMPLETED':
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      default:
+        this.scheduleTournamentRefresh(tournamentId, 800);
+    }
+  }
+
+  private scheduleTournamentRefresh(tournamentId: string, delayMs = 250): void {
+    if (this.refreshDebounceTimer) {
+      clearTimeout(this.refreshDebounceTimer);
+    }
+    this.refreshDebounceTimer = setTimeout(() => {
+      this.loadTournament(tournamentId);
+      this.refreshDebounceTimer = null;
+    }, delayMs);
+  }
+
+  private startPollingFallback(tournamentId: string): void {
+    const fetchTournament = () =>
+      this.http.get<Tournament>(`${this.apiUrl}/${tournamentId}`).pipe(
+        catchError(() => EMPTY)
+      );
+
+    timer(0, 5000).pipe(
+      takeUntil(this.destroy$),
+      filter(() => this.get().connectionStatus !== 'connected'),
+      switchMap(() => fetchTournament())
+    ).subscribe(tournament => this.applyTournamentSnapshot(tournament));
+
+    timer(0, 30000).pipe(
+      takeUntil(this.destroy$),
+      filter(() => this.get().connectionStatus === 'connected'),
+      switchMap(() => fetchTournament())
+    ).subscribe(tournament => this.applyTournamentSnapshot(tournament));
+  }
+
+  private applyTournamentSnapshot(tournament: Tournament): void {
+    this.setActiveTournament(tournament);
+
+    const myPlayer = this.get().myPlayer;
+    if (myPlayer) {
+      const updatedPlayer = tournament.registeredPlayers.find(p => p.id === myPlayer.id);
+      if (updatedPlayer) {
+        this.setMyPlayer(updatedPlayer);
+      }
+
+      const myTable = tournament.tables.find(t =>
+        t.players.some(p => p.id === myPlayer.id)
+      );
+      this.setMyTable(myTable ?? null);
+    }
   }
 
 

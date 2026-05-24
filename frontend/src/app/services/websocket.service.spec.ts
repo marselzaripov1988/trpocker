@@ -243,6 +243,58 @@ describe('WebSocketService', () => {
     });
   });
 
+  describe('tournament subscriptions', () => {
+    beforeEach(fakeAsync(() => {
+      mockStompClient.connect.mockImplementation((headers, onConnect) => {
+        mockStompClient.connected = true;
+        onConnect({});
+      });
+      service.connect();
+      tick();
+    }));
+
+    it('should subscribe to tournament and table topics', () => {
+      service.subscribeToTournament('tournament-1', 3);
+
+      expect(mockStompClient.subscribe).toHaveBeenCalledWith(
+        '/topic/tournament/tournament-1',
+        expect.any(Function)
+      );
+      expect(mockStompClient.subscribe).toHaveBeenCalledWith(
+        '/topic/tournament/tournament-1/table/3',
+        expect.any(Function)
+      );
+      expect(mockStompClient.subscribe).toHaveBeenCalledWith(
+        '/topic/tournament/tournament-1/shard/2',
+        expect.any(Function)
+      );
+    });
+
+    it('should emit tournament updates when received', fakeAsync(() => {
+      const updates: import('./websocket.service').TournamentMessage[] = [];
+      service.tournamentUpdates$.subscribe(update => updates.push(update));
+
+      mockStompClient.subscribe.mockImplementation((destination, callback) => {
+        if (destination.includes('/table/3')) {
+          callback({
+            body: JSON.stringify({
+              type: 'TABLE_CREATED',
+              tournamentId: 'tournament-1',
+              data: { tableNumber: 3 }
+            })
+          });
+        }
+        return { unsubscribe: jest.fn() };
+      });
+
+      service.subscribeToTournament('tournament-1', 3);
+      tick();
+
+      expect(updates.length).toBeGreaterThan(0);
+      expect(updates[0].type).toBe('TABLE_CREATED');
+    }));
+  });
+
   describe('player actions', () => {
     beforeEach(fakeAsync(() => {
       mockStompClient.connect.mockImplementation((headers, onConnect) => {

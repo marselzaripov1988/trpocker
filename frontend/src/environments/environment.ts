@@ -19,6 +19,8 @@ export const environment = {
   
   
   enableWebSocket: true,
+  /** Must match backend app.tournament.shard-count */
+  tournamentShardCount: 16,
   enableSoundEffects: true,
   enableAnimations: true,
   enableHandHistory: true,

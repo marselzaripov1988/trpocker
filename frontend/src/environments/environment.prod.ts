@@ -19,6 +19,7 @@ export const environment = {
   
   
   enableWebSocket: true,
+  tournamentShardCount: 16,
   enableSoundEffects: true,
   enableAnimations: true,
   enableHandHistory: true,

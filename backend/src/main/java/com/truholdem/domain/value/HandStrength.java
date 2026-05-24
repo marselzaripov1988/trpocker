@@ -130,7 +130,7 @@ public record HandStrength(
 
     
     public String getEquityPercentage() {
-        return String.format("%.1f%%", equity * 100);
+        return String.format(java.util.Locale.ROOT, "%.1f%%", equity * 100);
     }
 
     

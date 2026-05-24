@@ -19,13 +19,14 @@ import {
   getNextBlindLevel
 } from '../model/tournament';
 import { WebSocketService } from '../services/websocket.service';
+import { of } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 describe('TournamentStore', () => {
   let store: TournamentStore;
   let httpMock: HttpTestingController;
   let wsServiceMock: jasmine.SpyObj<WebSocketService>;
-  const apiUrl = `${environment.apiUrl}/tournament`;
+  const apiUrl = `${environment.apiUrl}/v1/tournaments`;
 
 
 
@@ -160,8 +161,18 @@ describe('TournamentStore', () => {
       'connect',
       'disconnect',
       'subscribeToGame',
+      'subscribeToTournament',
+      'updateTournamentTableSubscription',
+      'unsubscribeFromTournament',
       'isConnected'
-    ]);
+    ], {
+      tournamentUpdates$: of(),
+      connectionStatus$: of(false)
+    });
+    wsServiceMock.isConnected.and.returnValue(false);
+    Object.defineProperty(wsServiceMock, 'currentTournamentId', {
+      value: () => null
+    });
 
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
@@ -665,7 +676,7 @@ describe('TournamentStore', () => {
         store.loadTournaments();
         tick();
 
-        const req = httpMock.expectOne(`${apiUrl}/list`);
+        const req = httpMock.expectOne(`${apiUrl}`);
         expect(req.request.method).toBe('GET');
         req.flush(tournaments);
 
@@ -682,7 +693,7 @@ describe('TournamentStore', () => {
         store.loadTournaments();
         tick();
 
-        const req = httpMock.expectOne(`${apiUrl}/list`);
+        const req = httpMock.expectOne(`${apiUrl}`);
         req.flush('Error', { status: 500, statusText: 'Server Error' });
 
         tick();
@@ -706,7 +717,7 @@ describe('TournamentStore', () => {
 
         expect(loadingStates).toContain(true);
 
-        const req = httpMock.expectOne(`${apiUrl}/list`);
+        const req = httpMock.expectOne(`${apiUrl}`);
         req.flush([]);
 
         tick();
