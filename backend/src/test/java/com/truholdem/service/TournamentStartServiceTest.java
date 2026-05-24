@@ -8,6 +8,7 @@ import com.truholdem.model.TournamentType;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
+import com.truholdem.service.tournament.TournamentTimingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,6 +50,8 @@ class TournamentStartServiceTest {
     @Mock
     private AppProperties.Tournament tournamentProperties;
     @Mock
+    private TournamentTimingService timingService;
+    @Mock
     private ScheduledFuture<?> scheduledFuture;
 
     private TournamentStartService tournamentStartService;
@@ -67,7 +70,8 @@ class TournamentStartServiceTest {
                 tableRepository,
                 eventPublisher,
                 taskScheduler,
-                appProperties);
+                appProperties,
+                timingService);
     }
 
     @Test
@@ -109,7 +113,8 @@ class TournamentStartServiceTest {
                 tableRepository,
                 eventPublisher,
                 taskScheduler,
-                appProperties);
+                appProperties,
+                timingService);
         when(tournamentProperties.getAsyncStartThreshold()).thenReturn(100);
         assertThat(service.shouldStartAsynchronously(99)).isFalse();
         assertThat(service.shouldStartAsynchronously(100)).isTrue();

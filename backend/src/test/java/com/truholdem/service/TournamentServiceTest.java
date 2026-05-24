@@ -56,6 +56,9 @@ class TournamentServiceTest {
     @Mock
     private AppProperties.Tournament tournamentProperties;
 
+    @Mock
+    private com.truholdem.service.tournament.TournamentTimingService timingService;
+
     @Captor
     private ArgumentCaptor<TournamentEvent> eventCaptor;
     
@@ -74,7 +77,8 @@ class TournamentServiceTest {
             tableRepository,
             eventPublisher,
             tournamentStartService,
-            appProperties
+            appProperties,
+            timingService
         );
     }
     

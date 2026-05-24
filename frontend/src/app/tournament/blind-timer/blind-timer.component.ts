@@ -259,6 +259,7 @@ export class BlindTimerComponent implements OnInit, OnDestroy {
   readonly nextBlinds = input<BlindLevel | null>(null);
   readonly levelEndTime = input<number>(0);
   readonly levelDurationMinutes = input<number>(15);
+  readonly levelDurationSeconds = input<number>(0);
   readonly isOnBreak = input<boolean>(false);
 
   private readonly destroy$ = new Subject<void>();
@@ -300,8 +301,9 @@ export class BlindTimerComponent implements OnInit, OnDestroy {
 
   readonly dashOffset = computed(() => {
     const time = this.timeRemaining$();
-    const totalMs = this.levelDurationMinutes() * 60 * 1000;
-    const progress = time / totalMs;
+    const sec = this.levelDurationSeconds();
+    const totalMs = sec > 0 ? sec * 1000 : this.levelDurationMinutes() * 60 * 1000;
+    const progress = totalMs > 0 ? time / totalMs : 0;
     return this.circumference * (1 - progress);
   });
 

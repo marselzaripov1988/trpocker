@@ -755,7 +755,7 @@ describe('TournamentStore', () => {
         tick();
 
         const req = httpMock.expectOne(`${apiUrl}/test-id`);
-        req.flush(tournament);
+        req.flush({ ...tournament, registeredPlayers: tournament.registeredPlayers });
 
         tick();
 
@@ -785,7 +785,11 @@ describe('TournamentStore', () => {
         tick();
 
         const req = httpMock.expectOne(`${apiUrl}/test-id`);
-        req.flush(tournament);
+        req.flush({
+          ...tournament,
+          registeredPlayers: tournament.registeredPlayers,
+          tables: tournament.tables
+        });
 
         tick();
 

@@ -301,6 +301,12 @@ public class AppProperties {
         /** When true, table events also go to /topic/tournament/{id}/table/{n}. */
         private boolean tableTopicsEnabled = true;
 
+        /**
+         * When &gt; 0, overrides blind-structure level duration for scheduling and API timers (tests).
+         */
+        @Min(0)
+        private int levelDurationSeconds = 0;
+
         public int getMaxPlayersLimit() {
             return maxPlayersLimit;
         }
@@ -347,6 +353,14 @@ public class AppProperties {
 
         public void setTableTopicsEnabled(boolean tableTopicsEnabled) {
             this.tableTopicsEnabled = tableTopicsEnabled;
+        }
+
+        public int getLevelDurationSeconds() {
+            return levelDurationSeconds;
+        }
+
+        public void setLevelDurationSeconds(int levelDurationSeconds) {
+            this.levelDurationSeconds = levelDurationSeconds;
         }
     }
 }

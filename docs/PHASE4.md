@@ -40,6 +40,13 @@ Connect tournament table UI to a real poker hand: shared player IDs, tournament 
 - `TournamentChipSyncService.syncAfterHand` copies stacks from a finished `Game` into `TournamentRegistration`
 - `PokerGameService.persistAfterAction` invokes sync when the game belongs to a tournament table (`TournamentTableShardService.findTableForGame`)
 
-## Next (4c+)
-- Tournament blind timer → auto level advance
+## Phase 4c — Blind timer
+
+- `TournamentTimingService` — level duration from blind structure or `app.tournament.level-duration-seconds` (IT uses 5s)
+- `TournamentDetailResponse` — `levelEndTimeEpochMillis`, `levelDurationSeconds`
+- WS `BLIND_LEVEL_INCREASED` — adds `levelEndTimeEpochMillis`, `nextSmallBlind` / `nextBigBlind`, `levelDurationSeconds`
+- Frontend `tournament-detail.mapper.ts` — maps REST detail → `Tournament`; WS patch via `blindLevelUpdateFromWs`
+- `BlindTimerComponent` — ring uses `levelDurationSeconds` when set
+
+## Next (4d+)
 - Load tests (k6) for concurrent table actions

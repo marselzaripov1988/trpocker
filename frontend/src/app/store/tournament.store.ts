@@ -27,6 +27,11 @@ import {
   formatTimeRemaining,
   getNextBlindLevel
 } from '../model/tournament';
+import {
+  blindLevelUpdateFromWs,
+  mapTournamentDetailFromApi,
+  TournamentDetailApi
+} from '../model/tournament-detail.mapper';
 import { Game } from '../model/game';
 import { TournamentMessage, WebSocketService } from '../services/websocket.service';
 
@@ -175,6 +180,9 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     this.activeTournament$,
     tournament => {
       if (!tournament) return null;
+      if (tournament.nextBlinds) {
+        return tournament.nextBlinds;
+      }
       return getNextBlindLevel(tournament.currentLevel, tournament.config.blindLevels);
     }
   );
@@ -441,7 +449,8 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     tournamentId$.pipe(
       tap(() => this.setLoading(true)),
       switchMap(tournamentId =>
-        this.http.get<Tournament>(`${this.apiUrl}/${tournamentId}`).pipe(
+        this.http.get<TournamentDetailApi>(`${this.apiUrl}/${tournamentId}`).pipe(
+          map(api => this.mapTournamentFromApi(api)),
           tapResponse(
             tournament => {
               this.setActiveTournament(tournament);
@@ -598,15 +607,11 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
 
     switch (message.type) {
       case 'BLIND_LEVEL_INCREASED': {
-        const newLevel = Number(message.data['newLevel']);
         const active = this.get().activeTournament;
-        if (active && Number.isFinite(newLevel)) {
-          const blinds = active.config.blindLevels.find(b => b.level === newLevel);
-          if (blinds) {
-            this.updateTournamentState({
-              currentLevel: newLevel,
-              currentBlinds: blinds
-            });
+        if (active) {
+          const patch = blindLevelUpdateFromWs(message.data, active);
+          if (patch) {
+            this.updateTournamentState(patch);
             return;
           }
         }
@@ -639,7 +644,8 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
 
   private startPollingFallback(tournamentId: string): void {
     const fetchTournament = () =>
-      this.http.get<Tournament>(`${this.apiUrl}/${tournamentId}`).pipe(
+      this.http.get<TournamentDetailApi>(`${this.apiUrl}/${tournamentId}`).pipe(
+        map(api => this.mapTournamentFromApi(api)),
         catchError(() => EMPTY)
       );
 
@@ -654,6 +660,27 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
       filter(() => this.get().connectionStatus === 'connected'),
       switchMap(() => fetchTournament())
     ).subscribe(tournament => this.applyTournamentSnapshot(tournament));
+  }
+
+  /** Maps REST detail; preserves legacy `registeredPlayers` / table `players` when present in JSON. */
+  private mapTournamentFromApi(api: TournamentDetailApi): Tournament {
+    const mapped = mapTournamentDetailFromApi(api);
+    const legacyPayload = api as unknown as {
+      registeredPlayers?: TournamentPlayer[];
+      tables?: TournamentTable[];
+    };
+    const legacyPlayers = legacyPayload.registeredPlayers;
+    const legacyTables = legacyPayload.tables;
+    if (legacyPlayers?.length) {
+      const withTables = legacyTables?.some(t => t.players?.length)
+        ? { ...mapped, tables: legacyTables }
+        : mapped;
+      return { ...withTables, registeredPlayers: legacyPlayers };
+    }
+    if (legacyTables?.some(t => t.players?.length)) {
+      return { ...mapped, tables: legacyTables };
+    }
+    return mapped;
   }
 
   private applyTournamentSnapshot(tournament: Tournament): void {

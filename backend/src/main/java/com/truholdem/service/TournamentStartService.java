@@ -9,6 +9,7 @@ import com.truholdem.model.TournamentTable;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
+import com.truholdem.service.tournament.TournamentTimingService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ public class TournamentStartService {
     private final ApplicationEventPublisher eventPublisher;
     private final TaskScheduler taskScheduler;
     private final AppProperties.Tournament tournamentProperties;
+    private final TournamentTimingService timingService;
 
     private final Map<UUID, ScheduledFuture<?>> scheduledLevelIncreases = new ConcurrentHashMap<>();
 
@@ -49,13 +51,15 @@ public class TournamentStartService {
             TournamentTableRepository tableRepository,
             ApplicationEventPublisher eventPublisher,
             TaskScheduler taskScheduler,
-            AppProperties appProperties) {
+            AppProperties appProperties,
+            TournamentTimingService timingService) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
         this.eventPublisher = eventPublisher;
         this.taskScheduler = taskScheduler;
         this.tournamentProperties = appProperties.getTournament();
+        this.timingService = timingService;
     }
 
     public boolean shouldStartAsynchronously(int registeredPlayerCount) {
@@ -172,8 +176,7 @@ public class TournamentStartService {
     }
 
     void scheduleLevelIncrease(Tournament tournament) {
-        int durationMinutes = tournament.getBlindStructure().getLevelDurationMinutes();
-        Duration levelDuration = Duration.ofMinutes(durationMinutes);
+        Duration levelDuration = timingService.levelDuration(tournament);
 
         Runnable task = () -> {
             try {

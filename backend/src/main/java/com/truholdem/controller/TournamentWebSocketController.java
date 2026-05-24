@@ -2,7 +2,11 @@ package com.truholdem.controller;
 
 import com.truholdem.domain.event.*;
 import com.truholdem.dto.TournamentMessage;
+import com.truholdem.model.BlindLevel;
+import com.truholdem.model.Tournament;
+import com.truholdem.repository.TournamentRepository;
 import com.truholdem.service.tournament.TournamentTableShardService;
+import com.truholdem.service.tournament.TournamentTimingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -22,12 +26,18 @@ public class TournamentWebSocketController {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final TournamentTableShardService tableShardService;
+    private final TournamentRepository tournamentRepository;
+    private final TournamentTimingService timingService;
 
     public TournamentWebSocketController(
             SimpMessagingTemplate messagingTemplate,
-            TournamentTableShardService tableShardService) {
+            TournamentTableShardService tableShardService,
+            TournamentRepository tournamentRepository,
+            TournamentTimingService timingService) {
         this.messagingTemplate = messagingTemplate;
         this.tableShardService = tableShardService;
+        this.tournamentRepository = tournamentRepository;
+        this.timingService = timingService;
     }
 
     
@@ -55,6 +65,22 @@ public class TournamentWebSocketController {
         data.put("bigBlind", event.getBigBlind());
         data.put("ante", event.getAnte());
         data.put("playersRemaining", event.getPlayersRemaining());
+
+        tournamentRepository.findById(event.getTournamentId()).ifPresent(tournament -> {
+            var levelEnd = timingService.levelEndTime(tournament);
+            if (levelEnd != null) {
+                data.put("levelEndTimeEpochMillis", levelEnd.toEpochMilli());
+            }
+            data.put("levelDurationSeconds", timingService.levelDuration(tournament).toSeconds());
+
+            BlindLevel next = tournament.getBlindStructure().getLevelAt(event.getNewLevel() + 1);
+            if (next != null) {
+                data.put("nextLevel", event.getNewLevel() + 1);
+                data.put("nextSmallBlind", next.getSmallBlind());
+                data.put("nextBigBlind", next.getBigBlind());
+                data.put("nextAnte", next.getAnte());
+            }
+        });
         
         broadcast(event.getTournamentId(), "BLIND_LEVEL_INCREASED", data);
     }

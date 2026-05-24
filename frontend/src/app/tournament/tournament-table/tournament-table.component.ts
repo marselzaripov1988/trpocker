@@ -49,6 +49,7 @@ import { WebSocketService } from '../../services/websocket.service';
             [nextBlinds]="nextBlinds()"
             [levelEndTime]="levelEndTime()"
             [levelDurationMinutes]="levelDurationMinutes()"
+            [levelDurationSeconds]="levelDurationSeconds()"
             [isOnBreak]="isOnBreak()"
           />
         </div>
@@ -710,6 +711,9 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   readonly levelEndTime = computed(() => this.tournamentVm().tournament?.levelEndTime ?? 0);
   readonly levelDurationMinutes = computed(() => 
     this.tournamentVm().tournament?.config.levelDurationMinutes ?? 15
+  );
+  readonly levelDurationSeconds = computed(() =>
+    this.tournamentVm().tournament?.config.levelDurationSeconds ?? 0
   );
   readonly isOnBreak = computed(() => this.tournamentVm().isOnBreak);
   readonly remainingPlayers = computed(() => this.tournamentVm().remainingPlayers);

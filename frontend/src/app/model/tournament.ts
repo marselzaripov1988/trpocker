@@ -76,6 +76,8 @@ export interface TournamentConfig {
   minPlayers: number;
   blindLevels: BlindLevel[];
   levelDurationMinutes: number;
+  /** When set, overrides minutes for countdown ring (e.g. test / turbo override). */
+  levelDurationSeconds?: number;
   breakAfterLevels: number;
   breakDurationMinutes: number;
   prizeStructure: PrizeStructure[];
@@ -95,6 +97,8 @@ export interface Tournament {
   
   currentLevel: number;
   currentBlinds: BlindLevel;
+  /** Next level blinds from API/WS when available. */
+  nextBlinds?: BlindLevel | null;
   levelStartTime: number;        
   levelEndTime: number;          
   nextBreakAtLevel: number;
@@ -156,6 +160,22 @@ export interface TournamentUpdate {
   timestamp: number;
 }
 
+
+/** Matches backend {@code BlindStructure.turbo()}. */
+export const TURBO_BLIND_LEVELS: BlindLevel[] = [
+  { level: 1, smallBlind: 10, bigBlind: 20, ante: 0, durationMinutes: 5 },
+  { level: 2, smallBlind: 15, bigBlind: 30, ante: 0, durationMinutes: 5 },
+  { level: 3, smallBlind: 25, bigBlind: 50, ante: 0, durationMinutes: 5 },
+  { level: 4, smallBlind: 50, bigBlind: 100, ante: 0, durationMinutes: 5 },
+  { level: 5, smallBlind: 75, bigBlind: 150, ante: 0, durationMinutes: 5 },
+  { level: 6, smallBlind: 100, bigBlind: 200, ante: 0, durationMinutes: 5 },
+  { level: 7, smallBlind: 150, bigBlind: 300, ante: 25, durationMinutes: 5 },
+  { level: 8, smallBlind: 200, bigBlind: 400, ante: 50, durationMinutes: 5 },
+  { level: 9, smallBlind: 300, bigBlind: 600, ante: 75, durationMinutes: 5 },
+  { level: 10, smallBlind: 500, bigBlind: 1000, ante: 100, durationMinutes: 5 },
+  { level: 11, smallBlind: 750, bigBlind: 1500, ante: 150, durationMinutes: 5 },
+  { level: 12, smallBlind: 1000, bigBlind: 2000, ante: 200, durationMinutes: 5 },
+];
 
 export const DEFAULT_BLIND_LEVELS: BlindLevel[] = [
   { level: 1, smallBlind: 25, bigBlind: 50, ante: 0, durationMinutes: 15 },

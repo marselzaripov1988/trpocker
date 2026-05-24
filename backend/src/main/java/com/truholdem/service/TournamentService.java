@@ -9,6 +9,7 @@ import com.truholdem.model.*;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
+import com.truholdem.service.tournament.TournamentTimingService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,19 +41,22 @@ public class TournamentService {
     private final ApplicationEventPublisher eventPublisher;
     private final TournamentStartService tournamentStartService;
     private final AppProperties.Tournament tournamentProperties;
+    private final TournamentTimingService timingService;
 
     public TournamentService(TournamentRepository tournamentRepository,
                              TournamentRegistrationRepository registrationRepository,
                              TournamentTableRepository tableRepository,
                              ApplicationEventPublisher eventPublisher,
                              TournamentStartService tournamentStartService,
-                             AppProperties appProperties) {
+                             AppProperties appProperties,
+                             TournamentTimingService timingService) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
         this.eventPublisher = eventPublisher;
         this.tournamentStartService = tournamentStartService;
         this.tournamentProperties = appProperties.getTournament();
+        this.timingService = timingService;
     }
 
     
@@ -483,7 +487,8 @@ public class TournamentService {
                 chipLeaderName,
                 chipLeaderStack,
                 averageStack,
-                prizePool);
+                prizePool,
+                timingService);
     }
 
     
