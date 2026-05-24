@@ -100,6 +100,10 @@ public class PokerGameService {
                 Player player = new Player(info.getName(), info.getStartingChips(), info.isBot());
                 if (info.getPlayerId() != null) {
                     player.setId(info.getPlayerId());
+                    // Tournament registration uses the account UUID as playerId.
+                    if (!info.isBot()) {
+                        player.setUserId(info.getPlayerId());
+                    }
                 }
                 player.setSeatPosition(i);
                 game.addPlayer(player);

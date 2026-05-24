@@ -399,6 +399,32 @@ class PokerGameServiceTest {
                     assertEquals(i, game.getPlayers().get(i).getSeatPosition());
                 }
             }
+
+            @Test
+            @DisplayName("Should set userId from playerId for human tournament seats")
+            void shouldSetUserIdFromPlayerIdForHumans() {
+                UUID accountId = UUID.randomUUID();
+                PlayerInfo human = new PlayerInfo("Human", 1000, false);
+                human.setPlayerId(accountId);
+                PlayerInfo bot = new PlayerInfo("Bot_1", 1000, true);
+                bot.setPlayerId(UUID.randomUUID());
+                setupRepositorySaveToReturnArgument();
+
+                Game game = pokerGameService.createNewGame(List.of(human, bot));
+
+                Player humanSeat = game.getPlayers().stream()
+                        .filter(p -> p.getName().equals("Human"))
+                        .findFirst()
+                        .orElseThrow();
+                Player botSeat = game.getPlayers().stream()
+                        .filter(p -> p.getName().equals("Bot_1"))
+                        .findFirst()
+                        .orElseThrow();
+
+                assertEquals(accountId, humanSeat.getId());
+                assertEquals(accountId, humanSeat.getUserId());
+                assertNull(botSeat.getUserId());
+            }
         }
 
         @Nested

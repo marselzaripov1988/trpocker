@@ -48,5 +48,25 @@ Connect tournament table UI to a real poker hand: shared player IDs, tournament 
 - Frontend `tournament-detail.mapper.ts` — maps REST detail → `Tournament`; WS patch via `blindLevelUpdateFromWs`
 - `BlindTimerComponent` — ring uses `levelDurationSeconds` when set
 
-## Next (4d+)
-- Load tests (k6) for concurrent table actions
+## Phase 4d — k6 load tests
+
+Scripts under `load/k6/`:
+
+| File | Purpose |
+|------|---------|
+| `tournament-table.js` | Smoke / load: auth → SNG register → hand → actions |
+| `lib/auth.js`, `lib/tournament.js` | Shared REST helpers |
+| `README.md` | Run instructions |
+
+```bash
+k6 run load/k6/tournament-table.js
+k6 run -e SCENARIO=load -e VUS=20 -e DURATION=60s load/k6/tournament-table.js
+```
+
+For heavy runs set `rate-limit.enabled=false` on the target server.
+
+Tournament hands set `player.userId` from registration `playerId` so JWT game actions work.
+
+## Phase 4 complete
+
+- 4a live hand, 4b chip sync, 4c blind timer, 4d k6 REST load
