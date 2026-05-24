@@ -43,4 +43,7 @@ public interface TournamentTableRepository extends JpaRepository<TournamentTable
     
     @Query("SELECT SUM(SIZE(t.playerIds)) FROM TournamentTable t WHERE t.tournament.id = :tournamentId AND t.isActive = true")
     Long countTotalPlayersAtTables(@Param("tournamentId") UUID tournamentId);
+
+    @Query("SELECT t FROM TournamentTable t JOIN FETCH t.tournament WHERE t.currentGame.id = :gameId")
+    Optional<TournamentTable> findByCurrentGameId(@Param("gameId") UUID gameId);
 }

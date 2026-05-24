@@ -85,6 +85,8 @@ class PokerGameServiceTest {
                 .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
         lenient().when(gameStateService.persistFull(any(Game.class)))
                 .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
+        lenient().when(gameStateService.persistFullSync(any(Game.class)))
+                .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
 
         pokerGameService = new PokerGameService(
                 gameStateService,

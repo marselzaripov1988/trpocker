@@ -41,6 +41,12 @@ class GameStateServiceTest {
     @Mock
     private AppProperties.Game gameConfig;
 
+    @Mock
+    private ObjectProvider<AsyncGamePersistService> asyncPersistService;
+
+    @Mock
+    private AsyncGamePersistService asyncGamePersistService;
+
     private GameStateService gameStateService;
 
     @BeforeEach
@@ -48,7 +54,9 @@ class GameStateServiceTest {
         lenient().when(appProperties.getGame()).thenReturn(gameConfig);
         lenient().when(redisStore.getIfAvailable()).thenReturn(redisGameStateStore);
         lenient().when(redisStore.getObject()).thenReturn(redisGameStateStore);
-        gameStateService = new GameStateService(gameRepository, redisStore, appProperties);
+        lenient().when(asyncPersistService.getIfAvailable()).thenReturn(null);
+        lenient().when(gameConfig.isAsyncPersistEnabled()).thenReturn(false);
+        gameStateService = new GameStateService(gameRepository, redisStore, asyncPersistService, appProperties);
     }
 
     @Test
@@ -109,5 +117,24 @@ class GameStateServiceTest {
 
         verify(gameRepository).save(game);
         verify(redisGameStateStore).save(game);
+    }
+
+    @Test
+    @DisplayName("persistFull queues async PostgreSQL when async persist is enabled")
+    void persistFull_queuesAsyncWhenConfigured() {
+        when(gameConfig.isHotStateEnabled()).thenReturn(true);
+        when(gameConfig.isAsyncPersistEnabled()).thenReturn(true);
+        when(asyncPersistService.getIfAvailable()).thenReturn(asyncGamePersistService);
+        when(asyncPersistService.getObject()).thenReturn(asyncGamePersistService);
+
+        Game game = new Game();
+        game.setId(UUID.randomUUID());
+
+        Game result = gameStateService.persistFull(game);
+
+        assertThat(result).isSameAs(game);
+        verify(redisGameStateStore).save(game);
+        verify(asyncGamePersistService).persistAsync(game);
+        verify(gameRepository, never()).save(any());
     }
 }

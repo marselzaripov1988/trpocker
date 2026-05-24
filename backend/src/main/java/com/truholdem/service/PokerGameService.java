@@ -99,7 +99,7 @@ public class PokerGameService {
                 firstToAct != null ? firstToAct.isBot() : "N/A",
                 game.getCurrentPlayerIndex());
 
-            Game savedGame = gameStateService.persistFull(game);
+            Game savedGame = gameStateService.persistFullSync(game);
 
             handHistoryService.startRecording(savedGame);
 

@@ -34,8 +34,6 @@ Unit tests disable hot state in `application-test.properties`.
 - Redis (`spring.data.redis`) must be available when `hot-state-enabled=true`
 - Cluster WebSocket (`app.websocket.cluster.enabled`) is independent of game state Redis
 
-## Next (Phase 3+)
+## Next
 
-- Async PG persist queue
-- Tournament table sharding
-- Load tests for concurrent table actions
+See [PHASE3.md](PHASE3.md) for async persist, table sharding, and concurrency smoke tests.

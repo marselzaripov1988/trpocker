@@ -184,6 +184,9 @@ public class AppProperties {
         @Min(50)
         private int botMonteCarloIterations = 500;
 
+        /** Phase 3: enqueue PostgreSQL persist on hand milestones (Redis remains authoritative). */
+        private boolean asyncPersistEnabled = false;
+
         
         public int getDefaultChips() {
             return defaultChips;
@@ -264,6 +267,14 @@ public class AppProperties {
         public void setBotMonteCarloIterations(int botMonteCarloIterations) {
             this.botMonteCarloIterations = botMonteCarloIterations;
         }
+
+        public boolean isAsyncPersistEnabled() {
+            return asyncPersistEnabled;
+        }
+
+        public void setAsyncPersistEnabled(boolean asyncPersistEnabled) {
+            this.asyncPersistEnabled = asyncPersistEnabled;
+        }
     }
 
     public static class Tournament {
@@ -282,6 +293,13 @@ public class AppProperties {
         /** Default page size for paginated registration/leaderboard APIs. */
         @Min(1)
         private int defaultPageSize = 50;
+
+        /** Phase 3: logical shards for table-scoped WebSocket topics (tableNumber % shardCount). */
+        @Min(1)
+        private int shardCount = 16;
+
+        /** When true, table events also go to /topic/tournament/{id}/table/{n}. */
+        private boolean tableTopicsEnabled = true;
 
         public int getMaxPlayersLimit() {
             return maxPlayersLimit;
@@ -313,6 +331,22 @@ public class AppProperties {
 
         public void setDefaultPageSize(int defaultPageSize) {
             this.defaultPageSize = defaultPageSize;
+        }
+
+        public int getShardCount() {
+            return shardCount;
+        }
+
+        public void setShardCount(int shardCount) {
+            this.shardCount = shardCount;
+        }
+
+        public boolean isTableTopicsEnabled() {
+            return tableTopicsEnabled;
+        }
+
+        public void setTableTopicsEnabled(boolean tableTopicsEnabled) {
+            this.tableTopicsEnabled = tableTopicsEnabled;
         }
     }
 }

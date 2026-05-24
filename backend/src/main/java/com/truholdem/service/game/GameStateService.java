@@ -23,14 +23,17 @@ public class GameStateService {
 
     private final GameRepository gameRepository;
     private final ObjectProvider<RedisGameStateStore> redisStore;
+    private final ObjectProvider<AsyncGamePersistService> asyncPersistService;
     private final AppProperties appProperties;
 
     public GameStateService(
             GameRepository gameRepository,
             ObjectProvider<RedisGameStateStore> redisStore,
+            ObjectProvider<AsyncGamePersistService> asyncPersistService,
             AppProperties appProperties) {
         this.gameRepository = gameRepository;
         this.redisStore = redisStore;
+        this.asyncPersistService = asyncPersistService;
         this.appProperties = appProperties;
     }
 
@@ -69,6 +72,23 @@ public class GameStateService {
      * Full persist: hand end, new hand, game creation.
      */
     public Game persistFull(Game game) {
+        if (shouldAsyncPersist(game)) {
+            if (isHotStateActive()) {
+                redisStore.getObject().save(game);
+            }
+            asyncPersistService.getObject().persistAsync(game);
+            logger.debug("Queued async PostgreSQL persist for game {}", game.getId());
+            return game;
+        }
+        Game saved = gameRepository.save(game);
+        if (isHotStateActive()) {
+            redisStore.getObject().save(saved);
+        }
+        return saved;
+    }
+
+    /** Synchronous persist — required when the game id is not yet assigned. */
+    public Game persistFullSync(Game game) {
         Game saved = gameRepository.save(game);
         if (isHotStateActive()) {
             redisStore.getObject().save(saved);
@@ -82,5 +102,11 @@ public class GameStateService {
 
     private boolean shouldDeferPostgresWrite() {
         return isHotStateActive() && appProperties.getGame().isPersistOnHandEndOnly();
+    }
+
+    private boolean shouldAsyncPersist(Game game) {
+        return game.getId() != null
+                && appProperties.getGame().isAsyncPersistEnabled()
+                && asyncPersistService.getIfAvailable() != null;
     }
 }

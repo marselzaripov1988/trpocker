@@ -2,6 +2,7 @@ package com.truholdem.controller;
 
 import com.truholdem.domain.event.*;
 import com.truholdem.dto.TournamentMessage;
+import com.truholdem.service.tournament.TournamentTableShardService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -20,9 +21,13 @@ public class TournamentWebSocketController {
     private static final String TOURNAMENT_TOPIC = "/topic/tournament/";
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final TournamentTableShardService tableShardService;
 
-    public TournamentWebSocketController(SimpMessagingTemplate messagingTemplate) {
+    public TournamentWebSocketController(
+            SimpMessagingTemplate messagingTemplate,
+            TournamentTableShardService tableShardService) {
         this.messagingTemplate = messagingTemplate;
+        this.tableShardService = tableShardService;
     }
 
     
@@ -149,6 +154,7 @@ public class TournamentWebSocketController {
         data.put("isFinalTable", event.isFinalTable());
         
         broadcast(event.getTournamentId(), "TABLE_CREATED", data);
+        broadcastToTable(event.getTournamentId(), event.getTableNumber(), "TABLE_CREATED", data);
     }
 
     @EventListener
@@ -180,6 +186,15 @@ public class TournamentWebSocketController {
         
         log.debug("Broadcasting {} to {}", type, destination);
         messagingTemplate.convertAndSend(destination, message);
+    }
+
+    private void broadcastToTable(UUID tournamentId, int tableNumber, String type, Map<String, Object> data) {
+        TournamentMessage message = TournamentMessage.of(type, tournamentId, data);
+        String tableDestination = tableShardService.tableTopic(tournamentId, tableNumber);
+        String shardDestination = tableShardService.shardTopic(tournamentId, tableNumber);
+        log.debug("Broadcasting {} to table {} and shard {}", type, tableDestination, shardDestination);
+        messagingTemplate.convertAndSend(tableDestination, message);
+        messagingTemplate.convertAndSend(shardDestination, message);
     }
 
     
