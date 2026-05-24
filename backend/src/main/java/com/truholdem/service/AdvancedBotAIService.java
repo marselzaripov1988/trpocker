@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.model.Card;
 import com.truholdem.model.Game;
 import com.truholdem.model.GamePhase;
@@ -29,15 +30,15 @@ import com.truholdem.model.Value;
 public class AdvancedBotAIService {
 
     private static final Logger logger = LoggerFactory.getLogger(AdvancedBotAIService.class);
-    private static final int MONTE_CARLO_ITERATIONS = 500;
-
     private final HandEvaluator handEvaluator;
+    private final int monteCarloIterations;
 
 
     private final Map<UUID, OpponentModel> opponentModels = new ConcurrentHashMap<>();
 
-    public AdvancedBotAIService(HandEvaluator handEvaluator) {
+    public AdvancedBotAIService(HandEvaluator handEvaluator, AppProperties appProperties) {
         this.handEvaluator = handEvaluator;
+        this.monteCarloIterations = appProperties.getGame().getBotMonteCarloIterations();
     }
 
     
@@ -277,7 +278,7 @@ public class AdvancedBotAIService {
 
         List<Card> remainingDeck = createRemainingDeck(knownCards);
 
-        for (int i = 0; i < MONTE_CARLO_ITERATIONS; i++) {
+        for (int i = 0; i < monteCarloIterations; i++) {
             Collections.shuffle(remainingDeck);
 
             
@@ -313,8 +314,8 @@ public class AdvancedBotAIService {
         }
 
         
-        double winRate = (double) wins / MONTE_CARLO_ITERATIONS;
-        double tieRate = (double) ties / MONTE_CARLO_ITERATIONS;
+        double winRate = (double) wins / monteCarloIterations;
+        double tieRate = (double) ties / monteCarloIterations;
 
         
         double adjustedWinRate = Math.pow(winRate + tieRate * 0.5, Math.max(1, numOpponents - 1));

@@ -28,7 +28,7 @@ import com.truholdem.model.GamePhase;
 import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
-import com.truholdem.repository.GameRepository;
+import com.truholdem.service.game.GameStateService;
 
 @Service
 @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -36,7 +36,7 @@ public class PokerGameService {
 
     private static final Logger logger = LoggerFactory.getLogger(PokerGameService.class);
 
-    private final GameRepository gameRepository;
+    private final GameStateService gameStateService;
     private final HandEvaluator handEvaluator;
     private final HandHistoryService handHistoryService;
     private final PlayerStatisticsService playerStatisticsService;
@@ -45,14 +45,14 @@ public class PokerGameService {
     private final GameMetricsService metricsService;
 
     public PokerGameService(
-            GameRepository gameRepository,
+            GameStateService gameStateService,
             HandEvaluator handEvaluator,
             HandHistoryService handHistoryService,
             PlayerStatisticsService playerStatisticsService,
             GameNotificationService notificationService,
             AdvancedBotAIService botAIService,
             GameMetricsService metricsService) {
-        this.gameRepository = gameRepository;
+        this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
         this.playerStatisticsService = playerStatisticsService;
@@ -99,7 +99,7 @@ public class PokerGameService {
                 firstToAct != null ? firstToAct.isBot() : "N/A",
                 game.getCurrentPlayerIndex());
 
-            Game savedGame = gameRepository.save(game);
+            Game savedGame = gameStateService.persistFull(game);
 
             handHistoryService.startRecording(savedGame);
 
@@ -160,7 +160,7 @@ public class PokerGameService {
                 nextPlayer != null ? nextPlayer.isBot() : "N/A",
                 game.getCurrentPlayerIndex());
 
-            return gameRepository.save(game);
+            return persistAfterAction(game);
         });
     }
 
@@ -177,13 +177,13 @@ public class PokerGameService {
         if (bot.isAllIn()) {
             logger.debug("Bot {} is all-in, skipping action and advancing to next player", bot.getName());
             advanceToNextPlayer(game);
-            return gameRepository.save(game);
+            return persistAfterAction(game);
         }
 
         if (bot.isFolded()) {
             logger.debug("Bot {} is folded, skipping action and advancing to next player", bot.getName());
             advanceToNextPlayer(game);
-            return gameRepository.save(game);
+            return persistAfterAction(game);
         }
 
         validatePlayerTurn(game, botId);
@@ -224,7 +224,11 @@ public class PokerGameService {
     @Cacheable(value = "games", key = "#gameId", unless = "#result == null")
     @Transactional(readOnly = true)
     public Optional<Game> getGame(UUID gameId) {
-        return gameRepository.findById(gameId);
+        try {
+            return Optional.of(gameStateService.load(gameId));
+        } catch (NoSuchElementException e) {
+            return Optional.empty();
+        }
     }
 
     @CacheEvict(value = "games", key = "#gameId")
@@ -248,7 +252,7 @@ public class PokerGameService {
         game.setPhase(GamePhase.PRE_FLOP);
 
         logger.info("Started new hand {} in game {}", game.getHandNumber(), gameId);
-        return gameRepository.save(game);
+        return gameStateService.persistFull(game);
     }
 
     private void validatePlayerCount(List<PlayerInfo> playersInfo) {
@@ -1007,8 +1011,15 @@ public class PokerGameService {
     }
 
     private Game findGameById(UUID gameId) {
-        return gameRepository.findById(gameId)
-                .orElseThrow(() -> new NoSuchElementException("Game not found: " + gameId));
+        return gameStateService.load(gameId);
+    }
+
+    private Game persistAfterAction(Game game) {
+        if (game.isFinished()) {
+            playerStatisticsService.flushBufferedActionsForGame(game);
+            return gameStateService.persistFull(game);
+        }
+        return gameStateService.afterPlayerAction(game);
     }
 
     private Player findPlayerInGame(Game game, UUID playerId) {

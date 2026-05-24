@@ -172,6 +172,18 @@ public class AppProperties {
         @Min(100)
         private long botThinkTime = 100;
 
+        /** Phase 2: Redis hot state during active play (PostgreSQL on hand milestones). */
+        private boolean hotStateEnabled = true;
+
+        /** When hot state is on, skip PostgreSQL write on every player action. */
+        private boolean persistOnHandEndOnly = true;
+
+        /** Buffer per-action statistics until hand completion. */
+        private boolean bufferStatisticsOnActions = true;
+
+        @Min(50)
+        private int botMonteCarloIterations = 500;
+
         
         public int getDefaultChips() {
             return defaultChips;
@@ -219,6 +231,38 @@ public class AppProperties {
 
         public void setBotThinkTime(long botThinkTime) {
             this.botThinkTime = botThinkTime;
+        }
+
+        public boolean isHotStateEnabled() {
+            return hotStateEnabled;
+        }
+
+        public void setHotStateEnabled(boolean hotStateEnabled) {
+            this.hotStateEnabled = hotStateEnabled;
+        }
+
+        public boolean isPersistOnHandEndOnly() {
+            return persistOnHandEndOnly;
+        }
+
+        public void setPersistOnHandEndOnly(boolean persistOnHandEndOnly) {
+            this.persistOnHandEndOnly = persistOnHandEndOnly;
+        }
+
+        public boolean isBufferStatisticsOnActions() {
+            return bufferStatisticsOnActions;
+        }
+
+        public void setBufferStatisticsOnActions(boolean bufferStatisticsOnActions) {
+            this.bufferStatisticsOnActions = bufferStatisticsOnActions;
+        }
+
+        public int getBotMonteCarloIterations() {
+            return botMonteCarloIterations;
+        }
+
+        public void setBotMonteCarloIterations(int botMonteCarloIterations) {
+            this.botMonteCarloIterations = botMonteCarloIterations;
         }
     }
 

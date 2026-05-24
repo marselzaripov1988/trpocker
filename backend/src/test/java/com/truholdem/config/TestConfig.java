@@ -45,8 +45,8 @@ public class TestConfig {
 
     @Bean
     @Primary
-    public AdvancedBotAIService advancedBotAIService(HandEvaluator handEvaluator) {
-        return new AdvancedBotAIService(handEvaluator);
+    public AdvancedBotAIService advancedBotAIService(HandEvaluator handEvaluator, AppProperties appProperties) {
+        return new AdvancedBotAIService(handEvaluator, appProperties);
     }
 
     @Bean

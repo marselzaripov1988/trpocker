@@ -34,6 +34,7 @@ import com.truholdem.model.PlayerInfo;
 import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
 import com.truholdem.repository.GameRepository;
+import com.truholdem.service.game.GameStateService;
 
 
 @ExtendWith(MockitoExtension.class)
@@ -42,6 +43,9 @@ class PokerGameServiceTest {
 
     @Mock
     private GameRepository gameRepository;
+
+    @Mock
+    private GameStateService gameStateService;
 
     @Mock
     private HandEvaluator handEvaluator;
@@ -74,8 +78,16 @@ class PokerGameServiceTest {
         lenient().when(metricsService.timeShowdown(any(Supplier.class)))
                 .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(0)).get());
 
+        lenient().when(gameStateService.load(any(UUID.class)))
+                .thenAnswer(invocation -> gameRepository.findById(invocation.getArgument(0))
+                        .orElseThrow(() -> new NoSuchElementException("Game not found")));
+        lenient().when(gameStateService.afterPlayerAction(any(Game.class)))
+                .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
+        lenient().when(gameStateService.persistFull(any(Game.class)))
+                .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
+
         pokerGameService = new PokerGameService(
-                gameRepository,
+                gameStateService,
                 handEvaluator,
                 handHistoryService,
                 playerStatisticsService,

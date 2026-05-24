@@ -1,5 +1,8 @@
 package com.truholdem.service;
 
+import com.truholdem.config.AppProperties;
+import com.truholdem.model.Game;
+import com.truholdem.model.Player;
 import com.truholdem.model.PlayerStatistics;
 import com.truholdem.repository.PlayerStatisticsRepository;
 import org.slf4j.Logger;
@@ -8,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 @Service
@@ -18,9 +22,12 @@ public class PlayerStatisticsService {
     private static final int MIN_HANDS_FOR_LEADERBOARD = 10;
 
     private final PlayerStatisticsRepository statsRepository;
+    private final AppProperties appProperties;
+    private final ConcurrentHashMap<String, BufferedActions> actionBuffer = new ConcurrentHashMap<>();
 
-    public PlayerStatisticsService(PlayerStatisticsRepository statsRepository) {
+    public PlayerStatisticsService(PlayerStatisticsRepository statsRepository, AppProperties appProperties) {
         this.statsRepository = statsRepository;
+        this.appProperties = appProperties;
     }
 
     
@@ -188,24 +195,98 @@ public class PlayerStatisticsService {
 
     
     public void recordAction(String playerName, String action) {
+        if (shouldBufferActions()) {
+            actionBuffer.computeIfAbsent(playerName, ignored -> new BufferedActions()).recordAction(action);
+            return;
+        }
         PlayerStatistics stats = getOrCreateStats(playerName);
-        
+        applyAction(stats, action);
+        statsRepository.save(stats);
+    }
+
+    
+    public void recordAllIn(String playerName) {
+        if (shouldBufferActions()) {
+            actionBuffer.computeIfAbsent(playerName, ignored -> new BufferedActions()).allIn = true;
+            return;
+        }
+        PlayerStatistics stats = getOrCreateStats(playerName);
+        stats.recordAllIn();
+        statsRepository.save(stats);
+    }
+
+    /**
+     * Flushes per-action statistics buffered during the current hand.
+     */
+    public void flushBufferedActionsForGame(Game game) {
+        if (!shouldBufferActions()) {
+            return;
+        }
+        for (Player player : game.getPlayers()) {
+            BufferedActions buffered = actionBuffer.remove(player.getName());
+            if (buffered == null) {
+                continue;
+            }
+            PlayerStatistics stats = getOrCreateStats(player.getName());
+            buffered.applyTo(stats);
+            statsRepository.save(stats);
+        }
+    }
+
+    private boolean shouldBufferActions() {
+        return appProperties.getGame().isBufferStatisticsOnActions();
+    }
+
+    private void applyAction(PlayerStatistics stats, String action) {
         switch (action.toUpperCase()) {
             case "BET" -> stats.recordBet();
             case "RAISE" -> stats.recordRaise();
             case "CALL" -> stats.recordCall();
             case "FOLD" -> stats.recordFold();
             case "CHECK" -> stats.recordCheck();
+            default -> { }
         }
-        
-        statsRepository.save(stats);
     }
 
-    
-    public void recordAllIn(String playerName) {
-        PlayerStatistics stats = getOrCreateStats(playerName);
-        stats.recordAllIn();
-        statsRepository.save(stats);
+    private static final class BufferedActions {
+        private int bets;
+        private int raises;
+        private int calls;
+        private int folds;
+        private int checks;
+        private boolean allIn;
+
+        void recordAction(String action) {
+            switch (action.toUpperCase()) {
+                case "BET" -> bets++;
+                case "RAISE" -> raises++;
+                case "CALL" -> calls++;
+                case "FOLD" -> folds++;
+                case "CHECK" -> checks++;
+                default -> { }
+            }
+        }
+
+        void applyTo(PlayerStatistics stats) {
+            for (int i = 0; i < bets; i++) {
+                stats.recordBet();
+            }
+            for (int i = 0; i < raises; i++) {
+                stats.recordRaise();
+            }
+            for (int i = 0; i < calls; i++) {
+                stats.recordCall();
+            }
+            for (int i = 0; i < folds; i++) {
+                stats.recordFold();
+            }
+            for (int i = 0; i < checks; i++) {
+                stats.recordCheck();
+            }
+            if (allIn) {
+                stats.recordAllIn();
+            }
+        }
     }
 
     

@@ -3,6 +3,7 @@ package com.truholdem.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +25,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.model.PlayerStatistics;
 import com.truholdem.repository.PlayerStatisticsRepository;
 
@@ -33,6 +35,12 @@ class PlayerStatisticsServiceTest {
 
     @Mock
     private PlayerStatisticsRepository statsRepository;
+
+    @Mock
+    private AppProperties appProperties;
+
+    @Mock
+    private AppProperties.Game gameConfig;
 
     @InjectMocks
     private PlayerStatisticsService statsService;
@@ -46,6 +54,9 @@ class PlayerStatisticsServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(appProperties.getGame()).thenReturn(gameConfig);
+        lenient().when(gameConfig.isBufferStatisticsOnActions()).thenReturn(false);
+
         testStats = new PlayerStatistics();
         testStats.setId(UUID.randomUUID());
         testStats.setPlayerName(TEST_PLAYER);
@@ -510,6 +521,37 @@ class PlayerStatisticsServiceTest {
             PlayerStatisticsService.PlayerStatsSummary result = statsService.getStatsSummary("Unknown");
 
             assertThat(result).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Buffered action statistics")
+    class BufferedActionStatisticsTests {
+
+        @Test
+        @DisplayName("Should defer save until flush when buffering enabled")
+        void shouldBufferUntilFlush() {
+            when(gameConfig.isBufferStatisticsOnActions()).thenReturn(true);
+            PlayerStatistics freshStats = new PlayerStatistics();
+            freshStats.setPlayerName(TEST_PLAYER);
+            when(statsRepository.findByPlayerName(TEST_PLAYER))
+                    .thenReturn(Optional.of(freshStats));
+            when(statsRepository.save(any(PlayerStatistics.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+
+            statsService.recordAction(TEST_PLAYER, "RAISE");
+            statsService.recordAction(TEST_PLAYER, "CALL");
+            verify(statsRepository, never()).save(any());
+
+            com.truholdem.model.Game game = new com.truholdem.model.Game();
+            com.truholdem.model.Player player = new com.truholdem.model.Player(TEST_PLAYER, 1000, false);
+            game.addPlayer(player);
+
+            statsService.flushBufferedActionsForGame(game);
+
+            verify(statsRepository).save(statsCaptor.capture());
+            assertThat(statsCaptor.getValue().getTotalRaises()).isEqualTo(1);
+            assertThat(statsCaptor.getValue().getTotalCalls()).isEqualTo(1);
         }
     }
 }

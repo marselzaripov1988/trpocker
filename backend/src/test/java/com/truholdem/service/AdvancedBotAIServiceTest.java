@@ -25,6 +25,7 @@ import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
+import com.truholdem.config.AppProperties;
 import com.truholdem.service.AdvancedBotAIService.BotDecision;
 import com.truholdem.service.AdvancedBotAIService.BotPersonality;
 
@@ -35,11 +36,19 @@ class AdvancedBotAIServiceTest {
     @Mock
     private HandEvaluator handEvaluator;
 
+    @Mock
+    private AppProperties appProperties;
+
+    @Mock
+    private AppProperties.Game gameConfig;
+
     private AdvancedBotAIService botAIService;
 
     @BeforeEach
     void setUp() {
-        botAIService = new AdvancedBotAIService(handEvaluator);
+        when(appProperties.getGame()).thenReturn(gameConfig);
+        when(gameConfig.getBotMonteCarloIterations()).thenReturn(500);
+        botAIService = new AdvancedBotAIService(handEvaluator, appProperties);
     }
 
     
