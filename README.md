@@ -430,19 +430,4 @@ docker-compose up -d
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
----
 
-## 👤 Author
-
-**Adam Porkolab**  
-Senior Full-Stack Engineer | Java/Spring Boot & Angular Specialist
-
-- 🌐 [Portfolio](https://www.aporkolab.com)
-- 💼 [LinkedIn](https://linkedin.com/in/adamporkolab)
-- 📧 [Email](mailto:ap@aporkolab.com)
-
----
-
-<p align="center">
-  Made with ❤️ and ☕ — <i>Because every hand tells a story</i>
-</p>
