@@ -153,7 +153,15 @@ export interface TournamentRegistrationRequest {
 
 
 export interface TournamentUpdate {
-  type: 'LEVEL_CHANGE' | 'PLAYER_ELIMINATED' | 'TABLE_BREAK' | 'BREAK_START' | 'BREAK_END' | 'TOURNAMENT_END';
+  type:
+    | 'LEVEL_CHANGE'
+    | 'PLAYER_ELIMINATED'
+    | 'TABLE_BREAK'
+    | 'FINAL_TABLE'
+    | 'TOURNAMENT_STARTED'
+    | 'BREAK_START'
+    | 'BREAK_END'
+    | 'TOURNAMENT_END';
   tournamentId: string;
   data: Partial<Tournament>;
   message: string;

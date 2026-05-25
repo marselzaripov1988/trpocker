@@ -9,7 +9,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Subject, takeUntil, filter, tap, distinctUntilChanged } from 'rxjs';
+import { Subject, takeUntil, filter, tap, distinctUntilChanged, map } from 'rxjs';
 
 import { TournamentStore } from '../../store/tournament.store';
 import { GameStore } from '../../store/game.store';
@@ -71,6 +71,12 @@ import { WebSocketService } from '../../services/websocket.service';
           </div>
         </div>
       </header>
+
+      @if (statusMessage()) {
+        <div class="status-banner" data-cy="tournament-status-banner" role="status">
+          {{ statusMessage() }}
+        </div>
+      }
 
       <!-- Main Game Area -->
       <main class="game-area">
@@ -729,7 +735,14 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   );
   readonly breakTimeRemaining = computed(() => this.tournamentVm().formattedTimeRemaining);
 
-  
+  readonly statusMessage = toSignal(
+    this.tournamentStore.lastUpdate$.pipe(
+      map(u => u?.message ?? null),
+      distinctUntilChanged()
+    ),
+    { initialValue: null as string | null }
+  );
+
   readonly tablePlayers = computed(() => {
     const gamePlayers = this.gameVm().game?.players;
     if (gamePlayers && gamePlayers.length > 0) {

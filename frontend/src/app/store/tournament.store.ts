@@ -32,6 +32,11 @@ import {
   mapTournamentDetailFromApi,
   TournamentDetailApi
 } from '../model/tournament-detail.mapper';
+import {
+  finalTableReachedFromWs,
+  playerEliminatedFromWs,
+  tableRebalancedFromWs
+} from '../model/tournament-ws.mapper';
 import { Game } from '../model/game';
 import { TournamentMessage, WebSocketService } from '../services/websocket.service';
 
@@ -618,18 +623,131 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
         this.scheduleTournamentRefresh(tournamentId);
         break;
       }
-      case 'PLAYER_ELIMINATED':
-      case 'TABLE_REBALANCED':
-      case 'TOURNAMENT_STARTED':
+      case 'PLAYER_ELIMINATED': {
+        const active = this.get().activeTournament;
+        if (active) {
+          const patch = playerEliminatedFromWs(message.data, active);
+          if (patch) {
+            this.updateTournamentState(patch);
+            this.syncMyPlayerAndTable();
+            const playerName = String(message.data['playerName'] ?? 'Player');
+            const pos = Number(message.data['finishPosition']);
+            this.setLastUpdate({
+              type: 'PLAYER_ELIMINATED',
+              tournamentId,
+              data: patch,
+              message: Number.isFinite(pos)
+                ? `${playerName} eliminated (#${pos})`
+                : `${playerName} eliminated`,
+              timestamp: Date.now()
+            });
+            return;
+          }
+        }
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      }
+      case 'TABLE_REBALANCED': {
+        const active = this.get().activeTournament;
+        if (active) {
+          const result = tableRebalancedFromWs(
+            message.data,
+            active,
+            this.get().myPlayer?.id
+          );
+          if (result.patch) {
+            this.updateTournamentState(result.patch);
+            if (result.myNewTableNumber) {
+              this.subscribeTournamentWebSocket(tournamentId, result.myNewTableNumber);
+            }
+            this.syncMyPlayerAndTable();
+            const moveCount = (message.data['playerMoves'] as unknown[] | undefined)?.length ?? 0;
+            this.setLastUpdate({
+              type: 'TABLE_BREAK',
+              tournamentId,
+              data: result.patch,
+              message: result.patch.status === 'FINAL_TABLE'
+                ? 'Final table formed — players consolidated'
+                : moveCount > 0
+                  ? `Tables rebalanced (${moveCount} move${moveCount === 1 ? '' : 's'})`
+                  : 'Tables rebalanced',
+              timestamp: Date.now()
+            });
+            return;
+          }
+        }
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      }
+      case 'FINAL_TABLE_REACHED': {
+        const active = this.get().activeTournament;
+        if (active && !message.data['playerMoves']) {
+          const patch = finalTableReachedFromWs(message.data, active);
+          this.updateTournamentState(patch);
+          this.setLastUpdate({
+            type: 'FINAL_TABLE',
+            tournamentId,
+            data: patch,
+            message: 'Final table reached!',
+            timestamp: Date.now()
+          });
+          return;
+        }
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      }
+      case 'TOURNAMENT_STARTED': {
+        const active = this.get().activeTournament;
+        if (active && (active.status === 'REGISTERING' || active.status === 'STARTING')) {
+          const patch = { status: 'RUNNING' as const };
+          this.updateTournamentState(patch);
+          this.setLastUpdate({
+            type: 'TOURNAMENT_STARTED',
+            tournamentId,
+            data: patch,
+            message: 'Tournament started',
+            timestamp: Date.now()
+          });
+          return;
+        }
+        this.scheduleTournamentRefresh(tournamentId);
+        break;
+      }
+      case 'TOURNAMENT_COMPLETED': {
+        this.updateTournamentState({ status: 'FINISHED' });
+        this.setLastUpdate({
+          type: 'TOURNAMENT_END',
+          tournamentId,
+          data: { status: 'FINISHED' },
+          message: 'Tournament completed',
+          timestamp: Date.now()
+        });
+        this.scheduleTournamentRefresh(tournamentId, 500);
+        break;
+      }
       case 'TABLE_CREATED':
       case 'PLAYER_REGISTERED':
-      case 'FINAL_TABLE_REACHED':
-      case 'TOURNAMENT_COMPLETED':
         this.scheduleTournamentRefresh(tournamentId);
         break;
       default:
         this.scheduleTournamentRefresh(tournamentId, 800);
     }
+  }
+
+  private syncMyPlayerAndTable(): void {
+    const tournament = this.get().activeTournament;
+    const myPlayer = this.get().myPlayer;
+    if (!tournament || !myPlayer) {
+      return;
+    }
+    const updatedPlayer = tournament.registeredPlayers.find(p => p.id === myPlayer.id);
+    if (updatedPlayer) {
+      this.setMyPlayer(updatedPlayer);
+    }
+    const myTable = tournament.tables.find(t =>
+      t.players.some(p => p.id === myPlayer.id)
+    );
+    this.setMyTable(myTable ?? null);
   }
 
   private scheduleTournamentRefresh(tournamentId: string, delayMs = 250): void {
@@ -664,19 +782,7 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
 
   private applyTournamentSnapshot(tournament: Tournament): void {
     this.setActiveTournament(tournament);
-
-    const myPlayer = this.get().myPlayer;
-    if (myPlayer) {
-      const updatedPlayer = tournament.registeredPlayers.find(p => p.id === myPlayer.id);
-      if (updatedPlayer) {
-        this.setMyPlayer(updatedPlayer);
-      }
-
-      const myTable = tournament.tables.find(t =>
-        t.players.some(p => p.id === myPlayer.id)
-      );
-      this.setMyTable(myTable ?? null);
-    }
+    this.syncMyPlayerAndTable();
   }
 
 

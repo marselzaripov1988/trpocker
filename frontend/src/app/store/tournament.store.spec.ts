@@ -18,14 +18,16 @@ import {
   formatTimeRemaining,
   getNextBlindLevel
 } from '../model/tournament';
-import { WebSocketService } from '../services/websocket.service';
-import { of } from 'rxjs';
+import { TournamentMessage, WebSocketService } from '../services/websocket.service';
+import { Subject, firstValueFrom, of } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 describe('TournamentStore', () => {
   let store: TournamentStore;
   let httpMock: HttpTestingController;
   let wsServiceMock: jasmine.SpyObj<WebSocketService>;
+  const wsUpdates$ = new Subject<TournamentMessage>();
+  let wsCurrentTournamentId: string | null = null;
   const apiUrl = `${environment.apiUrl}/v1/tournaments`;
 
 
@@ -166,12 +168,14 @@ describe('TournamentStore', () => {
       'unsubscribeFromTournament',
       'isConnected'
     ], {
-      tournamentUpdates$: of(),
+      tournamentUpdates$: wsUpdates$.asObservable(),
       connectionStatus$: of(false)
     });
     wsServiceMock.isConnected.and.returnValue(false);
+    wsCurrentTournamentId = null;
     Object.defineProperty(wsServiceMock, 'currentTournamentId', {
-      value: () => null
+      configurable: true,
+      value: () => wsCurrentTournamentId
     });
 
     TestBed.configureTestingModule({
@@ -1066,6 +1070,100 @@ describe('TournamentStore', () => {
       it('should return false when no player', () => {
         expect(store.isPlayerRegistered()).toBe(false);
       });
+    });
+
+    describe('WebSocket incremental updates', () => {
+      beforeEach(() => {
+        wsServiceMock.isConnected.and.returnValue(true);
+      });
+
+      it('patches elimination without HTTP refresh', fakeAsync(async () => {
+        const tournament = createMockTournament({
+          status: 'RUNNING',
+          registeredPlayers: [
+            createMockTournamentPlayer({ id: 'human-1', name: 'Human' }),
+            createMockTournamentPlayer({ id: 'bot-1', name: 'Bot1', isBot: true })
+          ],
+          tables: [
+            createMockTournamentTable({
+              players: [
+                createMockTournamentPlayer({ id: 'human-1', name: 'Human' }),
+                createMockTournamentPlayer({ id: 'bot-1', name: 'Bot1', isBot: true })
+              ]
+            })
+          ],
+          remainingPlayers: 2
+        });
+        store.setActiveTournament(tournament);
+        store.setMyPlayer(tournament.registeredPlayers[0]);
+        store.setMyTable(tournament.tables[0]);
+
+        wsUpdates$.next({
+          type: 'PLAYER_ELIMINATED',
+          tournamentId: tournament.id,
+          data: {
+            playerId: 'bot-1',
+            playerName: 'Bot1',
+            finishPosition: 2,
+            prize: 0,
+            playersRemaining: 1
+          }
+        });
+        tick(300);
+
+        const active = await firstValueFrom(store.activeTournament$);
+        const lastUpdate = await firstValueFrom(store.lastUpdate$);
+        expect(active?.remainingPlayers).toBe(1);
+        expect(active?.registeredPlayers.find(p => p.id === 'bot-1')?.isEliminated).toBe(true);
+        expect(lastUpdate?.type).toBe('PLAYER_ELIMINATED');
+        httpMock.expectNone(`${apiUrl}/${tournament.id}`);
+      }));
+
+      it('patches table rebalance and resubscribes WS for self move', fakeAsync(async () => {
+        wsCurrentTournamentId = 'tournament-123';
+        const human = createMockTournamentPlayer({ id: 'human-1', name: 'Human' });
+        const tournament = createMockTournament({
+          status: 'RUNNING',
+          tables: [
+            createMockTournamentTable({
+              id: 'table-1',
+              tableNumber: 1,
+              players: [human]
+            }),
+            createMockTournamentTable({
+              id: 'table-2',
+              tableNumber: 2,
+              players: [createMockTournamentPlayer({ id: 'bot-1', name: 'Bot1', isBot: true })]
+            })
+          ]
+        });
+        store.setActiveTournament(tournament);
+        store.setMyPlayer(human);
+        store.setMyTable(tournament.tables[0]);
+
+        wsUpdates$.next({
+          type: 'TABLE_REBALANCED',
+          tournamentId: tournament.id,
+          data: {
+            playerMoves: [{ playerId: 'human-1', fromTableId: 'table-1', toTableId: 'table-2' }],
+            closedTableIds: ['table-1'],
+            activeTableCount: 1,
+            finalTableFormed: true,
+            playersRemaining: 2
+          }
+        });
+        tick(300);
+
+        const active = await firstValueFrom(store.activeTournament$);
+        const myTable = await firstValueFrom(store.myTable$);
+        expect(active?.status).toBe('FINAL_TABLE');
+        expect(myTable?.tableNumber).toBe(2);
+        expect(wsServiceMock.updateTournamentTableSubscription).toHaveBeenCalledWith(
+          tournament.id,
+          2
+        );
+        httpMock.expectNone(`${apiUrl}/${tournament.id}`);
+      }));
     });
   });
 });

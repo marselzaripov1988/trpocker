@@ -17,6 +17,16 @@ $color-table-border: #1a7a5c;
 $color-text: #e2e8f0;
 $color-text-muted: #94a3b8;
 
+.status-banner {
+  padding: 0.5rem 1.25rem;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: $color-dark-bg;
+  background: linear-gradient(90deg, $color-gold 0%, color.adjust($color-gold, $lightness: 12%) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
 .tournament-table-container {
   min-height: 100vh;
   background: linear-gradient(135deg, $color-dark-bg 0%, #16213e 100%);
