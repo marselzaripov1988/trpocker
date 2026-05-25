@@ -44,6 +44,24 @@ k6 run -e SCENARIO=load -e VUS=20 -e DURATION=60s load/k6/tournament-table.js
 | `DURATION` | `60s` | Hold phase for `load` scenario |
 | `K6_PASSWORD` | `LoadTest123!` | Password for auto-registered users |
 | `ACTION_ROUNDS` | `30` | Max actions per VU per iteration |
+| `SETUP_STAGGER_SECONDS` | `13` | Delay between setup registrations (`0` when rate limit is off, e.g. CI) |
+
+## CI (GitHub Actions)
+
+Job `k6-smoke` in `.github/workflows/ci-cd.yml`:
+
+- Starts `docker-compose.k6.yml` (Postgres, Redis, backend with `RATE_LIMIT_ENABLED=false`)
+- Runs `k6 run load/k6/tournament-table.js` with `SETUP_STAGGER_SECONDS=0`
+- Uploads `k6-smoke-summary.json` artifact on completion
+
+Local reproduction:
+
+```bash
+docker compose -f docker-compose.k6.yml up -d --build
+# wait for http://localhost:8080/api/actuator/health
+SETUP_STAGGER_SECONDS=0 k6 run load/k6/tournament-table.js
+docker compose -f docker-compose.k6.yml down -v
+```
 
 ## What is measured
 

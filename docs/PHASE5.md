@@ -60,7 +60,18 @@ Incremental patches in `TournamentStore` instead of debounced full `loadTourname
 - `tournament-ws.mapper.spec.ts`
 - `tournament.store.spec.ts` (WS handler describe)
 
-### Next (5c+)
+---
 
-- CI k6 smoke job
-- E2E tournament flow
+## 5c — CI k6 smoke
+
+GitHub Actions job **`k6-smoke`** (after `backend-test`):
+
+- Stack: `docker-compose.k6.yml` — Postgres, Redis, backend on `:8080`
+- `RATE_LIMIT_ENABLED=false`, `SETUP_STAGGER_SECONDS=0` for fast setup
+- Artifact: `k6-smoke-summary.json`
+
+Does not block Docker image build (parallel with `e2e-test`).
+
+### Next (5d)
+
+- E2E tournament flow (Cypress)

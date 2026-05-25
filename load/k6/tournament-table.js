@@ -7,6 +7,7 @@
  *   VUS               players per tournament (default 4)
  *   K6_PASSWORD       default LoadTest123!
  *   ACTION_ROUNDS     max actions per VU (default 30)
+ *   SETUP_STAGGER_SECONDS  delay between setup user registrations (default 13; use 0 in CI)
  */
 import { sleep } from 'k6';
 import { registerAndLogin, fetchProfile } from './lib/auth.js';
@@ -23,6 +24,7 @@ import {
 const VUS = Number(__ENV.VUS || 4);
 const SCENARIO = (__ENV.SCENARIO || 'smoke').toLowerCase();
 const ACTION_ROUNDS = Number(__ENV.ACTION_ROUNDS || 30);
+const SETUP_STAGGER_SECONDS = Number(__ENV.SETUP_STAGGER_SECONDS ?? 13);
 
 export const options = (() => {
   if (SCENARIO === 'load') {
@@ -68,9 +70,9 @@ export function setup() {
   const runId = Date.now();
 
   for (let i = 0; i < VUS; i++) {
-    if (i > 0) {
-      // Auth bucket allows ~5 requests/min per IP — stagger user creation.
-      sleep(13);
+    if (i > 0 && SETUP_STAGGER_SECONDS > 0) {
+      // Auth bucket allows ~5 requests/min per IP when rate limiting is on.
+      sleep(SETUP_STAGGER_SECONDS);
     }
     const username = `k6_${runId}_${i}`;
     const session = registerAndLogin(username);
