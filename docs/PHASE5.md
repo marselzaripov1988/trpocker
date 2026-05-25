@@ -72,6 +72,29 @@ GitHub Actions job **`k6-smoke`** (after `backend-test`):
 
 Does not block Docker image build (parallel with `e2e-test`).
 
-### Next (5d)
+---
 
-- E2E tournament flow (Cypress)
+## 5d — E2E tournament flow (Cypress)
+
+### Fixes
+
+- Tournament routes: `/tournaments/:id` and `/tournaments/:id/play` (was broken `/tournament/...` → 404)
+- `TournamentStore.registerForTournament` sends `playerId` + maps detail response
+- `tournament-list.mapper.ts` maps `registeredPlayers` → `registeredCount`
+
+### Specs
+
+| File | Mode |
+|------|------|
+| `cypress/e2e/tournament.cy.ts` | Mocked `/api/v1/tournaments` — list, lobby, table |
+| `cypress/e2e/tournament-flow.cy.ts` | Live API when `CYPRESS_LIVE_TOURNAMENT=true` (CI e2e job) |
+
+### Commands
+
+- `cy.loginViaApi()` — register + login + profile
+- `cy.seedRunningSitAndGo({ maxPlayers: 2 })` — full SNG start for table E2E
+- `cy.setAuthSession(token, user)`
+
+### CI
+
+`e2e-test` sets `CYPRESS_LIVE_TOURNAMENT=true`, `RATE_LIMIT_ENABLED=false` on backend.

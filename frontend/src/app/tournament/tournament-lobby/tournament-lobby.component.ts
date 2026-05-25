@@ -687,7 +687,7 @@ export class TournamentLobbyComponent implements OnInit, OnDestroy {
   goToTable(): void {
     const tournament = this.tournament();
     if (tournament) {
-      this.router.navigate(['/tournament', tournament.id, 'play']);
+      this.router.navigate(['/tournaments', tournament.id, 'play']);
     }
   }
 

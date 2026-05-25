@@ -194,7 +194,7 @@ describe('TournamentListComponent', () => {
 
       component.onRegister(tournament);
 
-      expect(router.navigate).toHaveBeenCalledWith(['/tournament', 'nav-test']);
+      expect(router.navigate).toHaveBeenCalledWith(['/tournaments', 'nav-test']);
     });
 
     it('should navigate to tournament on view details', () => {
@@ -202,7 +202,7 @@ describe('TournamentListComponent', () => {
 
       component.onViewDetails(tournament);
 
-      expect(router.navigate).toHaveBeenCalledWith(['/tournament', 'details-test']);
+      expect(router.navigate).toHaveBeenCalledWith(['/tournaments', 'details-test']);
     });
   });
 

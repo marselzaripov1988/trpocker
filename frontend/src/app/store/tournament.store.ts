@@ -33,6 +33,11 @@ import {
   TournamentDetailApi
 } from '../model/tournament-detail.mapper';
 import {
+  mapTournamentListFromApi,
+  TournamentSummaryApi
+} from '../model/tournament-list.mapper';
+import { AuthService } from '../services/auth.service';
+import {
   finalTableReachedFromWs,
   playerEliminatedFromWs,
   tableRebalancedFromWs
@@ -135,6 +140,7 @@ const initialState: TournamentStoreState = {
 export class TournamentStore extends ComponentStore<TournamentStoreState> {
   private readonly http = inject(HttpClient);
   private readonly wsService = inject(WebSocketService);
+  private readonly authService = inject(AuthService);
 
   private readonly apiUrl = `${environment.apiUrl}/v1/tournaments`;
   private refreshDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -439,7 +445,8 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
     trigger$.pipe(
       tap(() => this.setLoading(true)),
       switchMap(() =>
-        this.http.get<TournamentListItem[]>(this.apiUrl).pipe(
+        this.http.get<TournamentSummaryApi[]>(this.apiUrl).pipe(
+          map(items => mapTournamentListFromApi(items)),
           tapResponse(
             tournaments => this.setTournaments(tournaments),
             (error: HttpErrorResponse) => this.handleError(error)
@@ -480,25 +487,38 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
   readonly registerForTournament = this.effect<{ tournamentId: string; playerName: string }>(
     params$ => params$.pipe(
       tap(() => this.setRegistering(true)),
-      switchMap(({ tournamentId, playerName }) =>
-        this.http.post<TournamentPlayer>(
+      switchMap(({ tournamentId, playerName }) => {
+        const user = this.authService.getCurrentUserValue();
+        if (!user?.id) {
+          this.setError('User profile not loaded. Please sign in again.');
+          this.setRegistering(false);
+          return EMPTY;
+        }
+        return this.http.post<TournamentDetailApi>(
           `${this.apiUrl}/${tournamentId}/register`,
-          { playerName }
+          { playerId: user.id, playerName }
         ).pipe(
+          map(api => mapTournamentDetailFromApi(api)),
           tapResponse(
-            player => {
-              this.setMyPlayer(player);
+            tournament => {
+              this.setActiveTournament(tournament);
+              const myPlayer = tournament.registeredPlayers.find(p => p.id === user.id);
+              if (myPlayer) {
+                this.setMyPlayer(myPlayer);
+              }
+              const myTable = tournament.tables.find(t =>
+                t.players.some(p => p.id === user.id)
+              );
+              this.setMyTable(myTable ?? null);
               this.setRegistering(false);
-
-              this.loadTournament(tournamentId);
             },
             (error: HttpErrorResponse) => {
               this.handleError(error);
               this.setRegistering(false);
             }
           )
-        )
-      )
+        );
+      })
     )
   );
 

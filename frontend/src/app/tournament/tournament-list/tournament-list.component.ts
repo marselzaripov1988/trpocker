@@ -296,11 +296,11 @@ export class TournamentListComponent implements OnInit, OnDestroy {
   }
 
   onRegister(tournament: TournamentListItem): void {
-    this.router.navigate(['/tournament', tournament.id]);
+    this.router.navigate(['/tournaments', tournament.id]);
   }
 
   onViewDetails(tournament: TournamentListItem): void {
-    this.router.navigate(['/tournament', tournament.id]);
+    this.router.navigate(['/tournaments', tournament.id]);
   }
 
   trackByTournamentId(index: number, tournament: TournamentListItem): string {

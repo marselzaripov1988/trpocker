@@ -4,6 +4,7 @@
 
 
 import './commands';
+import './tournament.commands';
 
 
 declare global {

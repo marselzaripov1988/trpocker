@@ -3,6 +3,10 @@ import { defineConfig } from 'cypress';
 export default defineConfig({
   e2e: {
     baseUrl: process.env['CYPRESS_BASE_URL'] || 'http://localhost:4200',
+    env: {
+      API_URL: process.env['CYPRESS_API_URL'] || 'http://localhost:8080/api',
+      LIVE_TOURNAMENT: process.env['CYPRESS_LIVE_TOURNAMENT'] ?? false
+    },
     viewportWidth: 1280,
     viewportHeight: 720,
     video: false,

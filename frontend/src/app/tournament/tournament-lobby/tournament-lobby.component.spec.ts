@@ -493,7 +493,7 @@ describe('TournamentLobbyComponent', () => {
       const goToTableBtn = fixture.nativeElement.querySelector('[data-cy="go-to-table-btn"]');
       goToTableBtn.click();
 
-      expect(router.navigate).toHaveBeenCalledWith(['/tournament', 'nav-test', 'play']);
+      expect(router.navigate).toHaveBeenCalledWith(['/tournaments', 'nav-test', 'play']);
     });
 
     it('should navigate back on back button click', () => {

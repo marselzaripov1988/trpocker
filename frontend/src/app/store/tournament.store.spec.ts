@@ -19,6 +19,8 @@ import {
   getNextBlindLevel
 } from '../model/tournament';
 import { TournamentMessage, WebSocketService } from '../services/websocket.service';
+import { AuthService } from '../services/auth.service';
+import { TournamentDetailApi } from '../model/tournament-detail.mapper';
 import { Subject, firstValueFrom, of } from 'rxjs';
 import { environment } from '../../environments/environment';
 
@@ -26,6 +28,7 @@ describe('TournamentStore', () => {
   let store: TournamentStore;
   let httpMock: HttpTestingController;
   let wsServiceMock: jasmine.SpyObj<WebSocketService>;
+  let authServiceMock: jasmine.SpyObj<AuthService>;
   const wsUpdates$ = new Subject<TournamentMessage>();
   let wsCurrentTournamentId: string | null = null;
   const apiUrl = `${environment.apiUrl}/v1/tournaments`;
@@ -140,6 +143,36 @@ describe('TournamentStore', () => {
     updatedAt: overrides.updatedAt ?? Date.now()
   });
 
+  const createMockTournamentDetailApi = (
+    overrides: Partial<TournamentDetailApi> = {}
+  ): TournamentDetailApi => ({
+    id: overrides.id ?? 't1',
+    name: overrides.name ?? 'Test Tournament',
+    status: overrides.status ?? 'REGISTERING',
+    registeredPlayers: overrides.registeredPlayers ?? 3,
+    playersRemaining: overrides.playersRemaining ?? 3,
+    minPlayers: overrides.minPlayers ?? 2,
+    maxPlayers: overrides.maxPlayers ?? 9,
+    currentLevel: overrides.currentLevel ?? 1,
+    currentBlinds: overrides.currentBlinds ?? { level: 1, smallBlind: 10, bigBlind: 20, ante: 0 },
+    nextBlinds: overrides.nextBlinds ?? null,
+    secondsToNextLevel: overrides.secondsToNextLevel ?? 300,
+    startingChips: overrides.startingChips ?? 1500,
+    averageStack: overrides.averageStack ?? 1500,
+    buyIn: overrides.buyIn ?? 100,
+    prizePool: overrides.prizePool ?? 300,
+    players: overrides.players ?? [
+      {
+        rank: 1,
+        playerId: 'new-player',
+        playerName: 'TestPlayer',
+        chips: 1500,
+        status: 'REGISTERED'
+      }
+    ],
+    tables: overrides.tables ?? []
+  });
+
   const createMockTournamentListItem = (overrides: Partial<TournamentListItem> = {}): TournamentListItem => ({
     id: overrides.id ?? 'tournament-123',
     name: overrides.name ?? 'Test Tournament',
@@ -178,11 +211,24 @@ describe('TournamentStore', () => {
       value: () => wsCurrentTournamentId
     });
 
+    authServiceMock = jasmine.createSpyObj('AuthService', ['getCurrentUserValue']);
+    authServiceMock.getCurrentUserValue.and.returnValue({
+      id: 'new-player',
+      username: 'TestPlayer',
+      email: 'test@test.com',
+      firstName: 'Test',
+      lastName: 'Player',
+      roles: ['USER'],
+      totalGamesPlayed: 0,
+      totalWinnings: 0
+    });
+
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
       providers: [
         TournamentStore,
-        { provide: WebSocketService, useValue: wsServiceMock }
+        { provide: WebSocketService, useValue: wsServiceMock },
+        { provide: AuthService, useValue: authServiceMock }
       ]
     });
 
@@ -672,22 +718,39 @@ describe('TournamentStore', () => {
   describe('Effects', () => {
     describe('loadTournaments', () => {
       it('should load tournaments from API', fakeAsync(() => {
-        const tournaments = [
-          createMockTournamentListItem({ id: 't1' }),
-          createMockTournamentListItem({ id: 't2' })
-        ];
-
         store.loadTournaments();
         tick();
 
         const req = httpMock.expectOne(`${apiUrl}`);
         expect(req.request.method).toBe('GET');
-        req.flush(tournaments);
+        req.flush([
+          {
+            id: 't1',
+            name: 'T1',
+            status: 'REGISTERING',
+            registeredPlayers: 5,
+            maxPlayers: 9,
+            buyIn: 100,
+            prizePool: 500,
+            currentLevel: 1
+          },
+          {
+            id: 't2',
+            name: 'T2',
+            status: 'RUNNING',
+            registeredPlayers: 9,
+            maxPlayers: 9,
+            buyIn: 100,
+            prizePool: 900,
+            currentLevel: 2
+          }
+        ]);
 
         tick();
 
         store.tournaments$.subscribe(result => {
           expect(result.length).toBe(2);
+          expect(result[0].registeredCount).toBe(5);
         });
 
         flush();
@@ -731,14 +794,12 @@ describe('TournamentStore', () => {
 
     describe('loadTournament', () => {
       it('should load specific tournament by ID', fakeAsync(() => {
-        const tournament = createMockTournament({ id: 'test-id' });
-
         store.loadTournament('test-id');
         tick();
 
         const req = httpMock.expectOne(`${apiUrl}/test-id`);
         expect(req.request.method).toBe('GET');
-        req.flush(tournament);
+        req.flush(createMockTournamentDetailApi({ id: 'test-id' }));
 
         tick();
 
@@ -930,28 +991,16 @@ describe('TournamentStore', () => {
 
     describe('registerForTournament', () => {
       it('should register player for tournament', fakeAsync(() => {
-        const registeredPlayer = createMockTournamentPlayer({ id: 'new-player', isBot: false });
-
         store.registerForTournament({ tournamentId: 't1', playerName: 'TestPlayer' });
         tick();
 
         const registerReq = httpMock.expectOne(`${apiUrl}/t1/register`);
         expect(registerReq.request.method).toBe('POST');
-        expect(registerReq.request.body).toEqual({ playerName: 'TestPlayer' });
-        registerReq.flush(registeredPlayer);
-
-        tick();
-
-
-        const loadReq = httpMock.expectOne(`${apiUrl}/t1`);
-        const tournamentWithNewPlayer = createMockTournament({
-          registeredPlayers: [
-            registeredPlayer,
-            createMockTournamentPlayer({ id: 'bot-1', name: 'Bot1', isBot: true }),
-            createMockTournamentPlayer({ id: 'bot-2', name: 'Bot2', isBot: true })
-          ]
+        expect(registerReq.request.body).toEqual({
+          playerId: 'new-player',
+          playerName: 'TestPlayer'
         });
-        loadReq.flush(tournamentWithNewPlayer);
+        registerReq.flush(createMockTournamentDetailApi());
 
         tick();
 
@@ -975,11 +1024,7 @@ describe('TournamentStore', () => {
         expect(registeringStates).toContain(true);
 
         const req = httpMock.expectOne(`${apiUrl}/t1/register`);
-        req.flush(createMockTournamentPlayer());
-
-        tick();
-
-        httpMock.expectOne(`${apiUrl}/t1`).flush(createMockTournament());
+        req.flush(createMockTournamentDetailApi());
 
         tick();
         flush();
