@@ -17,10 +17,10 @@ Or set in environment when starting Spring Boot.
 
 ## Quick run
 
-From repo root:
+From repo root (backend on `:8080`, Postgres/Redis up):
 
 ```bash
-# Smoke — 4 players, one hand each
+# Smoke — 4 players, one hand each (~2 min: setup staggers auth for rate limits)
 k6 run load/k6/tournament-table.js
 
 # Load — ramp to 20 VUs for 60s

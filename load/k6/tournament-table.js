@@ -13,7 +13,9 @@ import { registerAndLogin, fetchProfile } from './lib/auth.js';
 import {
   createTournament,
   registerForTournament,
+  tryStartTournament,
   waitForRunning,
+  waitForTables,
   startTableHand,
   playUntilFinishedOrLimit,
 } from './lib/tournament.js';
@@ -62,35 +64,60 @@ export const options = (() => {
 })();
 
 export function setup() {
-  const bootstrapUser = `k6_bootstrap_${Date.now()}`;
-  const { token } = registerAndLogin(bootstrapUser);
-  const tournamentId = createTournament(token, {
-    name: `k6-${SCENARIO}-${Date.now()}`,
+  const players = [];
+  const runId = Date.now();
+
+  for (let i = 0; i < VUS; i++) {
+    if (i > 0) {
+      // Auth bucket allows ~5 requests/min per IP — stagger user creation.
+      sleep(13);
+    }
+    const username = `k6_${runId}_${i}`;
+    const session = registerAndLogin(username);
+    players.push({ username, token: session.token });
+  }
+
+  const tournamentId = createTournament(players[0].token, {
+    name: `k6-${SCENARIO}-${runId}`,
     maxPlayers: VUS,
   });
-  return { tournamentId };
+  return { tournamentId, players };
 }
 
 export default function (data) {
   const tournamentId = data.tournamentId;
-  const username = `k6_vu${__VU}_${__ITER}_${Date.now()}`;
+  const player = data.players[__VU - 1];
+  const token = player?.token;
+  if (!token) {
+    return;
+  }
 
-  const { token } = registerAndLogin(username);
   const profile = fetchProfile(token);
   const userId = profile?.id;
   if (!userId) {
     return;
   }
 
-  registerForTournament(token, tournamentId, userId, username);
+  registerForTournament(token, tournamentId, userId, player.username);
 
-  const detail = waitForRunning(token, tournamentId);
+  // Last VU ensures start after all parallel registrations land.
+  if (__VU === VUS) {
+    sleep(0.5);
+    tryStartTournament(token, tournamentId);
+  }
+
+  const running = waitForRunning(token, tournamentId);
+  if (!running) {
+    return;
+  }
+
+  const detail = waitForTables(token, tournamentId);
   if (!detail?.tables?.length) {
     return;
   }
 
   const tableId = detail.tables[0].id;
-  sleep(0.2);
+  sleep(0.3);
 
   const game = startTableHand(token, tournamentId, tableId);
   if (!game?.id) {

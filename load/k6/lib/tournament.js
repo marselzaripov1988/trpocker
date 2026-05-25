@@ -36,6 +36,16 @@ export function getTournamentDetail(token, tournamentId) {
   return parseJson(res);
 }
 
+export function tryStartTournament(token, tournamentId) {
+  const api = apiBase();
+  const res = post(`${api}/v1/tournaments/${tournamentId}/start`, {}, token, {
+    name: 'tournament_start',
+  });
+  check(res, {
+    'tournament_start ok': (r) => r.status === 200 || r.status === 202,
+  });
+}
+
 export function waitForRunning(token, tournamentId, timeoutSec = 90) {
   const deadline = Date.now() + timeoutSec * 1000;
   while (Date.now() < deadline) {
@@ -51,6 +61,19 @@ export function waitForRunning(token, tournamentId, timeoutSec = 90) {
   }
   check(null, { 'tournament reached RUNNING': () => false });
   return null;
+}
+
+export function waitForTables(token, tournamentId, timeoutSec = 30) {
+  const deadline = Date.now() + timeoutSec * 1000;
+  while (Date.now() < deadline) {
+    const detail = getTournamentDetail(token, tournamentId);
+    if (detail?.tables?.length > 0 && detail.tables[0]?.id) {
+      return detail;
+    }
+    sleep(0.3);
+  }
+  check(null, { 'tournament tables ready': () => false });
+  return getTournamentDetail(token, tournamentId);
 }
 
 export function startTableHand(token, tournamentId, tableId) {
