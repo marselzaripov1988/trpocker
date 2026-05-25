@@ -450,7 +450,7 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
       tap(() => this.setLoading(true)),
       switchMap(tournamentId =>
         this.http.get<TournamentDetailApi>(`${this.apiUrl}/${tournamentId}`).pipe(
-          map(api => this.mapTournamentFromApi(api)),
+          map(api => mapTournamentDetailFromApi(api)),
           tapResponse(
             tournament => {
               this.setActiveTournament(tournament);
@@ -645,7 +645,7 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
   private startPollingFallback(tournamentId: string): void {
     const fetchTournament = () =>
       this.http.get<TournamentDetailApi>(`${this.apiUrl}/${tournamentId}`).pipe(
-        map(api => this.mapTournamentFromApi(api)),
+        map(api => mapTournamentDetailFromApi(api)),
         catchError(() => EMPTY)
       );
 
@@ -660,27 +660,6 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
       filter(() => this.get().connectionStatus === 'connected'),
       switchMap(() => fetchTournament())
     ).subscribe(tournament => this.applyTournamentSnapshot(tournament));
-  }
-
-  /** Maps REST detail; preserves legacy `registeredPlayers` / table `players` when present in JSON. */
-  private mapTournamentFromApi(api: TournamentDetailApi): Tournament {
-    const mapped = mapTournamentDetailFromApi(api);
-    const legacyPayload = api as unknown as {
-      registeredPlayers?: TournamentPlayer[];
-      tables?: TournamentTable[];
-    };
-    const legacyPlayers = legacyPayload.registeredPlayers;
-    const legacyTables = legacyPayload.tables;
-    if (legacyPlayers?.length) {
-      const withTables = legacyTables?.some(t => t.players?.length)
-        ? { ...mapped, tables: legacyTables }
-        : mapped;
-      return { ...withTables, registeredPlayers: legacyPlayers };
-    }
-    if (legacyTables?.some(t => t.players?.length)) {
-      return { ...mapped, tables: legacyTables };
-    }
-    return mapped;
   }
 
   private applyTournamentSnapshot(tournament: Tournament): void {

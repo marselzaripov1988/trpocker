@@ -3,6 +3,7 @@ package com.truholdem.service;
 import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.*;
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.LeaderboardEntryDto;
 import com.truholdem.dto.TournamentDetailResponse;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.*;
@@ -23,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 
 @Service
@@ -471,12 +474,16 @@ public class TournamentService {
         }
 
         int prizePool = tournament.getBuyIn() * registered;
-        List<TournamentDetailResponse.TableSummary> tables = List.of();
-        if (tableCount > 0 && tableCount <= 100) {
-            tables = tableRepository.findActiveTablesByTournament(tournamentId).stream()
-                    .map(TournamentDetailResponse.TableSummary::from)
-                    .toList();
-        }
+
+        List<TournamentRegistration> registrationsForDetail = loadDetailRegistrations(tournamentId, registered);
+        List<LeaderboardEntryDto> players = IntStream.range(0, registrationsForDetail.size())
+                .mapToObj(i -> LeaderboardEntryDto.from(registrationsForDetail.get(i), i + 1))
+                .toList();
+        Map<UUID, TournamentRegistration> registrationByPlayerId = registrationsForDetail.stream()
+                .collect(Collectors.toMap(TournamentRegistration::getPlayerId, Function.identity(), (a, b) -> a));
+
+        List<TournamentDetailResponse.TableSummary> tables = loadDetailTables(
+                tournamentId, tableCount, registrationByPlayerId);
 
         return TournamentDetailResponse.fromSummary(
                 tournament,
@@ -488,7 +495,37 @@ public class TournamentService {
                 chipLeaderStack,
                 averageStack,
                 prizePool,
-                timingService);
+                timingService,
+                players,
+                tables);
+    }
+
+    private List<TournamentRegistration> loadDetailRegistrations(UUID tournamentId, int registeredCount) {
+        int max = tournamentProperties.getDetailMaxRegistrations();
+        if (registeredCount <= 0 || registeredCount > max) {
+            return List.of();
+        }
+        return registrationRepository.findByTournamentIdOrderByChipsDesc(tournamentId);
+    }
+
+    private List<TournamentDetailResponse.TableSummary> loadDetailTables(
+            UUID tournamentId,
+            int tableCount,
+            Map<UUID, TournamentRegistration> registrationByPlayerId) {
+        int max = tournamentProperties.getDetailMaxTables();
+        if (tableCount <= 0 || tableCount > max) {
+            return List.of();
+        }
+        return tableRepository.findActiveTablesByTournament(tournamentId).stream()
+                .map(table -> {
+                    List<TournamentDetailResponse.TablePlayerSummary> seated = table.getPlayerIds().stream()
+                            .map(registrationByPlayerId::get)
+                            .filter(Objects::nonNull)
+                            .map(TournamentDetailResponse.TablePlayerSummary::from)
+                            .toList();
+                    return TournamentDetailResponse.TableSummary.from(table, seated);
+                })
+                .toList();
     }
 
     

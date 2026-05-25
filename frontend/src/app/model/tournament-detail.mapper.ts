@@ -5,6 +5,7 @@ import {
   TURBO_BLIND_LEVELS,
   Tournament,
   TournamentConfig,
+  TournamentPlayer,
   TournamentStatus,
   TournamentTable
 } from './tournament';
@@ -16,11 +17,32 @@ export interface BlindLevelInfoApi {
   ante: number;
 }
 
+export interface TournamentPlayerEntryApi {
+  rank: number;
+  playerId: string;
+  playerName: string;
+  chips: number;
+  status: string;
+  finishPosition?: number | null;
+  prizeWon?: number | null;
+  rebuysUsed?: number;
+  addOnsUsed?: number;
+  bountiesCollected?: number;
+}
+
+export interface TournamentTablePlayerApi {
+  id: string;
+  name: string;
+  chips: number;
+  isBot: boolean;
+}
+
 export interface TournamentDetailApi {
   id: string;
   name: string;
   type?: string;
   status: TournamentStatus;
+  /** Registered player count. */
   registeredPlayers: number;
   playersRemaining: number;
   minPlayers: number;
@@ -40,6 +62,8 @@ export interface TournamentDetailApi {
   payoutStructure?: number[];
   tableCount?: number;
   tables?: TournamentTableSummaryApi[];
+  /** Standings (Phase 5a); empty when tournament is very large. */
+  players?: TournamentPlayerEntryApi[];
   createdAt?: string;
   startTime?: string | null;
 }
@@ -50,6 +74,71 @@ export interface TournamentTableSummaryApi {
   playerCount: number;
   isFinalTable: boolean;
   currentGameId?: string | null;
+  players?: TournamentTablePlayerApi[];
+}
+
+function isBotName(name: string): boolean {
+  return name?.length >= 3 && name.substring(0, 3).toLowerCase() === 'bot';
+}
+
+function isEliminatedStatus(status: string): boolean {
+  return status === 'ELIMINATED' || status === 'FINISHED' || status === 'WITHDRAWN';
+}
+
+function baseTournamentPlayer(
+  partial: Partial<TournamentPlayer> & Pick<TournamentPlayer, 'id' | 'name' | 'chips'>
+): TournamentPlayer {
+  return {
+    hand: [],
+    betAmount: 0,
+    totalBetInRound: 0,
+    folded: false,
+    isAllIn: false,
+    hasActed: false,
+    seatPosition: 0,
+    tablesPlayed: 0,
+    handsWon: 0,
+    biggestPot: 0,
+    knockouts: 0,
+    isEliminated: false,
+    isBot: false,
+    canAct() {
+      return !this.folded && !this.isAllIn && this.chips > 0;
+    },
+    getDisplayName() {
+      return this.name || 'Anonymous';
+    },
+    isHuman() {
+      return !this.isBot;
+    },
+    getStatusText() {
+      return '';
+    },
+    ...partial
+  };
+}
+
+function mapPlayerEntry(entry: TournamentPlayerEntryApi): TournamentPlayer {
+  return baseTournamentPlayer({
+    id: entry.playerId,
+    name: entry.playerName,
+    chips: entry.chips,
+    isBot: isBotName(entry.playerName),
+    rank: entry.rank,
+    finishPosition: entry.finishPosition ?? undefined,
+    prizeMoney: entry.prizeWon ?? undefined,
+    isEliminated: isEliminatedStatus(entry.status),
+    knockouts: entry.bountiesCollected ?? 0
+  });
+}
+
+function mapTablePlayer(p: TournamentTablePlayerApi): TournamentPlayer {
+  return baseTournamentPlayer({
+    id: p.id,
+    name: p.name,
+    chips: p.chips,
+    isBot: p.isBot
+  });
 }
 
 function blindFromInfo(info: BlindLevelInfoApi, durationMinutes: number): BlindLevel {
@@ -105,15 +194,20 @@ export function mapTournamentDetailFromApi(api: TournamentDetailApi): Tournament
     addOnAllowed: false
   };
 
+  const registeredPlayers: TournamentPlayer[] = (api.players ?? []).map(mapPlayerEntry);
+
   const tables: TournamentTable[] = (api.tables ?? []).map(t => ({
     id: t.id,
     tableNumber: t.tableNumber,
-    players: [],
+    players: (t.players ?? []).map(mapTablePlayer),
     currentHandNumber: 0,
     dealerPosition: 0,
     isActive: true,
     currentGameId: t.currentGameId ?? null
   }));
+
+  const chipStacks = registeredPlayers.filter(p => !p.isEliminated).map(p => p.chips ?? 0);
+  const smallestStack = chipStacks.length > 0 ? Math.min(...chipStacks) : 0;
 
   const now = Date.now();
 
@@ -128,13 +222,13 @@ export function mapTournamentDetailFromApi(api: TournamentDetailApi): Tournament
     levelStartTime,
     levelEndTime,
     nextBreakAtLevel: 0,
-    registeredPlayers: [],
+    registeredPlayers,
     remainingPlayers: api.playersRemaining,
     totalPlayers: api.registeredPlayers,
     tables,
     averageStack: api.averageStack,
     largestStack: api.chipLeaderStack ?? api.averageStack,
-    smallestStack: 0,
+    smallestStack,
     totalChipsInPlay: api.averageStack * api.playersRemaining,
     handsPlayed: 0,
     prizePool: api.prizePool,

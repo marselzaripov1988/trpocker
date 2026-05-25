@@ -266,7 +266,39 @@ class TournamentControllerIT {
         @Test
         @DisplayName("Should get tournament by ID - returns 200")
         void getTournament_ValidId_Returns200() throws Exception {
-            when(tournamentService.getTournament(tournamentId)).thenReturn(testTournament);
+            UUID seatedId = UUID.randomUUID();
+            TournamentDetailResponse detail = new TournamentDetailResponse(
+                    tournamentId,
+                    "Sunday Million",
+                    TournamentType.FREEZEOUT,
+                    TournamentStatus.REGISTERING,
+                    1,
+                    1,
+                    2,
+                    9,
+                    1,
+                    new TournamentDetailResponse.BlindLevelInfo(1, 10, 20, 0),
+                    new TournamentDetailResponse.BlindLevelInfo(2, 15, 30, 0),
+                    0,
+                    null,
+                    900,
+                    1500,
+                    1500,
+                    1500,
+                    "Sunday Million",
+                    100,
+                    100,
+                    List.of(50, 30, 20),
+                    3,
+                    0,
+                    List.of(),
+                    List.of(new LeaderboardEntryDto(
+                            1, seatedId, "Hero", 1500, RegistrationStatus.REGISTERED,
+                            null, null, 0, 0, 0)),
+                    Instant.now(),
+                    null,
+                    null);
+            when(tournamentService.getTournamentDetail(tournamentId)).thenReturn(detail);
 
             mockMvc.perform(get(BASE_URL + "/{id}", tournamentId))
                 .andExpect(status().isOk())
@@ -275,14 +307,16 @@ class TournamentControllerIT {
                 .andExpect(jsonPath("$.type").value("FREEZEOUT"))
                 .andExpect(jsonPath("$.status").value("REGISTERING"))
                 .andExpect(jsonPath("$.buyIn").value(100))
-                .andExpect(jsonPath("$.startingChips").value(1500));
+                .andExpect(jsonPath("$.startingChips").value(1500))
+                .andExpect(jsonPath("$.players", hasSize(1)))
+                .andExpect(jsonPath("$.players[0].playerName").value("Hero"));
         }
 
         @Test
         @DisplayName("Should return 404 for non-existing tournament")
         void getTournament_NotFound_Returns404() throws Exception {
             UUID nonExistentId = UUID.randomUUID();
-            when(tournamentService.getTournament(nonExistentId))
+            when(tournamentService.getTournamentDetail(nonExistentId))
                 .thenThrow(new ResourceNotFoundException("Tournament not found"));
 
             mockMvc.perform(get(BASE_URL + "/{id}", nonExistentId))

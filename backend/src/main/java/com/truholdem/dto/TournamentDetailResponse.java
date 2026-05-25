@@ -47,6 +47,9 @@ public record TournamentDetailResponse(
     
     int tableCount,
     List<TableSummary> tables,
+
+    /** Player standings (empty when field is too large; use leaderboard API). */
+    List<LeaderboardEntryDto> players,
     
     
     Instant createdAt,
@@ -62,12 +65,16 @@ public record TournamentDetailResponse(
                 tournament.getRegistrations().size(),
                 tournament.getPlayersRemaining(),
                 tournament.getActiveTables().size(),
-                tournament.getActiveTables().stream().map(TableSummary::from).toList(),
+                tournament.getActiveTables().stream()
+                        .map(TableSummary::from)
+                        .toList(),
                 tournament.getChipLeader().map(TournamentRegistration::getPlayerName).orElse(null),
                 tournament.getChipLeader().map(TournamentRegistration::getCurrentChips).orElse(0),
                 tournament.getAverageStack(),
                 tournament.getPrizePool(),
-                null);
+                null,
+                List.of(),
+                List.of());
     }
 
     /**
@@ -83,7 +90,9 @@ public record TournamentDetailResponse(
             int chipLeaderStack,
             int averageStack,
             int prizePool,
-            TournamentTimingService timingService) {
+            TournamentTimingService timingService,
+            List<LeaderboardEntryDto> players,
+            List<TableSummary> tablesWithPlayers) {
         BlindLevel current = tournament.getCurrentBlindLevel();
         BlindLevel next = tournament.getBlindStructure().getLevelAt(tournament.getCurrentLevel() + 1);
 
@@ -135,7 +144,8 @@ public record TournamentDetailResponse(
                 tournament.getPayoutStructure(),
                 tournament.getPaidPositions(),
                 tableCount,
-                tables,
+                tablesWithPlayers,
+                players != null ? players : List.of(),
                 tournament.getCreatedAt(),
                 tournament.getStartTime(),
                 durationStr);
@@ -164,17 +174,38 @@ public record TournamentDetailResponse(
         int tableNumber,
         int playerCount,
         boolean isFinalTable,
-        UUID currentGameId
+        UUID currentGameId,
+        List<TablePlayerSummary> players
     ) {
         public static TableSummary from(TournamentTable table) {
+            return from(table, List.of());
+        }
+
+        public static TableSummary from(TournamentTable table, List<TablePlayerSummary> players) {
             UUID gameId = table.getCurrentGame() != null ? table.getCurrentGame().getId() : null;
             return new TableSummary(
                 table.getId(),
                 table.getTableNumber(),
                 table.getPlayerCount(),
                 table.isFinalTable(),
-                gameId
-            );
+                gameId,
+                players != null ? players : List.of());
+        }
+    }
+
+    public record TablePlayerSummary(
+        UUID id,
+        String name,
+        int chips,
+        boolean isBot
+    ) {
+        public static TablePlayerSummary from(TournamentRegistration registration) {
+            String name = registration.getPlayerName();
+            return new TablePlayerSummary(
+                    registration.getPlayerId(),
+                    name,
+                    registration.getCurrentChips(),
+                    name != null && name.regionMatches(true, 0, "bot", 0, 3));
         }
     }
 }

@@ -294,6 +294,14 @@ public class AppProperties {
         @Min(1)
         private int defaultPageSize = 50;
 
+        /** Max registrations embedded in GET tournament detail (larger fields use leaderboard API). */
+        @Min(1)
+        private int detailMaxRegistrations = 500;
+
+        /** Max active tables with seated players in GET tournament detail. */
+        @Min(1)
+        private int detailMaxTables = 100;
+
         /** Phase 3: logical shards for table-scoped WebSocket topics (tableNumber % shardCount). */
         @Min(1)
         private int shardCount = 16;
@@ -337,6 +345,22 @@ public class AppProperties {
 
         public void setDefaultPageSize(int defaultPageSize) {
             this.defaultPageSize = defaultPageSize;
+        }
+
+        public int getDetailMaxRegistrations() {
+            return detailMaxRegistrations;
+        }
+
+        public void setDetailMaxRegistrations(int detailMaxRegistrations) {
+            this.detailMaxRegistrations = detailMaxRegistrations;
+        }
+
+        public int getDetailMaxTables() {
+            return detailMaxTables;
+        }
+
+        public void setDetailMaxTables(int detailMaxTables) {
+            this.detailMaxTables = detailMaxTables;
         }
 
         public int getShardCount() {

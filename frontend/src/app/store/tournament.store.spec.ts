@@ -755,7 +755,35 @@ describe('TournamentStore', () => {
         tick();
 
         const req = httpMock.expectOne(`${apiUrl}/test-id`);
-        req.flush({ ...tournament, registeredPlayers: tournament.registeredPlayers });
+        req.flush({
+          id: tournament.id,
+          name: tournament.name,
+          status: tournament.status,
+          registeredPlayers: tournament.totalPlayers,
+          playersRemaining: tournament.remainingPlayers,
+          minPlayers: tournament.config.minPlayers,
+          maxPlayers: tournament.config.maxPlayers,
+          currentLevel: tournament.currentLevel,
+          currentBlinds: {
+            level: tournament.currentBlinds.level,
+            smallBlind: tournament.currentBlinds.smallBlind,
+            bigBlind: tournament.currentBlinds.bigBlind,
+            ante: tournament.currentBlinds.ante
+          },
+          nextBlinds: null,
+          secondsToNextLevel: 900,
+          startingChips: tournament.config.startingChips,
+          averageStack: tournament.averageStack,
+          buyIn: tournament.config.buyIn,
+          prizePool: tournament.prizePool,
+          players: tournament.registeredPlayers.map((p, i) => ({
+            rank: i + 1,
+            playerId: p.id,
+            playerName: p.name,
+            chips: p.chips ?? 0,
+            status: p.isEliminated ? 'ELIMINATED' : 'PLAYING'
+          }))
+        });
 
         tick();
 
@@ -786,9 +814,46 @@ describe('TournamentStore', () => {
 
         const req = httpMock.expectOne(`${apiUrl}/test-id`);
         req.flush({
-          ...tournament,
-          registeredPlayers: tournament.registeredPlayers,
-          tables: tournament.tables
+          id: tournament.id,
+          name: tournament.name,
+          status: tournament.status,
+          registeredPlayers: tournament.totalPlayers,
+          playersRemaining: tournament.remainingPlayers,
+          minPlayers: tournament.config.minPlayers,
+          maxPlayers: tournament.config.maxPlayers,
+          currentLevel: tournament.currentLevel,
+          currentBlinds: {
+            level: tournament.currentBlinds.level,
+            smallBlind: tournament.currentBlinds.smallBlind,
+            bigBlind: tournament.currentBlinds.bigBlind,
+            ante: tournament.currentBlinds.ante
+          },
+          nextBlinds: null,
+          secondsToNextLevel: 900,
+          startingChips: tournament.config.startingChips,
+          averageStack: tournament.averageStack,
+          buyIn: tournament.config.buyIn,
+          prizePool: tournament.prizePool,
+          players: tournament.registeredPlayers.map((p, i) => ({
+            rank: i + 1,
+            playerId: p.id,
+            playerName: p.name,
+            chips: p.chips ?? 0,
+            status: 'PLAYING'
+          })),
+          tables: tournament.tables.map(t => ({
+            id: t.id,
+            tableNumber: t.tableNumber,
+            playerCount: t.players.length,
+            isFinalTable: false,
+            currentGameId: t.currentGameId ?? null,
+            players: t.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              chips: p.chips ?? 0,
+              isBot: p.isBot
+            }))
+          }))
         });
 
         tick();

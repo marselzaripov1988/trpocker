@@ -1,6 +1,7 @@
 package com.truholdem.integration;
 
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.TournamentDetailResponse;
 import com.truholdem.model.*;
 import com.truholdem.repository.*;
 import com.truholdem.service.*;
@@ -786,6 +787,29 @@ class TournamentIT {
             assertThat(leaderboard.get(0).getCurrentChips()).isEqualTo(3000);
             assertThat(leaderboard.get(1).getCurrentChips()).isEqualTo(2500);
             assertThat(leaderboard.get(5).getCurrentChips()).isEqualTo(0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Tournament detail API (Phase 5a)")
+    class TournamentDetailApiTests {
+
+        @Test
+        @DisplayName("Detail response includes standings and seated players")
+        void detailIncludesPlayersAndTableSeats() {
+            tournament = createFreezeoutTournament(4, 100, 1500);
+            tournamentId = tournament.getId();
+            registerPlayers(4);
+            tournamentService.startTournament(tournamentId);
+
+            TournamentDetailResponse detail = tournamentService.getTournamentDetail(tournamentId);
+
+            assertThat(detail.registeredPlayers()).isEqualTo(4);
+            assertThat(detail.players()).hasSize(4);
+            assertThat(detail.players()).extracting(p -> p.playerName())
+                    .contains("Player_1", "Player_4");
+            assertThat(detail.tables()).isNotEmpty();
+            assertThat(detail.tables().get(0).players()).hasSizeGreaterThanOrEqualTo(2);
         }
     }
 

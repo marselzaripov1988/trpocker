@@ -26,6 +26,46 @@ describe('tournament-detail.mapper', () => {
     prizePool: 400
   };
 
+  it('maps player standings and table seats from API', () => {
+    const api: TournamentDetailApi = {
+      ...turboApi,
+      players: [
+        {
+          rank: 1,
+          playerId: 'p1',
+          playerName: 'Alice',
+          chips: 2000,
+          status: 'PLAYING'
+        },
+        {
+          rank: 2,
+          playerId: 'p2',
+          playerName: 'Bot_1',
+          chips: 1000,
+          status: 'PLAYING'
+        }
+      ],
+      tables: [
+        {
+          id: 'table-1',
+          tableNumber: 1,
+          playerCount: 2,
+          isFinalTable: false,
+          currentGameId: null,
+          players: [
+            { id: 'p1', name: 'Alice', chips: 2000, isBot: false },
+            { id: 'p2', name: 'Bot_1', chips: 1000, isBot: true }
+          ]
+        }
+      ]
+    };
+    const t = mapTournamentDetailFromApi(api);
+    expect(t.registeredPlayers).toHaveLength(2);
+    expect(t.registeredPlayers[0].name).toBe('Alice');
+    expect(t.registeredPlayers[1].isBot).toBe(true);
+    expect(t.tables[0].players).toHaveLength(2);
+  });
+
   it('maps API detail to tournament with level end time', () => {
     const t = mapTournamentDetailFromApi(turboApi);
     expect(t.levelEndTime).toBe(1_700_000_000_000);
