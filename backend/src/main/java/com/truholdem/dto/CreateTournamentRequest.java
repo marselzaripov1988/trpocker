@@ -103,6 +103,19 @@ public record CreateTournamentRequest(
     }
     
     
+    public static CreateTournamentRequest pyramid(String name, int maxPlayers, int seatsPerTable, int handsPerRound) {
+        return new CreateTournamentRequest(
+            name,
+            TournamentType.PYRAMID,
+            1000,
+            2,
+            maxPlayers,
+            0,
+            "STANDARD",
+            null, null, null, null, null, null, null
+        );
+    }
+
     public static CreateTournamentRequest bounty(String name, int buyIn, int bountyAmount, int maxPlayers) {
         return new CreateTournamentRequest(
             name,

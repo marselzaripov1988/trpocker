@@ -187,6 +187,9 @@ public class AppProperties {
         /** Phase 3: enqueue PostgreSQL persist on hand milestones (Redis remains authoritative). */
         private boolean asyncPersistEnabled = false;
 
+        /** {@link BotMode#ADVANCED} by default; use PASSIVE for mass bot / load tests. */
+        private BotMode botMode = BotMode.ADVANCED;
+
         
         public int getDefaultChips() {
             return defaultChips;
@@ -275,6 +278,14 @@ public class AppProperties {
         public void setAsyncPersistEnabled(boolean asyncPersistEnabled) {
             this.asyncPersistEnabled = asyncPersistEnabled;
         }
+
+        public BotMode getBotMode() {
+            return botMode;
+        }
+
+        public void setBotMode(BotMode botMode) {
+            this.botMode = botMode;
+        }
     }
 
     public static class Tournament {
@@ -314,6 +325,12 @@ public class AppProperties {
          */
         @Min(0)
         private int levelDurationSeconds = 0;
+
+        @Min(1)
+        private int pyramidDefaultSeatsPerTable = 10;
+
+        @Min(1)
+        private int pyramidDefaultHandsPerRound = 3;
 
         public int getMaxPlayersLimit() {
             return maxPlayersLimit;
@@ -385,6 +402,22 @@ public class AppProperties {
 
         public void setLevelDurationSeconds(int levelDurationSeconds) {
             this.levelDurationSeconds = levelDurationSeconds;
+        }
+
+        public int getPyramidDefaultSeatsPerTable() {
+            return pyramidDefaultSeatsPerTable;
+        }
+
+        public void setPyramidDefaultSeatsPerTable(int pyramidDefaultSeatsPerTable) {
+            this.pyramidDefaultSeatsPerTable = pyramidDefaultSeatsPerTable;
+        }
+
+        public int getPyramidDefaultHandsPerRound() {
+            return pyramidDefaultHandsPerRound;
+        }
+
+        public void setPyramidDefaultHandsPerRound(int pyramidDefaultHandsPerRound) {
+            this.pyramidDefaultHandsPerRound = pyramidDefaultHandsPerRound;
         }
     }
 }

@@ -128,7 +128,14 @@ public class TournamentTable {
     
     
     public boolean isFull() {
-        return playerIds.size() >= MAX_PLAYERS_PER_TABLE;
+        return playerIds.size() >= maxSeatsForTournament();
+    }
+
+    private int maxSeatsForTournament() {
+        if (tournament != null && tournament.getTournamentType() == TournamentType.PYRAMID) {
+            return tournament.getSeatsPerTable();
+        }
+        return MAX_PLAYERS_PER_TABLE;
     }
     
     
@@ -138,7 +145,7 @@ public class TournamentTable {
     
     
     public int getEmptySeats() {
-        return MAX_PLAYERS_PER_TABLE - playerIds.size();
+        return maxSeatsForTournament() - playerIds.size();
     }
     
     

@@ -104,6 +104,18 @@ public class Tournament {
     private Instant startTime;
     private Instant endTime;
 
+    /** Pyramid format: current survival round (1-based). */
+    @Column(name = "pyramid_round", nullable = false)
+    private int pyramidRound = 1;
+
+    /** Pyramid format: completed hands per table before table resolution. */
+    @Column(name = "hands_per_round", nullable = false)
+    private int handsPerRound = 3;
+
+    /** Pyramid format: max players seated at one table. */
+    @Column(name = "seats_per_table", nullable = false)
+    private int seatsPerTable = 10;
+
     
     protected Tournament() {
         this.createdAt = Instant.now();
@@ -142,6 +154,13 @@ public class Tournament {
                 this.maxPlayers = 100;
                 this.blindStructure = BlindStructure.standard();
             }
+            case PYRAMID -> {
+                this.maxPlayers = 10_000;
+                this.minPlayers = 2;
+                this.seatsPerTable = 10;
+                this.handsPerRound = 3;
+                this.payoutStructure = List.of(100);
+            }
             default -> {
                 
             }
@@ -167,6 +186,14 @@ public class Tournament {
         this.startTime = Instant.now();
         this.levelStartTime = Instant.now();
         this.currentLevel = 1;
+    }
+
+    public void markCompleted() {
+        if (status == TournamentStatus.COMPLETED || status == TournamentStatus.CANCELLED) {
+            return;
+        }
+        this.status = TournamentStatus.COMPLETED;
+        this.endTime = Instant.now();
     }
 
     public void start() {
@@ -531,7 +558,14 @@ public class Tournament {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getStartTime() { return startTime; }
     public Instant getEndTime() { return endTime; }
+    public int getPyramidRound() { return pyramidRound; }
+    public int getHandsPerRound() { return handsPerRound; }
+    public int getSeatsPerTable() { return seatsPerTable; }
     public Long getVersion() { return version; }
+
+    public void incrementPyramidRound() {
+        this.pyramidRound++;
+    }
 
     
 
@@ -549,6 +583,12 @@ public class Tournament {
     protected void setBountyAmount(int amount) { this.bountyAmount = amount; }
     protected void setPayoutStructure(List<Integer> structure) { 
         this.payoutStructure = new ArrayList<>(structure); 
+    }
+    protected void setHandsPerRound(int handsPerRound) {
+        this.handsPerRound = handsPerRound;
+    }
+    protected void setSeatsPerTable(int seatsPerTable) {
+        this.seatsPerTable = seatsPerTable;
     }
 
     @Override
@@ -626,6 +666,12 @@ public class Tournament {
 
         public TournamentBuilder payoutStructure(List<Integer> percentages) {
             tournament.setPayoutStructure(percentages);
+            return this;
+        }
+
+        public TournamentBuilder pyramidConfig(int seatsPerTable, int handsPerRound) {
+            tournament.setSeatsPerTable(seatsPerTable);
+            tournament.setHandsPerRound(handsPerRound);
             return this;
         }
 

@@ -397,16 +397,19 @@ public class TournamentService {
             .filter(r -> r.getFinishPosition() != null && r.getFinishPosition() == 1)
             .findFirst()
             .orElseGet(() -> {
-                // No winner yet - find the last active player
                 TournamentRegistration activeWinner = tournament.getActiveRegistrations().stream()
                     .findFirst()
+                    .or(() -> registrationRepository.findActivePlayersByTournament(tournamentId).stream()
+                            .findFirst())
                     .orElseThrow(() -> new IllegalStateException("No winner found"));
-                
+
                 int firstPrize = tournament.calculatePrizeForPosition(1);
                 activeWinner.finish(1, firstPrize);
+                registrationRepository.save(activeWinner);
                 return activeWinner;
             });
-        
+
+        tournament.markCompleted();
         tournamentRepository.save(tournament);
         
         
@@ -724,6 +727,12 @@ public class TournamentService {
         
         if (request.payoutStructure() != null && !request.payoutStructure().isEmpty()) {
             builder.payoutStructure(request.payoutStructure());
+        }
+
+        if (request.type() == TournamentType.PYRAMID) {
+            builder.pyramidConfig(
+                    tournamentProperties.getPyramidDefaultSeatsPerTable(),
+                    tournamentProperties.getPyramidDefaultHandsPerRound());
         }
         
         return builder.build();

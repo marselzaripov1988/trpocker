@@ -27,6 +27,8 @@ import com.truholdem.model.HandRanking;
 import com.truholdem.model.GamePhase;
 import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
+import com.truholdem.config.AppProperties;
+import com.truholdem.config.BotMode;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -44,6 +46,8 @@ public class PokerGameService {
     private final PlayerStatisticsService playerStatisticsService;
     private final GameNotificationService notificationService;
     private final AdvancedBotAIService botAIService;
+    private final PassiveBotAIService passiveBotAIService;
+    private final AppProperties appProperties;
     private final GameMetricsService metricsService;
     private final TournamentTableShardService tournamentTableShardService;
     private final TournamentChipSyncService tournamentChipSyncService;
@@ -55,6 +59,8 @@ public class PokerGameService {
             PlayerStatisticsService playerStatisticsService,
             GameNotificationService notificationService,
             AdvancedBotAIService botAIService,
+            PassiveBotAIService passiveBotAIService,
+            AppProperties appProperties,
             GameMetricsService metricsService,
             TournamentTableShardService tournamentTableShardService,
             TournamentChipSyncService tournamentChipSyncService) {
@@ -64,6 +70,8 @@ public class PokerGameService {
         this.playerStatisticsService = playerStatisticsService;
         this.notificationService = notificationService;
         this.botAIService = botAIService;
+        this.passiveBotAIService = passiveBotAIService;
+        this.appProperties = appProperties;
         this.metricsService = metricsService;
         this.tournamentTableShardService = tournamentTableShardService;
         this.tournamentChipSyncService = tournamentChipSyncService;
@@ -214,7 +222,7 @@ public class PokerGameService {
 
         validatePlayerTurn(game, botId);
 
-        AdvancedBotAIService.BotDecision decision = botAIService.decide(game, bot);
+        AdvancedBotAIService.BotDecision decision = resolveBotDecision(game, bot);
 
         if (decision == null) {
 
@@ -245,6 +253,13 @@ public class PokerGameService {
                 bot.getName(), finalAction, finalAmount, decision.reasoning());
 
         return playerAct(gameId, botId, finalAction, finalAmount);
+    }
+
+    private AdvancedBotAIService.BotDecision resolveBotDecision(Game game, Player bot) {
+        if (appProperties.getGame().getBotMode() == BotMode.PASSIVE) {
+            return passiveBotAIService.decide(game, bot);
+        }
+        return botAIService.decide(game, bot);
     }
 
     @Cacheable(value = "games", key = "#gameId", unless = "#result == null")

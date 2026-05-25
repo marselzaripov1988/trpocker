@@ -15,5 +15,6 @@
     <include file="db/changelog/08-player-user-link.xml"/>
     <include file="db/changelog/09-oauth-support.xml"/>
     <include file="db/changelog/10-tournament-scale-phase1.xml"/>
+    <include file="db/changelog/11-pyramid-tournament.xml"/>
 
 </databaseChangeLog>

@@ -6,6 +6,7 @@ import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
 import com.truholdem.model.TournamentTable;
+import com.truholdem.model.TournamentType;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
@@ -120,20 +121,20 @@ public class TournamentStartService {
         tournament = tournamentRepository.save(tournament);
 
         List<UUID> playerIds = registrationRepository.findPlayerIdsForSeating(tournamentId);
-        int tableCount = calculateTableCount(playerCount);
+        int tableCount = calculateTableCount(tournament, playerCount);
 
         List<TournamentTable> tables = new ArrayList<>(tableCount);
         for (int tableNumber = 1; tableNumber <= tableCount; tableNumber++) {
             tables.add(new TournamentTable(tournament, tableNumber));
         }
 
-        for (int i = 0; i < playerIds.size(); i++) {
-            tables.get(i % tableCount).seatPlayer(playerIds.get(i));
-        }
+        seatPlayersForStart(tournament, tables, playerIds);
 
         persistTablesInBatches(tables);
 
-        scheduleLevelIncrease(tournament);
+        if (tournament.getTournamentType() != TournamentType.PYRAMID) {
+            scheduleLevelIncrease(tournament);
+        }
         publishStartEvents(tournamentId, tournament, playerCount, tables);
 
         log.info("Tournament {} started with {} players at {} tables",
@@ -226,11 +227,36 @@ public class TournamentStartService {
         }
     }
 
-    private int calculateTableCount(int playerCount) {
+    private int calculateTableCount(Tournament tournament, int playerCount) {
+        if (tournament.getTournamentType() == TournamentType.PYRAMID) {
+            int seats = tournament.getSeatsPerTable();
+            return (int) Math.ceil((double) playerCount / seats);
+        }
         if (playerCount <= MAX_PLAYERS_PER_TABLE) {
             return 1;
         }
         return (int) Math.ceil((double) playerCount / IDEAL_PLAYERS_PER_TABLE);
+    }
+
+    private void seatPlayersForStart(Tournament tournament, List<TournamentTable> tables, List<UUID> playerIds) {
+        if (tournament.getTournamentType() == TournamentType.PYRAMID) {
+            int tableIndex = 0;
+            for (UUID playerId : playerIds) {
+                TournamentTable table = tables.get(tableIndex);
+                while (table.isFull() && tableIndex < tables.size() - 1) {
+                    tableIndex++;
+                    table = tables.get(tableIndex);
+                }
+                table.seatPlayer(playerId);
+                if (!table.isFull()) {
+                    tableIndex = (tableIndex + 1) % tables.size();
+                }
+            }
+            return;
+        }
+        for (int i = 0; i < playerIds.size(); i++) {
+            tables.get(i % tables.size()).seatPlayer(playerIds.get(i));
+        }
     }
 
     private void publishEvent(TournamentEvent event) {

@@ -16,5 +16,8 @@ public enum TournamentType {
     SIT_AND_GO,
     
     
-    MULTI_TABLE
+    MULTI_TABLE,
+
+    /** Survival pyramid: N hands per table, chip leader advances, others eliminated. */
+    PYRAMID
 }

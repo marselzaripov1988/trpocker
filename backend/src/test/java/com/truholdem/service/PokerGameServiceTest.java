@@ -33,6 +33,8 @@ import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
+import com.truholdem.config.AppProperties;
+import com.truholdem.config.BotMode;
 import com.truholdem.repository.GameRepository;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -63,6 +65,12 @@ class PokerGameServiceTest {
 
     @Mock
     private AdvancedBotAIService botAIService;
+
+    @Mock
+    private PassiveBotAIService passiveBotAIService;
+
+    @Mock
+    private AppProperties appProperties;
 
     @Mock
     private GameMetricsService metricsService;
@@ -96,6 +104,10 @@ class PokerGameServiceTest {
         lenient().when(gameStateService.persistFullSync(any(Game.class)))
                 .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
 
+        AppProperties.Game gameConfig = mock(AppProperties.Game.class);
+        lenient().when(appProperties.getGame()).thenReturn(gameConfig);
+        lenient().when(gameConfig.getBotMode()).thenReturn(BotMode.ADVANCED);
+
         pokerGameService = new PokerGameService(
                 gameStateService,
                 handEvaluator,
@@ -103,6 +115,8 @@ class PokerGameServiceTest {
                 playerStatisticsService,
                 notificationService,
                 botAIService,
+                passiveBotAIService,
+                appProperties,
                 metricsService,
                 tournamentTableShardService,
                 tournamentChipSyncService);
