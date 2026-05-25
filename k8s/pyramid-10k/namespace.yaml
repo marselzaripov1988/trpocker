@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: truholdem-pyramid
+  labels:
+    app.kubernetes.io/name: truholdem
+    app.kubernetes.io/component: pyramid-10k

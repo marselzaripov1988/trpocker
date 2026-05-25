@@ -5,6 +5,7 @@ Production deployment and operations guide for the TruHoldem poker platform.
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Pyramid 10k production](#pyramid-10k-production)
 - [Quick Start](#quick-start)
 - [Development Setup](#development-setup)
 - [Docker Deployment](#docker-deployment)
@@ -26,6 +27,16 @@ Production deployment and operations guide for the TruHoldem poker platform.
 | Node.js | 20+ | Frontend build |
 | PostgreSQL | 16 | Primary database |
 | Redis | 7 | Caching & WebSocket pub/sub |
+
+---
+
+## Pyramid 10k production
+
+For **10 000 real players** (PYRAMID tournament: WebSocket cluster, PgBouncer, multi-backend):
+
+- Guide: [PYRAMID_10K_PRODUCTION.md](PYRAMID_10K_PRODUCTION.md)
+- Docker Compose: `docker compose -f docker-compose.pyramid-prod.yml up -d --scale backend=8`
+- Kubernetes: [k8s/pyramid-10k/](../k8s/pyramid-10k/)
 
 ---
 

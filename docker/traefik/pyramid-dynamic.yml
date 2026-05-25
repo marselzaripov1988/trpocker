@@ -1,0 +1,8 @@
+# Optional Traefik middleware / tuning for pyramid staging
+http:
+  middlewares:
+    api-ratelimit:
+      rateLimit:
+        average: 200
+        burst: 400
+  routers: {}

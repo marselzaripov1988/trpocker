@@ -1,0 +1,179 @@
+# Pyramid 10k — staging / load-test stack (multi-backend behind Traefik)
+#
+# Usage:
+#   export JWT_SECRET=$(openssl rand -base64 48)
+#   export DB_PASSWORD=your-strong-password
+#   docker compose -f docker-compose.pyramid-prod.yml build
+#   docker compose -f docker-compose.pyramid-prod.yml up -d postgres pgbouncer redis traefik frontend
+#   docker compose -f docker-compose.pyramid-prod.yml up -d --scale backend=8
+#
+# API: http://localhost/api/...
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: truholdem
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=6GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=512MB
+    volumes:
+      - pyramid_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d truholdem"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pyramid-net
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p2
+    environment:
+      DATABASE_URL: postgres://user:${DB_PASSWORD:-password}@postgres:5432/truholdem
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 800
+      DEFAULT_POOL_SIZE: 40
+      AUTH_TYPE: scram-sha-256
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pyramid-net
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 2gb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - pyramid_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pyramid-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: docker,pyramid-prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://pgbouncer:5432/truholdem
+      DB_USERNAME: user
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      WEBSOCKET_ORIGINS: ${WEBSOCKET_ORIGINS:-http://localhost}
+      WEBSOCKET_CLUSTER_ENABLED: "true"
+      JAVA_TOOL_OPTIONS: >-
+        -Xms4g -Xmx12g
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=200
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    networks:
+      - pyramid-net
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.truholdem-api.rule=PathPrefix(`/api`)
+      - traefik.http.routers.truholdem-api.entrypoints=web
+      - traefik.http.routers.truholdem-api.service=truholdem-api
+      - traefik.http.services.truholdem-api.loadbalancer.server.port=8080
+      - traefik.http.services.truholdem-api.loadbalancer.sticky.cookie=true
+      - traefik.http.services.truholdem-api.loadbalancer.sticky.cookie.name=truholdem_route
+      - traefik.http.routers.truholdem-ws.rule=PathPrefix(`/ws`)
+      - traefik.http.routers.truholdem-ws.entrypoints=web
+      - traefik.http.routers.truholdem-ws.service=truholdem-ws
+      - traefik.http.services.truholdem-ws.loadbalancer.server.port=8080
+      - traefik.http.services.truholdem-ws.loadbalancer.sticky.cookie=true
+      - traefik.http.services.truholdem-ws.loadbalancer.sticky.cookie.name=truholdem_ws
+    deploy:
+      resources:
+        limits:
+          memory: 14G
+
+  traefik:
+    image: traefik:v3.2
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/pyramid-dynamic.yml
+      - --entrypoints.web.address=:80
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik/pyramid-dynamic.yml:/etc/traefik/pyramid-dynamic.yml:ro
+    networks:
+      - pyramid-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_URL: http://localhost/api
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.truholdem-web.rule=PathPrefix(`/`)
+      - traefik.http.routers.truholdem-web.entrypoints=web
+      - traefik.http.routers.truholdem-web.priority=1
+      - traefik.http.services.truholdem-web.loadbalancer.server.port=80
+    depends_on:
+      - traefik
+    networks:
+      - pyramid-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: ["observability"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - pyramid-net
+
+volumes:
+  pyramid_pg_data:
+  pyramid_redis_data:
+
+networks:
+  pyramid-net:
+    driver: bridge

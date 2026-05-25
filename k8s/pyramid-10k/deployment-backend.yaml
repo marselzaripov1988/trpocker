@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: truholdem-backend
+  namespace: truholdem-pyramid
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: truholdem-backend
+  template:
+    metadata:
+      labels:
+        app: truholdem-backend
+    spec:
+      containers:
+        - name: backend
+          image: your-registry/truholdem-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: truholdem-backend-config
+            - secretRef:
+                name: truholdem-backend-secret
+          readinessProbe:
+            httpGet:
+              path: /api/actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: 8Gi
+              cpu: "4"
+            limits:
+              memory: 14Gi
+              cpu: "8"
