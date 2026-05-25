@@ -181,13 +181,29 @@ public class TournamentService {
     
     public void pauseTournament(UUID tournamentId) {
         log.info("Pausing tournament {}", tournamentId);
-        
+
         Tournament tournament = findTournamentOrThrow(tournamentId);
-        
-        if (!tournament.getStatus().isPlayable()) {
-            throw new IllegalStateException("Tournament is not in a playable state");
+        tournament.markPaused();
+        tournamentStartService.cancelScheduledLevelIncrease(tournamentId);
+        tournamentRepository.save(tournament);
+    }
+
+    public void resumeTournament(UUID tournamentId) {
+        log.info("Resuming tournament {}", tournamentId);
+
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        tournament.markResumed();
+        tournament = tournamentRepository.save(tournament);
+        if (tournament.getTournamentType() != TournamentType.PYRAMID) {
+            tournamentStartService.scheduleLevelIncrease(tournament);
         }
-        
+    }
+
+    public void cancelTournament(UUID tournamentId) {
+        log.info("Cancelling tournament {}", tournamentId);
+
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        tournament.markCancelled();
         tournamentStartService.cancelScheduledLevelIncrease(tournamentId);
         tournamentRepository.save(tournament);
     }

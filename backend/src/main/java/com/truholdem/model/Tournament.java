@@ -196,6 +196,28 @@ public class Tournament {
         this.endTime = Instant.now();
     }
 
+    public void markPaused() {
+        if (!status.isPlayable()) {
+            throw new IllegalStateException("Cannot pause tournament in status: " + status);
+        }
+        this.status = TournamentStatus.PAUSED;
+    }
+
+    public void markResumed() {
+        if (status != TournamentStatus.PAUSED) {
+            throw new IllegalStateException("Tournament is not paused: " + status);
+        }
+        this.status = TournamentStatus.RUNNING;
+    }
+
+    public void markCancelled() {
+        if (status.isTerminal()) {
+            throw new IllegalStateException("Tournament already finished: " + status);
+        }
+        this.status = TournamentStatus.CANCELLED;
+        this.endTime = Instant.now();
+    }
+
     public void start() {
         validateCanStart();
         markRunningAtStart();

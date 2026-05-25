@@ -96,6 +96,8 @@ public class SecurityConfig {
                 .requestMatchers("/v1/**").authenticated()
                 .requestMatchers("/v2/**").authenticated()
                 .requestMatchers("/users/**").authenticated()
+                .requestMatchers("/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/admin/**").hasRole("ADMIN")
                 .requestMatchers("/tournaments/**").authenticated()
 
                 // Everything else requires authentication

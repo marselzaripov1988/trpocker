@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,7 +55,8 @@ public class TournamentController {
     
 
     @PostMapping
-    @Operation(summary = "Create a new tournament", description = "Creates a new poker tournament with the specified configuration")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Create a new tournament", description = "Creates a new poker tournament (ADMIN). Prefer /admin/tournaments.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "Tournament created successfully"),
         @ApiResponse(responseCode = "400", description = "Invalid tournament configuration")
@@ -151,7 +153,8 @@ public class TournamentController {
     
 
     @PostMapping("/{id}/start")
-    @Operation(summary = "Start tournament", description = "Starts the tournament (admin only)")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Start tournament", description = "Starts the tournament (ADMIN)")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tournament started"),
         @ApiResponse(responseCode = "400", description = "Cannot start tournament"),
@@ -172,7 +175,8 @@ public class TournamentController {
     }
 
     @PostMapping("/{id}/pause")
-    @Operation(summary = "Pause tournament", description = "Pauses a running tournament (admin only)")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Pause tournament", description = "Pauses a running tournament (ADMIN)")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Tournament paused"),
         @ApiResponse(responseCode = "400", description = "Cannot pause tournament"),

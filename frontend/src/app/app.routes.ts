@@ -42,6 +42,12 @@ export const routes: Routes = [
     title: 'Tournaments - TruHoldem',
   },
   {
+    path: 'admin/tournaments',
+    loadChildren: () =>
+      import('./admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+    title: 'Admin - TruHoldem',
+  },
+  {
     path: 'tournament',
     redirectTo: 'tournaments',
     pathMatch: 'full',

@@ -1,12 +1,16 @@
 import { Player } from './player';
 
 
-export type TournamentStatus = 
-  | 'REGISTERING'  
-  | 'STARTING'     
-  | 'RUNNING'      
-  | 'PAUSED'       
-  | 'FINAL_TABLE'  
+export type TournamentStatus =
+  | 'REGISTERING'
+  | 'STARTING'
+  | 'LATE_REGISTRATION'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'FINAL_TABLE'
+  | 'HEADS_UP'
+  | 'COMPLETED'
+  | 'CANCELLED'
   | 'FINISHED';    
 
 

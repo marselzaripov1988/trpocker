@@ -176,7 +176,7 @@ public class TournamentStartService {
         return tournament.getBuyIn() * playerCount;
     }
 
-    void scheduleLevelIncrease(Tournament tournament) {
+    public void scheduleLevelIncrease(Tournament tournament) {
         Duration levelDuration = timingService.levelDuration(tournament);
 
         Runnable task = () -> {

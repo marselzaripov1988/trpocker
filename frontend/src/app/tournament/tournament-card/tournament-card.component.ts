@@ -312,9 +312,13 @@ export class TournamentCardComponent {
     const icons: Record<TournamentStatus, string> = {
       'REGISTERING': '📝',
       'STARTING': '⏳',
+      'LATE_REGISTRATION': '📝',
       'RUNNING': '▶️',
       'PAUSED': '⏸️',
       'FINAL_TABLE': '🔥',
+      'HEADS_UP': '⚔️',
+      'COMPLETED': '🏁',
+      'CANCELLED': '✕',
       'FINISHED': '🏁'
     };
     return icons[this.status() as TournamentStatus] ?? '';
@@ -324,9 +328,13 @@ export class TournamentCardComponent {
     const texts: Record<TournamentStatus, string> = {
       'REGISTERING': 'Open',
       'STARTING': 'Starting',
+      'LATE_REGISTRATION': 'Late reg',
       'RUNNING': 'Running',
       'PAUSED': 'Break',
       'FINAL_TABLE': 'Final Table',
+      'HEADS_UP': 'Heads-up',
+      'COMPLETED': 'Finished',
+      'CANCELLED': 'Cancelled',
       'FINISHED': 'Finished'
     };
     return texts[this.status() as TournamentStatus] ?? this.status();

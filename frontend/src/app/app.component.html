@@ -18,6 +18,11 @@
       <a routerLink="/settings" routerLinkActive="active">
         ⚙️ Settings
       </a>
+      @if (isAdmin) {
+        <a routerLink="/admin/tournaments" routerLinkActive="active">
+          🛡️ Admin
+        </a>
+      }
     </div>
 
     <div class="nav-actions">

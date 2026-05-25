@@ -7,6 +7,7 @@ import { PlayerInfo } from './register-players/register-players.component';
 import { PlayerService } from './services/player.service';
 import { Router } from '@angular/router';
 import { SoundService } from './services/sound.service';
+import { AuthService } from './services/auth.service';
 import { NotificationComponent } from './shared/notification/notification.component';
 
 @Component({
@@ -20,14 +21,17 @@ export class AppComponent implements OnInit, OnDestroy {
   private playerService = inject(PlayerService);
   private router = inject(Router);
   private soundService = inject(SoundService);
+  private authService = inject(AuthService);
   private destroy$ = new Subject<void>();
 
   title = 'TruHoldem';
   registeredPlayers: PlayerInfo[] = [];
   soundEnabled = true;
+  isAdmin = false;
 
   ngOnInit(): void {
-    
+    this.isAdmin = this.authService.isAdmin();
+
     this.playerService.players$.pipe(
       takeUntil(this.destroy$)
     ).subscribe(players => {

@@ -79,6 +79,26 @@ public class PyramidTournamentService {
     /**
      * Runs pyramid rounds until one champion remains.
      */
+    /**
+     * Plays one pyramid round (all active tables: hands → table survivors → re-seat).
+     */
+    public void playCurrentPyramidRound(UUID tournamentId) {
+        Tournament tournament = loadTournament(tournamentId);
+        assertPyramid(tournament);
+        if (!tournament.getStatus().isPlayable() && tournament.getStatus() != TournamentStatus.PAUSED) {
+            throw new IllegalStateException("Tournament not playable: " + tournament.getStatus());
+        }
+        List<TournamentTable> tables = tableRepository.findActiveTablesByTournament(tournamentId);
+        if (tables.isEmpty()) {
+            throw new IllegalStateException("No active tables for pyramid round " + tournament.getPyramidRound());
+        }
+        processRoundTables(tournamentId, tables, tournament.getHandsPerRound());
+        advanceToNextRound(tournamentId);
+        if (registrationRepository.countActiveByTournamentId(tournamentId) == 1) {
+            endTournamentInTransaction(tournamentId);
+        }
+    }
+
     public PyramidRunResult runToCompletion(UUID tournamentId) {
         Tournament tournament = loadTournament(tournamentId);
         assertPyramid(tournament);
