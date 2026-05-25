@@ -332,6 +332,10 @@ public class AppProperties {
         @Min(1)
         private int pyramidDefaultHandsPerRound = 3;
 
+        /** Parallel workers when simulating pyramid table rounds (load tests). */
+        @Min(1)
+        private int pyramidTableParallelism = 8;
+
         public int getMaxPlayersLimit() {
             return maxPlayersLimit;
         }
@@ -418,6 +422,14 @@ public class AppProperties {
 
         public void setPyramidDefaultHandsPerRound(int pyramidDefaultHandsPerRound) {
             this.pyramidDefaultHandsPerRound = pyramidDefaultHandsPerRound;
+        }
+
+        public int getPyramidTableParallelism() {
+            return pyramidTableParallelism;
+        }
+
+        public void setPyramidTableParallelism(int pyramidTableParallelism) {
+            this.pyramidTableParallelism = pyramidTableParallelism;
         }
     }
 }

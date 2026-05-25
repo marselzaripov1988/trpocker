@@ -4,12 +4,18 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.TournamentPlayerEliminated;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.Game;
@@ -24,13 +30,13 @@ import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
 import com.truholdem.service.PokerGameService;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.TournamentStartService;
 import com.truholdem.service.TournamentTableGameService;
 
 /**
  * Pyramid survival: play N hands per table, chip leader advances, re-seat survivors.
  */
 @Service
-@Transactional
 public class PyramidTournamentService {
 
     private static final Logger log = LoggerFactory.getLogger(PyramidTournamentService.class);
@@ -42,6 +48,9 @@ public class PyramidTournamentService {
     private final TournamentTableGameService tableGameService;
     private final PokerGameService pokerGameService;
     private final TournamentService tournamentService;
+    private final TournamentStartService tournamentStartService;
+    private final AppProperties.Tournament tournamentProperties;
+    private final TransactionTemplate transactionTemplate;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     public PyramidTournamentService(
@@ -51,6 +60,9 @@ public class PyramidTournamentService {
             TournamentTableGameService tableGameService,
             PokerGameService pokerGameService,
             TournamentService tournamentService,
+            TournamentStartService tournamentStartService,
+            AppProperties appProperties,
+            TransactionTemplate transactionTemplate,
             org.springframework.context.ApplicationEventPublisher eventPublisher) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
@@ -58,6 +70,9 @@ public class PyramidTournamentService {
         this.tableGameService = tableGameService;
         this.pokerGameService = pokerGameService;
         this.tournamentService = tournamentService;
+        this.tournamentStartService = tournamentStartService;
+        this.tournamentProperties = appProperties.getTournament();
+        this.transactionTemplate = transactionTemplate;
         this.eventPublisher = eventPublisher;
     }
 
@@ -69,7 +84,12 @@ public class PyramidTournamentService {
         assertPyramid(tournament);
 
         if (tournament.getStatus() == TournamentStatus.REGISTERING) {
-            tournamentService.startTournament(tournamentId);
+            int registered = registrationRepository.countByTournamentId(tournamentId);
+            if (tournamentStartService.shouldStartAsynchronously(registered)) {
+                tournamentStartService.completeStart(tournamentId);
+            } else {
+                tournamentService.startTournament(tournamentId);
+            }
             tournament = loadTournament(tournamentId);
         }
 
@@ -77,6 +97,7 @@ public class PyramidTournamentService {
             throw new IllegalStateException("Tournament not playable: " + tournament.getStatus());
         }
 
+        long runStart = System.currentTimeMillis();
         int roundsPlayed = 0;
         int maxRounds = 32;
 
@@ -87,14 +108,14 @@ public class PyramidTournamentService {
                 throw new IllegalStateException("No active tables for pyramid round " + tournament.getPyramidRound());
             }
 
+            int active = registrationRepository.countActiveByTournamentId(tournamentId);
             log.info("Pyramid round {} for tournament {}: {} tables, {} players active",
-                    tournament.getPyramidRound(), tournamentId, tables.size(),
-                    registrationRepository.countActiveByTournamentId(tournamentId));
+                    tournament.getPyramidRound(), tournamentId, tables.size(), active);
 
-            for (TournamentTable table : tables) {
-                playHandsOnTable(tournamentId, table.getId(), tournament.getHandsPerRound());
-                resolveTableSurvivor(tournamentId, table.getId());
-            }
+            long roundStart = System.currentTimeMillis();
+            processRoundTables(tournamentId, tables, tournament.getHandsPerRound());
+            log.info("Pyramid round {} table play finished in {} ms",
+                    tournament.getPyramidRound(), System.currentTimeMillis() - roundStart);
 
             advanceToNextRound(tournamentId);
             roundsPlayed++;
@@ -102,7 +123,7 @@ public class PyramidTournamentService {
 
         int remaining = registrationRepository.countActiveByTournamentId(tournamentId);
         if (remaining == 1) {
-            tournamentService.endTournament(tournamentId);
+            endTournamentInTransaction(tournamentId);
         } else if (remaining > 1) {
             throw new IllegalStateException(
                     "Pyramid tournament ended with " + remaining + " players still active");
@@ -115,9 +136,36 @@ public class PyramidTournamentService {
                 .map(TournamentRegistration::getPlayerId)
                 .orElseThrow(() -> new IllegalStateException("No champion found"));
 
+        log.info("Pyramid tournament {} completed in {} ms, rounds={}, champion={}",
+                tournamentId, System.currentTimeMillis() - runStart, roundsPlayed, championId);
+
         return new PyramidRunResult(tournamentId, championId, roundsPlayed, finished.getStatus());
     }
 
+    private void processRoundTables(UUID tournamentId, List<TournamentTable> tables, int handsPerRound) {
+        int parallelism = Math.min(tournamentProperties.getPyramidTableParallelism(), tables.size());
+        ExecutorService executor = Executors.newFixedThreadPool(parallelism);
+        try {
+            List<Future<?>> futures = new ArrayList<>(tables.size());
+            for (TournamentTable table : tables) {
+                UUID tableId = table.getId();
+                futures.add(executor.submit(() -> transactionTemplate.execute(status -> {
+                    playHandsOnTable(tournamentId, tableId, handsPerRound);
+                    resolveTableSurvivor(tournamentId, tableId);
+                    return null;
+                })));
+            }
+            for (Future<?> future : futures) {
+                future.get(30, TimeUnit.MINUTES);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Parallel pyramid table processing failed", e);
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Transactional
     public void playHandsOnTable(UUID tournamentId, UUID tableId, int handCount) {
         for (int h = 0; h < handCount; h++) {
             playOneHandToCompletion(tournamentId, tableId);
@@ -154,6 +202,7 @@ public class PyramidTournamentService {
     /**
      * Keeps chip leader at the table; eliminates all other seated players (no MTT rebalance).
      */
+    @Transactional
     public UUID resolveTableSurvivor(UUID tournamentId, UUID tableId) {
         TournamentTable table = tableRepository.findByIdAndTournamentIdWithDetails(tableId, tournamentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Table not found: " + tableId));
@@ -193,7 +242,7 @@ public class PyramidTournamentService {
         table.close();
         tableRepository.save(table);
 
-        log.info("Table {} round resolved: survivor {} with {} chips",
+        log.debug("Table {} resolved: survivor {} ({} chips)",
                 table.getTableNumber(), winner.getPlayerName(), winner.getCurrentChips());
         return winnerId;
     }
@@ -201,6 +250,7 @@ public class PyramidTournamentService {
     /**
      * Closes old tables and seats all survivors for the next pyramid level.
      */
+    @Transactional
     public void advanceToNextRound(UUID tournamentId) {
         Tournament tournament = loadTournament(tournamentId);
         int activeCount = registrationRepository.countActiveByTournamentId(tournamentId);
@@ -246,6 +296,11 @@ public class PyramidTournamentService {
 
         log.info("Advanced pyramid tournament {} to round {} with {} tables and {} survivors",
                 tournamentId, tournament.getPyramidRound(), tableCount, activeCount);
+    }
+
+    @Transactional
+    protected void endTournamentInTransaction(UUID tournamentId) {
+        tournamentService.endTournament(tournamentId);
     }
 
     private void pyramidEliminate(Tournament tournament, TournamentRegistration eliminated) {

@@ -89,6 +89,37 @@ public class TournamentService {
     }
 
     
+    /**
+     * Bulk-registers bot players for pyramid/load simulations (no per-player WS events).
+     */
+    public int registerBotPlayersBatch(UUID tournamentId, int count, String namePrefix) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        int registeredBefore = registrationRepository.countByTournamentId(tournamentId);
+        if (registeredBefore + count > tournament.getMaxPlayers()) {
+            throw new IllegalStateException("Tournament cannot accept " + count + " more players");
+        }
+        if (!tournament.getStatus().allowsRegistration()) {
+            throw new IllegalStateException("Tournament is not accepting registrations");
+        }
+
+        List<TournamentRegistration> batch = new ArrayList<>(500);
+        for (int i = 1; i <= count; i++) {
+            UUID playerId = UUID.randomUUID();
+            String name = namePrefix + i;
+            batch.add(new TournamentRegistration(tournament, playerId, name));
+            if (batch.size() >= 500) {
+                registrationRepository.saveAll(batch);
+                batch.clear();
+            }
+        }
+        if (!batch.isEmpty()) {
+            registrationRepository.saveAll(batch);
+        }
+        log.info("Batch-registered {} bots for tournament {} (total {})",
+                count, tournamentId, registeredBefore + count);
+        return count;
+    }
+
     public TournamentRegistration registerPlayer(UUID tournamentId, UUID playerId, String playerName) {
         log.info("Registering player {} for tournament {}", playerName, tournamentId);
 
