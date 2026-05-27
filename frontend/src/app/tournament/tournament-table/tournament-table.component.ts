@@ -42,18 +42,6 @@ import { WebSocketService } from '../../services/websocket.service';
           </button>
           <h1 class="tournament-name">{{ tournamentName() }}</h1>
         </div>
-        
-        <div class="header-center">
-          <app-blind-timer
-            [currentBlinds]="currentBlinds()"
-            [nextBlinds]="nextBlinds()"
-            [levelEndTime]="levelEndTime()"
-            [levelDurationMinutes]="levelDurationMinutes()"
-            [levelDurationSeconds]="levelDurationSeconds()"
-            [isOnBreak]="isOnBreak()"
-          />
-        </div>
-
         <div class="header-right">
           <div class="tournament-stats">
             <div class="stat-item">
@@ -238,6 +226,15 @@ import { WebSocketService } from '../../services/websocket.service';
 
       <!-- Side Panel: Mini Leaderboard -->
       <aside class="side-panel">
+        <app-blind-timer
+          [currentBlinds]="currentBlinds()"
+          [nextBlinds]="nextBlinds()"
+          [levelEndTime]="levelEndTime()"
+          [levelDurationMinutes]="levelDurationMinutes()"
+          [levelDurationSeconds]="levelDurationSeconds()"
+          [isOnBreak]="isOnBreak()"
+        />
+
         <app-tournament-leaderboard
           [players]="tournamentPlayers()"
           [myPlayerId]="myPlayerId()"
@@ -477,7 +474,7 @@ import { WebSocketService } from '../../services/websocket.service';
     .players-ring {
       position: absolute;
       inset: -60px;
-      transform: scaleX(1.25);
+      transform: scaleX(1.4);
       transform-origin: center;
     }
 
@@ -491,7 +488,7 @@ import { WebSocketService } from '../../services/websocket.service';
         rotate(var(--seat-angle))
         translateY(-200px)
         rotate(calc(-1 * var(--seat-angle)))
-        scaleX(0.8);
+        scaleX(0.714);
       
       display: flex;
       flex-direction: column;
