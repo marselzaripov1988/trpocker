@@ -477,6 +477,8 @@ import { WebSocketService } from '../../services/websocket.service';
     .players-ring {
       position: absolute;
       inset: -60px;
+      transform: scaleX(1.25);
+      transform-origin: center;
     }
 
     .player-seat {
@@ -488,7 +490,8 @@ import { WebSocketService } from '../../services/websocket.service';
         translate(-50%, -50%)
         rotate(var(--seat-angle))
         translateY(-200px)
-        rotate(calc(-1 * var(--seat-angle)));
+        rotate(calc(-1 * var(--seat-angle)))
+        scaleX(0.8);
       
       display: flex;
       flex-direction: column;
