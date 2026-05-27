@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AdminTournamentService } from '../services/admin-tournament.service';
 import {
-  AdminTournamentType,
   CreateTournamentAdminRequest,
   TOURNAMENT_TYPE_OPTIONS
 } from '../models/admin-tournament.models';

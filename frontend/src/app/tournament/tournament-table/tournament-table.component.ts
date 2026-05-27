@@ -132,7 +132,7 @@ import { WebSocketService } from '../../services/websocket.service';
           </div>
 
           <!-- Player Positions -->
-          <div class="players-ring">
+          <div class="players-ring" [style.--player-count]="tablePlayers().length || 1">
             @for (player of tablePlayers(); track player.id; let i = $index) {
               <div 
                 class="player-seat"
@@ -480,7 +480,7 @@ import { WebSocketService } from '../../services/websocket.service';
     }
 
     .player-seat {
-      --seat-angle: calc(var(--seat-index, 0) * (360deg / 6));
+      --seat-angle: calc(var(--seat-index, 0) * (360deg / var(--player-count, 6)));
       position: absolute;
       top: 50%;
       left: 50%;

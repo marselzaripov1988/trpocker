@@ -19,7 +19,6 @@ import {
   Tournament,
   TournamentListItem,
   TournamentTable,
-  TournamentTableDetail,
   TournamentPlayer,
   TournamentUpdate,
   BlindLevel,
