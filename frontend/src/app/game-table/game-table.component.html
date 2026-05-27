@@ -123,6 +123,12 @@
 	
 	<div class="actions" *ngIf="!isGameFinished() && phase() !== 'SHOWDOWN'" data-cy="actions-section" role="toolbar" aria-label="Player actions">
 		<div class="action-buttons" *ngIf="canPlayerAct()" data-cy="action-buttons">
+			<div
+				class="turn-timer"
+				[class.warning]="turnTimeRemaining() <= 10"
+				data-cy="turn-timer">
+				{{ turnTimeRemaining() }}s
+			</div>
 			
 			<button class="btn btn-danger" (click)="fold()" data-cy="fold-btn" type="button">
 				Fold

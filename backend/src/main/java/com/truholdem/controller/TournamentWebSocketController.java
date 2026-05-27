@@ -4,7 +4,7 @@ import com.truholdem.domain.event.*;
 import com.truholdem.dto.TournamentMessage;
 import com.truholdem.model.BlindLevel;
 import com.truholdem.model.Tournament;
-import com.truholdem.repository.TournamentRepository;
+import com.truholdem.service.TournamentService;
 import com.truholdem.service.tournament.TournamentTableShardService;
 import com.truholdem.service.tournament.TournamentTimingService;
 import org.slf4j.Logger;
@@ -26,17 +26,17 @@ public class TournamentWebSocketController {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final TournamentTableShardService tableShardService;
-    private final TournamentRepository tournamentRepository;
+    private final TournamentService tournamentService;
     private final TournamentTimingService timingService;
 
     public TournamentWebSocketController(
             SimpMessagingTemplate messagingTemplate,
             TournamentTableShardService tableShardService,
-            TournamentRepository tournamentRepository,
+            TournamentService tournamentService,
             TournamentTimingService timingService) {
         this.messagingTemplate = messagingTemplate;
         this.tableShardService = tableShardService;
-        this.tournamentRepository = tournamentRepository;
+        this.tournamentService = tournamentService;
         this.timingService = timingService;
     }
 
@@ -66,7 +66,8 @@ public class TournamentWebSocketController {
         data.put("ante", event.getAnte());
         data.put("playersRemaining", event.getPlayersRemaining());
 
-        tournamentRepository.findById(event.getTournamentId()).ifPresent(tournament -> {
+        try {
+            Tournament tournament = tournamentService.getTournament(event.getTournamentId());
             var levelEnd = timingService.levelEndTime(tournament);
             if (levelEnd != null) {
                 data.put("levelEndTimeEpochMillis", levelEnd.toEpochMilli());
@@ -80,7 +81,9 @@ public class TournamentWebSocketController {
                 data.put("nextBigBlind", next.getBigBlind());
                 data.put("nextAnte", next.getAnte());
             }
-        });
+        } catch (RuntimeException e) {
+            log.warn("Could not enrich blind level event for tournament {}", event.getTournamentId(), e);
+        }
         
         broadcast(event.getTournamentId(), "BLIND_LEVEL_INCREASED", data);
     }

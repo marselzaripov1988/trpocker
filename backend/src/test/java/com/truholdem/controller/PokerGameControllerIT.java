@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truholdem.config.TestSecurityConfig;
 import com.truholdem.dto.PlayerActionRequest;
 import com.truholdem.model.*;
+import com.truholdem.service.GameAuthorizationService;
 import com.truholdem.service.PokerGameService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,9 @@ class PokerGameControllerIT {
 
     @MockitoBean
     private PokerGameService pokerGameService;
+
+    @MockitoBean
+    private GameAuthorizationService authorizationService;
 
     private Game testGame;
     private List<PlayerInfo> validPlayers;
@@ -117,27 +121,27 @@ class PokerGameControllerIT {
     class GameCreationTests {
 
         @Test
-        @DisplayName("Should create game with valid players - returns 200")
-        void createGame_WithValidPlayers_Returns200() throws Exception {
+        @DisplayName("Should create game with valid players - returns 201")
+        void createGame_WithValidPlayers_Returns201() throws Exception {
             when(pokerGameService.createNewGame(any())).thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/start")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validPlayers)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.id").value(gameId.toString()))
                     .andExpect(jsonPath("$.players", hasSize(2)))
                     .andExpect(jsonPath("$.phase").value("PRE_FLOP"))
                     .andExpect(jsonPath("$.currentPot").value(30))
-                    .andExpect(jsonPath("$.finished").value(false));
+                    .andExpect(jsonPath("$.isFinished").value(false));
 
             verify(pokerGameService).createNewGame(any());
         }
 
         @Test
-        @DisplayName("Should create game with minimum 2 players - returns 200")
-        void createGame_WithMinimumPlayers_Returns200() throws Exception {
+        @DisplayName("Should create game with minimum 2 players - returns 201")
+        void createGame_WithMinimumPlayers_Returns201() throws Exception {
             List<PlayerInfo> twoPlayers = Arrays.asList(
                     new PlayerInfo("Alice", 1000, false),
                     new PlayerInfo("Bob", 1000, false)
@@ -147,7 +151,7 @@ class PokerGameControllerIT {
             mockMvc.perform(post(BASE_URL + "/start")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(twoPlayers)))
-                    .andExpect(status().isOk())
+                    .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").exists());
         }
 
@@ -276,9 +280,9 @@ class PokerGameControllerIT {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.players[0].name").value("Alice"))
                     .andExpect(jsonPath("$.players[0].chips").value(980))
-                    .andExpect(jsonPath("$.players[0].bot").value(false))
+                    .andExpect(jsonPath("$.players[0].isBot").value(false))
                     .andExpect(jsonPath("$.players[1].name").value("Bob"))
-                    .andExpect(jsonPath("$.players[1].bot").value(true));
+                    .andExpect(jsonPath("$.players[1].isBot").value(true));
         }
 
         @Test
@@ -307,7 +311,7 @@ class PokerGameControllerIT {
 
             mockMvc.perform(get(BASE_URL + "/{gameId}", gameId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.finished").value(true))
+                    .andExpect(jsonPath("$.isFinished").value(true))
                     .andExpect(jsonPath("$.phase").value("SHOWDOWN"));
         }
     }
@@ -546,7 +550,7 @@ class PokerGameControllerIT {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.players[0].allIn").value(true));
+                    .andExpect(jsonPath("$.players[0].isAllIn").value(true));
         }
     }
 
@@ -630,7 +634,7 @@ class PokerGameControllerIT {
             mockMvc.perform(post(BASE_URL + "/{gameId}/new-hand", gameId))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.handNumber").value(2))
-                    .andExpect(jsonPath("$.finished").value(false))
+                    .andExpect(jsonPath("$.isFinished").value(false))
                     .andExpect(jsonPath("$.phase").value("PRE_FLOP"));
         }
 

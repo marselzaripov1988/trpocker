@@ -524,6 +524,7 @@ public class TournamentService {
         }
 
         int prizePool = tournament.getBuyIn() * registered;
+        var levelEndTime = timingService.levelEndTime(tournament);
 
         List<TournamentRegistration> registrationsForDetail = loadDetailRegistrations(tournamentId, registered);
         List<LeaderboardEntryDto> players = IntStream.range(0, registrationsForDetail.size())
@@ -545,7 +546,9 @@ public class TournamentService {
                 chipLeaderStack,
                 averageStack,
                 prizePool,
-                timingService,
+                timingService.secondsToNextLevel(tournament),
+                levelEndTime != null ? levelEndTime.toEpochMilli() : null,
+                (int) timingService.levelDuration(tournament).toSeconds(),
                 players,
                 tables);
     }

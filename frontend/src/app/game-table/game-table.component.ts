@@ -41,6 +41,10 @@ export class GameTableComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
 
   private readonly destroy$ = new Subject<void>();
+  private readonly decisionTimeLimitSeconds = 30;
+  private turnCountdownTimer: ReturnType<typeof setInterval> | null = null;
+  private activeTurnKey: string | null = null;
+  private timeoutActionInProgress = false;
 
   
   
@@ -103,6 +107,8 @@ export class GameTableComponent implements OnInit, OnDestroy {
   private readonly _showModal = signal(false);
   readonly showModal = this._showModal.asReadonly();
 
+  readonly turnTimeRemaining = signal(this.decisionTimeLimitSeconds);
+
   
   
   
@@ -149,6 +155,7 @@ export class GameTableComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearTurnTimer();
     this.destroy$.next();
     this.destroy$.complete();
   }
@@ -207,6 +214,68 @@ export class GameTableComponent implements OnInit, OnDestroy {
       filter(finished => finished),
       tap(() => this.handleGameEnd())
     ).subscribe();
+
+    this.store.vm$.pipe(
+      takeUntil(this.destroy$),
+      tap(vm => this.handleTurnTimerState(vm))
+    ).subscribe();
+  }
+
+  private handleTurnTimerState(vm: GameViewModel): void {
+    if (!vm.canPlayerAct || !vm.currentPlayer?.id || !vm.game?.id) {
+      this.activeTurnKey = null;
+      this.clearTurnTimer();
+      return;
+    }
+
+    const turnKey = [
+      vm.game.id,
+      vm.phase,
+      vm.currentPlayer.id,
+      vm.game.currentBet ?? 0,
+      vm.communityCards.length
+    ].join(':');
+
+    if (turnKey !== this.activeTurnKey) {
+      this.activeTurnKey = turnKey;
+      this.startTurnTimer();
+    }
+  }
+
+  private startTurnTimer(): void {
+    this.clearTurnTimer();
+    this.timeoutActionInProgress = false;
+    this.turnTimeRemaining.set(this.decisionTimeLimitSeconds);
+
+    this.turnCountdownTimer = setInterval(() => {
+      const next = this.turnTimeRemaining() - 1;
+      this.turnTimeRemaining.set(Math.max(0, next));
+
+      if (next <= 0) {
+        this.clearTurnTimer();
+        this.performTimeoutAction();
+      }
+    }, 1000);
+  }
+
+  private clearTurnTimer(): void {
+    if (this.turnCountdownTimer) {
+      clearInterval(this.turnCountdownTimer);
+      this.turnCountdownTimer = null;
+    }
+  }
+
+  private performTimeoutAction(): void {
+    if (this.timeoutActionInProgress || !this.canPlayerAct()) {
+      return;
+    }
+
+    this.timeoutActionInProgress = true;
+    if (this.canCheck()) {
+      this.check();
+    } else {
+      this.fold();
+    }
   }
 
   

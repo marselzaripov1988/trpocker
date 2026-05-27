@@ -370,9 +370,28 @@
 
 .action-buttons {
   display: flex;
+  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+}
+
+.turn-timer {
+  min-width: 54px;
+  padding: 12px 14px;
+  border-radius: 25px;
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #bfdbfe;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.turn-timer.warning {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #fecaca;
 }
 
 .waiting-message,

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -96,6 +97,22 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 "Bad Request",
                 message,
+                getPath(request),
+                getCorrelationId()
+        );
+
+        return ResponseEntity.badRequest().body(error);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotReadable(
+            HttpMessageNotReadableException ex, WebRequest request) {
+        logger.warn("Malformed request body: {}", ex.getMessage());
+
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                "Malformed request body",
                 getPath(request),
                 getCorrelationId()
         );
@@ -215,6 +232,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, WebRequest request) {
+        if (ex instanceof HttpMessageNotReadableException
+                || ex.getClass().getName().equals(HttpMessageNotReadableException.class.getName())) {
+            ErrorResponse error = new ErrorResponse(
+                    HttpStatus.BAD_REQUEST.value(),
+                    "Bad Request",
+                    "Malformed request body",
+                    getPath(request),
+                    getCorrelationId()
+            );
+
+            return ResponseEntity.badRequest().body(error);
+        }
+
         logger.error("Unexpected error [correlationId={}]", getCorrelationId(), ex);
         
         ErrorResponse error = new ErrorResponse(

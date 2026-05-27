@@ -4,7 +4,8 @@ import {
   OnInit,
   OnDestroy,
   ChangeDetectionStrategy,
-  computed
+  computed,
+  signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -177,6 +178,13 @@ import { WebSocketService } from '../../services/websocket.service';
         <!-- Action Buttons -->
         @if (canPlayerAct() && !isEliminated()) {
           <div class="action-buttons" data-cy="action-buttons">
+            <div
+              class="turn-timer"
+              [class.warning]="turnTimeRemaining() <= 10"
+              data-cy="turn-timer"
+            >
+              {{ turnTimeRemaining() }}s
+            </div>
             <button 
               class="btn-action fold"
               (click)="fold()"
@@ -593,8 +601,26 @@ import { WebSocketService } from '../../services/websocket.service';
 
     .action-buttons {
       display: flex;
+      align-items: center;
       gap: 0.75rem;
       margin-top: 2rem;
+    }
+
+    .turn-timer {
+      min-width: 54px;
+      padding: 0.65rem 0.75rem;
+      border-radius: 0.5rem;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      color: #bfdbfe;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .turn-timer.warning {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fecaca;
     }
 
     .btn-action {
@@ -658,6 +684,12 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   private readonly wsService = inject(WebSocketService);
 
   private readonly destroy$ = new Subject<void>();
+  private readonly decisionTimeLimitSeconds = 30;
+  private turnCountdownTimer: ReturnType<typeof setInterval> | null = null;
+  private activeTurnKey: string | null = null;
+  private timeoutActionInProgress = false;
+
+  readonly turnTimeRemaining = signal(this.decisionTimeLimitSeconds);
 
   
   private readonly tournamentVm = toSignal(this.tournamentStore.tournamentTableVm$, {
@@ -794,6 +826,7 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearTurnTimer();
     this.wsService.unsubscribeFromGame();
     this.destroy$.next();
     this.destroy$.complete();
@@ -807,6 +840,73 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
         setTimeout(() => this.gameStore.processTournamentBots(), 800);
       })
     ).subscribe();
+
+    this.gameStore.vm$.pipe(
+      takeUntil(this.destroy$),
+      tap(vm => this.handleTurnTimerState(vm))
+    ).subscribe();
+  }
+
+  private handleTurnTimerState(vm: {
+    canPlayerAct: boolean;
+    currentPlayer: Player | null;
+    game: { id?: string; phase?: string; currentBet?: number } | null;
+    communityCards: unknown[];
+  }): void {
+    if (!vm.canPlayerAct || !vm.currentPlayer?.id || !vm.game?.id) {
+      this.activeTurnKey = null;
+      this.clearTurnTimer();
+      return;
+    }
+
+    const turnKey = [
+      vm.game.id,
+      vm.game.phase,
+      vm.currentPlayer.id,
+      vm.game.currentBet ?? 0,
+      vm.communityCards.length
+    ].join(':');
+
+    if (turnKey !== this.activeTurnKey) {
+      this.activeTurnKey = turnKey;
+      this.startTurnTimer();
+    }
+  }
+
+  private startTurnTimer(): void {
+    this.clearTurnTimer();
+    this.timeoutActionInProgress = false;
+    this.turnTimeRemaining.set(this.decisionTimeLimitSeconds);
+
+    this.turnCountdownTimer = setInterval(() => {
+      const next = this.turnTimeRemaining() - 1;
+      this.turnTimeRemaining.set(Math.max(0, next));
+
+      if (next <= 0) {
+        this.clearTurnTimer();
+        this.performTimeoutAction();
+      }
+    }, 1000);
+  }
+
+  private clearTurnTimer(): void {
+    if (this.turnCountdownTimer) {
+      clearInterval(this.turnCountdownTimer);
+      this.turnCountdownTimer = null;
+    }
+  }
+
+  private performTimeoutAction(): void {
+    if (this.timeoutActionInProgress || !this.canPlayerAct()) {
+      return;
+    }
+
+    this.timeoutActionInProgress = true;
+    if (this.canCheck()) {
+      this.check();
+    } else {
+      this.fold();
+    }
   }
 
   

@@ -51,6 +51,7 @@ public class PokerGameService {
     private final GameMetricsService metricsService;
     private final TournamentTableShardService tournamentTableShardService;
     private final TournamentChipSyncService tournamentChipSyncService;
+    private final GameTurnTimeoutService turnTimeoutService;
 
     public PokerGameService(
             GameStateService gameStateService,
@@ -63,7 +64,8 @@ public class PokerGameService {
             AppProperties appProperties,
             GameMetricsService metricsService,
             TournamentTableShardService tournamentTableShardService,
-            TournamentChipSyncService tournamentChipSyncService) {
+            TournamentChipSyncService tournamentChipSyncService,
+            GameTurnTimeoutService turnTimeoutService) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
@@ -75,6 +77,7 @@ public class PokerGameService {
         this.metricsService = metricsService;
         this.tournamentTableShardService = tournamentTableShardService;
         this.tournamentChipSyncService = tournamentChipSyncService;
+        this.turnTimeoutService = turnTimeoutService;
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -138,6 +141,7 @@ public class PokerGameService {
             handHistoryService.startRecording(savedGame);
 
             notificationService.broadcastGameUpdate(savedGame);
+            turnTimeoutService.scheduleForCurrentTurn(savedGame);
 
             metricsService.incrementGamesCreated();
             metricsService.setActivePlayers(playersInfo.size());
@@ -293,7 +297,41 @@ public class PokerGameService {
         game.setPhase(GamePhase.PRE_FLOP);
 
         logger.info("Started new hand {} in game {}", game.getHandNumber(), gameId);
-        return gameStateService.persistFull(game);
+        Game saved = gameStateService.persistFull(game);
+        turnTimeoutService.scheduleForCurrentTurn(saved);
+        return saved;
+    }
+
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game handleTurnTimeout(
+            UUID gameId,
+            UUID expectedPlayerId,
+            String expectedPhase,
+            int expectedCurrentBet,
+            int expectedCommunityCardCount) {
+        Game game = findGameById(gameId);
+        Player currentPlayer = game.getCurrentPlayer();
+
+        if (game.isFinished()
+                || currentPlayer == null
+                || !currentPlayer.getId().equals(expectedPlayerId)
+                || !game.getPhase().name().equals(expectedPhase)
+                || game.getCurrentBet() != expectedCurrentBet
+                || game.getCommunityCards().size() != expectedCommunityCardCount
+                || currentPlayer.isBot()
+                || !currentPlayer.canAct()) {
+            logger.debug("Ignoring stale turn timeout for game {} player {}", gameId, expectedPlayerId);
+            return game;
+        }
+
+        PlayerAction timeoutAction = currentPlayer.getBetAmount() < game.getCurrentBet()
+                ? PlayerAction.FOLD
+                : PlayerAction.CHECK;
+
+        logger.info("Turn timeout for player {} in game {} - auto {}",
+                currentPlayer.getName(), gameId, timeoutAction);
+
+        return playerAct(gameId, expectedPlayerId, timeoutAction, 0);
     }
 
     private void validatePlayerCount(List<PlayerInfo> playersInfo) {
@@ -1057,12 +1095,15 @@ public class PokerGameService {
 
     private Game persistAfterAction(Game game) {
         if (game.isFinished()) {
+            turnTimeoutService.cancel(game.getId());
             playerStatisticsService.flushBufferedActionsForGame(game);
             Game saved = gameStateService.persistFull(game);
             syncTournamentChipsAfterHand(saved);
             return saved;
         }
-        return gameStateService.afterPlayerAction(game);
+        Game saved = gameStateService.afterPlayerAction(game);
+        turnTimeoutService.scheduleForCurrentTurn(saved);
+        return saved;
     }
 
     private void syncTournamentChipsAfterHand(Game game) {

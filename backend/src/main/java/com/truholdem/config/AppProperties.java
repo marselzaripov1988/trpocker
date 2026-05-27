@@ -190,6 +190,10 @@ public class AppProperties {
         /** {@link BotMode#ADVANCED} by default; use PASSIVE for mass bot / load tests. */
         private BotMode botMode = BotMode.ADVANCED;
 
+        /** Seconds a human player has to act before auto-check/auto-fold. */
+        @Min(1)
+        private int turnActionTimeoutSeconds = 30;
+
         
         public int getDefaultChips() {
             return defaultChips;
@@ -285,6 +289,14 @@ public class AppProperties {
 
         public void setBotMode(BotMode botMode) {
             this.botMode = botMode;
+        }
+
+        public int getTurnActionTimeoutSeconds() {
+            return turnActionTimeoutSeconds;
+        }
+
+        public void setTurnActionTimeoutSeconds(int turnActionTimeoutSeconds) {
+            this.turnActionTimeoutSeconds = turnActionTimeoutSeconds;
         }
     }
 

@@ -2,8 +2,6 @@ package com.truholdem.dto;
 
 import com.truholdem.model.*;
 
-import com.truholdem.service.tournament.TournamentTimingService;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -72,7 +70,9 @@ public record TournamentDetailResponse(
                 tournament.getChipLeader().map(TournamentRegistration::getCurrentChips).orElse(0),
                 tournament.getAverageStack(),
                 tournament.getPrizePool(),
-                null,
+                calculateSecondsToNextLevel(tournament),
+                calculateLevelEndEpochMillis(tournament),
+                tournament.getBlindStructure().getLevelDurationMinutes() * 60,
                 List.of(),
                 List.of());
     }
@@ -90,29 +90,13 @@ public record TournamentDetailResponse(
             int chipLeaderStack,
             int averageStack,
             int prizePool,
-            TournamentTimingService timingService,
+            long secondsToNext,
+            Long levelEndEpoch,
+            int levelDurationSeconds,
             List<LeaderboardEntryDto> players,
             List<TableSummary> tablesWithPlayers) {
         BlindLevel current = tournament.getCurrentBlindLevel();
         BlindLevel next = tournament.getBlindStructure().getLevelAt(tournament.getCurrentLevel() + 1);
-
-        long secondsToNext = timingService != null
-                ? timingService.secondsToNextLevel(tournament)
-                : 0;
-        Long levelEndEpoch = null;
-        int levelDurationSeconds = tournament.getBlindStructure().getLevelDurationMinutes() * 60;
-        if (timingService != null) {
-            levelDurationSeconds = (int) timingService.levelDuration(tournament).toSeconds();
-            Instant levelEnd = timingService.levelEndTime(tournament);
-            if (levelEnd != null) {
-                levelEndEpoch = levelEnd.toEpochMilli();
-            }
-        } else if (tournament.getLevelStartTime() != null && tournament.getStatus().isPlayable()) {
-            long elapsed = Duration.between(tournament.getLevelStartTime(), Instant.now()).toSeconds();
-            long levelDuration = tournament.getBlindStructure().getLevelDurationMinutes() * 60L;
-            secondsToNext = Math.max(0, levelDuration - elapsed);
-            levelEndEpoch = tournament.getLevelStartTime().plusSeconds(levelDuration).toEpochMilli();
-        }
 
         String durationStr = null;
         if (tournament.getStartTime() != null) {
@@ -207,5 +191,22 @@ public record TournamentDetailResponse(
                     registration.getCurrentChips(),
                     name != null && name.regionMatches(true, 0, "bot", 0, 3));
         }
+    }
+
+    private static long calculateSecondsToNextLevel(Tournament tournament) {
+        if (tournament.getLevelStartTime() == null || !tournament.getStatus().isPlayable()) {
+            return 0;
+        }
+        long elapsed = Duration.between(tournament.getLevelStartTime(), Instant.now()).toSeconds();
+        long levelDuration = tournament.getBlindStructure().getLevelDurationMinutes() * 60L;
+        return Math.max(0, levelDuration - elapsed);
+    }
+
+    private static Long calculateLevelEndEpochMillis(Tournament tournament) {
+        if (tournament.getLevelStartTime() == null || !tournament.getStatus().isPlayable()) {
+            return null;
+        }
+        long levelDuration = tournament.getBlindStructure().getLevelDurationMinutes() * 60L;
+        return tournament.getLevelStartTime().plusSeconds(levelDuration).toEpochMilli();
     }
 }

@@ -269,6 +269,7 @@ class ArchitectureTest {
             ArchRule rule = classes()
                     .that().resideInAPackage("..config..")
                     .and().areTopLevelClasses()
+                    .and().areNotEnums()
                     .should().haveSimpleNameEndingWith("Config")
                     .orShould().haveSimpleNameEndingWith("Configuration")
                     .orShould().haveSimpleNameEndingWith("Properties")

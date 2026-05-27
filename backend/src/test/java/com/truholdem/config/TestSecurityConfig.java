@@ -1,5 +1,7 @@
 package com.truholdem.config;
 
+import com.truholdem.security.JwtUtil;
+import org.mockito.Mockito;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -60,5 +62,17 @@ public class TestSecurityConfig {
     @Primary
     public PasswordEncoder testPasswordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    @Primary
+    public JwtUtil testJwtUtil() {
+        return Mockito.mock(JwtUtil.class);
+    }
+
+    @Bean
+    @Primary
+    public AppProperties testAppProperties() {
+        return new AppProperties();
     }
 }

@@ -81,6 +81,9 @@ class PokerGameServiceTest {
     @Mock
     private TournamentChipSyncService tournamentChipSyncService;
 
+    @Mock
+    private GameTurnTimeoutService turnTimeoutService;
+
     private PokerGameService pokerGameService;
 
     @BeforeEach
@@ -119,7 +122,8 @@ class PokerGameServiceTest {
                 appProperties,
                 metricsService,
                 tournamentTableShardService,
-                tournamentChipSyncService);
+                tournamentChipSyncService,
+                turnTimeoutService);
     }
 
     
@@ -186,6 +190,87 @@ class PokerGameServiceTest {
     
     
     
+
+    @Nested
+    @DisplayName("Turn Timeout Tests")
+    class TurnTimeoutTests {
+
+        @Test
+        @DisplayName("Should auto-fold when player times out facing a bet")
+        void shouldAutoFoldWhenTimedOutFacingBet() {
+            Game game = createGameInBettingState();
+            Player current = game.getCurrentPlayer();
+            setupRepositorySaveToReturnArgument();
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Game result = pokerGameService.handleTurnTimeout(
+                    game.getId(),
+                    current.getId(),
+                    game.getPhase().name(),
+                    game.getCurrentBet(),
+                    game.getCommunityCards().size());
+
+            assertTrue(result.getPlayers().get(0).isFolded());
+            verify(handHistoryService).recordAction(
+                    eq(game.getId()),
+                    eq(current),
+                    eq(PlayerAction.FOLD),
+                    eq(0),
+                    eq(GamePhase.PRE_FLOP));
+        }
+
+        @Test
+        @DisplayName("Should auto-check when player times out without facing a bet")
+        void shouldAutoCheckWhenTimedOutWithoutFacingBet() {
+            Game game = createGameWithPlayers(3, 1000);
+            game.setCurrentBet(0);
+            game.setCurrentPot(0);
+            game.setCurrentPlayerIndex(0);
+            Player current = game.getCurrentPlayer();
+            setupRepositorySaveToReturnArgument();
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Game result = pokerGameService.handleTurnTimeout(
+                    game.getId(),
+                    current.getId(),
+                    game.getPhase().name(),
+                    game.getCurrentBet(),
+                    game.getCommunityCards().size());
+
+            assertFalse(result.getPlayers().get(0).isFolded());
+            assertTrue(result.getPlayers().get(0).hasActed());
+            verify(handHistoryService).recordAction(
+                    eq(game.getId()),
+                    eq(current),
+                    eq(PlayerAction.CHECK),
+                    eq(0),
+                    eq(GamePhase.PRE_FLOP));
+        }
+
+        @Test
+        @DisplayName("Should ignore stale timeout if phase changed")
+        void shouldIgnoreStaleTimeoutIfPhaseChanged() {
+            Game game = createGameInBettingState();
+            Player current = game.getCurrentPlayer();
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Game result = pokerGameService.handleTurnTimeout(
+                    game.getId(),
+                    current.getId(),
+                    GamePhase.FLOP.name(),
+                    game.getCurrentBet(),
+                    game.getCommunityCards().size());
+
+            assertSame(game, result);
+            assertFalse(current.isFolded());
+            verify(handHistoryService, never()).recordAction(
+                    any(UUID.class),
+                    any(Player.class),
+                    any(PlayerAction.class),
+                    anyInt(),
+                    any(GamePhase.class));
+        }
+    }
 
     @Nested
     @DisplayName("1. Game Lifecycle Tests")
