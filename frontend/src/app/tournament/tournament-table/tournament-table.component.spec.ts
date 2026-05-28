@@ -188,6 +188,7 @@ describe('TournamentTableComponent', () => {
       'ngOnDestroy'
     ], {
       tournamentTableVm$: vmSubject.asObservable(),
+      lastUpdate$: of(null),
       timeRemaining$: of(300000),
       myTable$: of(null),
       tableHandGame$: of(null)

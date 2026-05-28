@@ -2,6 +2,7 @@ import { Card } from "./card";
 import { Player } from "./player";
 
 export type GamePhase = 'PRE_FLOP' | 'FLOP' | 'TURN' | 'RIVER' | 'SHOWDOWN';
+export type HandLifecycleState = 'IN_PROGRESS' | 'HAND_COMPLETED' | 'RESULT_DELAY' | 'NEXT_HAND';
 
 export class Game {
 	id?: string;
@@ -27,6 +28,7 @@ export class Game {
 	
 	isFinished?: boolean;
 	handNumber?: number;
+	handLifecycleState?: HandLifecycleState;
 	
 	
 	minRaiseAmount?: number;
@@ -45,6 +47,7 @@ export class Game {
 		this.minRaiseAmount = 20;
 		this.isFinished = false;
 		this.handNumber = 1;
+		this.handLifecycleState = 'IN_PROGRESS';
 	}
 
 	

@@ -194,6 +194,10 @@ public class AppProperties {
         @Min(1)
         private int turnActionTimeoutSeconds = 30;
 
+        /** Seconds to keep hand results visible before server starts the next hand. */
+        @Min(1)
+        private int handResultDelaySeconds = 3;
+
         
         public int getDefaultChips() {
             return defaultChips;
@@ -297,6 +301,14 @@ public class AppProperties {
 
         public void setTurnActionTimeoutSeconds(int turnActionTimeoutSeconds) {
             this.turnActionTimeoutSeconds = turnActionTimeoutSeconds;
+        }
+
+        public int getHandResultDelaySeconds() {
+            return handResultDelaySeconds;
+        }
+
+        public void setHandResultDelaySeconds(int handResultDelaySeconds) {
+            this.handResultDelaySeconds = handResultDelaySeconds;
         }
     }
 

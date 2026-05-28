@@ -28,6 +28,7 @@ import com.truholdem.model.Game;
 import com.truholdem.model.GamePhase;
 import com.truholdem.model.HandRanking;
 import com.truholdem.model.HandType;
+import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
@@ -84,6 +85,9 @@ class PokerGameServiceTest {
     @Mock
     private GameTurnTimeoutService turnTimeoutService;
 
+    @Mock
+    private GameHandLifecycleService handLifecycleService;
+
     private PokerGameService pokerGameService;
 
     @BeforeEach
@@ -123,7 +127,8 @@ class PokerGameServiceTest {
                 metricsService,
                 tournamentTableShardService,
                 tournamentChipSyncService,
-                turnTimeoutService);
+                turnTimeoutService,
+                handLifecycleService);
     }
 
     
@@ -269,6 +274,87 @@ class PokerGameServiceTest {
                     any(PlayerAction.class),
                     anyInt(),
                     any(GamePhase.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Hand Lifecycle Tests")
+    class HandLifecycleTests {
+
+        @Test
+        @DisplayName("Should move completed hand into result delay")
+        void shouldMoveCompletedHandIntoResultDelay() {
+            Game game = createGameWithPlayers(3, 1000);
+            game.setFinished(true);
+            game.setPhase(GamePhase.SHOWDOWN);
+            game.setHandLifecycleState(HandLifecycleState.HAND_COMPLETED);
+            setupRepositorySaveToReturnArgument();
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Game result = pokerGameService.transitionCompletedHandToResultDelay(
+                    game.getId(),
+                    game.getHandNumber());
+
+            assertEquals(HandLifecycleState.RESULT_DELAY, result.getHandLifecycleState());
+            verify(notificationService).broadcastGameUpdate(result);
+        }
+
+        @Test
+        @DisplayName("Should ignore stale result delay transition")
+        void shouldIgnoreStaleResultDelayTransition() {
+            Game game = createGameWithPlayers(3, 1000);
+            game.setFinished(true);
+            game.setPhase(GamePhase.SHOWDOWN);
+            game.setHandLifecycleState(HandLifecycleState.RESULT_DELAY);
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Game result = pokerGameService.transitionCompletedHandToResultDelay(
+                    game.getId(),
+                    game.getHandNumber());
+
+            assertSame(game, result);
+            verify(notificationService, never()).broadcastGameUpdate(any(Game.class));
+        }
+
+        @Test
+        @DisplayName("Should start next hand from lifecycle state")
+        void shouldStartNextHandFromLifecycleState() {
+            Game game = createGameWithPlayers(3, 1000);
+            int completedHand = game.getHandNumber();
+            game.setFinished(true);
+            game.setPhase(GamePhase.SHOWDOWN);
+            game.setHandLifecycleState(HandLifecycleState.RESULT_DELAY);
+            setupRepositorySaveToReturnArgument();
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Optional<Game> result = pokerGameService.startNextHandFromLifecycle(
+                    game.getId(),
+                    completedHand);
+
+            assertTrue(result.isPresent());
+            assertEquals(completedHand + 1, result.get().getHandNumber());
+            assertFalse(result.get().isFinished());
+            assertEquals(GamePhase.PRE_FLOP, result.get().getPhase());
+            assertEquals(HandLifecycleState.IN_PROGRESS, result.get().getHandLifecycleState());
+        }
+
+        @Test
+        @DisplayName("Should keep completed game when not enough players remain")
+        void shouldKeepCompletedGameWhenNotEnoughPlayersRemain() {
+            Game game = createGameWithPlayers(2, 1000);
+            game.getPlayers().get(1).setChips(0);
+            game.setFinished(true);
+            game.setPhase(GamePhase.SHOWDOWN);
+            game.setHandLifecycleState(HandLifecycleState.RESULT_DELAY);
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+
+            Optional<Game> result = pokerGameService.startNextHandFromLifecycle(
+                    game.getId(),
+                    game.getHandNumber());
+
+            assertTrue(result.isEmpty());
+            assertEquals(HandLifecycleState.RESULT_DELAY, game.getHandLifecycleState());
+            verify(gameRepository, never()).save(any(Game.class));
         }
     }
 

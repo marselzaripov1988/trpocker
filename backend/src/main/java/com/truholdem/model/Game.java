@@ -86,6 +86,10 @@ public class Game {
     @Enumerated(EnumType.STRING)
     private GamePhase phase;
 
+    @Enumerated(EnumType.STRING)
+    @Column
+    private HandLifecycleState handLifecycleState;
+
     private int currentPlayerIndex;
 
     private int currentBet;
@@ -136,6 +140,7 @@ public class Game {
         this.smallBlind = 10;
         this.bigBlind = 20;
         this.phase = GamePhase.PRE_FLOP;
+        this.handLifecycleState = HandLifecycleState.IN_PROGRESS;
         this.dealerPosition = 0;
         this.buttonSeatPosition = 0;
         this.deadButton = false;
@@ -191,6 +196,14 @@ public class Game {
 
     public void setPhase(GamePhase phase) {
         this.phase = phase;
+    }
+
+    public HandLifecycleState getHandLifecycleState() {
+        return handLifecycleState;
+    }
+
+    public void setHandLifecycleState(HandLifecycleState handLifecycleState) {
+        this.handLifecycleState = handLifecycleState;
     }
 
     public int getCurrentPlayerIndex() {
@@ -343,6 +356,7 @@ public class Game {
         this.currentPot = 0;
         this.currentBet = 0;
         this.phase = GamePhase.PRE_FLOP;
+        this.handLifecycleState = HandLifecycleState.IN_PROGRESS;
         this.winnerName = null;
         this.winningHandDescription = null;
         this.winnerIds.clear();

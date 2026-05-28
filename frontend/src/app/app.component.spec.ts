@@ -5,6 +5,7 @@ import { BehaviorSubject } from 'rxjs';
 import { AppComponent } from './app.component';
 import { PlayerService } from './services/player.service';
 import { SoundService, SoundSettings } from './services/sound.service';
+import { AuthService } from './services/auth.service';
 import { PlayerInfo } from './register-players/register-players.component';
 
 describe('AppComponent', () => {
@@ -13,6 +14,7 @@ describe('AppComponent', () => {
   let router: Router;
   let playerServiceMock: Partial<PlayerService>;
   let soundServiceMock: Partial<SoundService>;
+  let authServiceMock: Partial<AuthService>;
   let playersSubject: BehaviorSubject<PlayerInfo[]>;
   let settingsSubject: BehaviorSubject<SoundSettings>;
 
@@ -55,12 +57,17 @@ describe('AppComponent', () => {
       playClick: jest.fn()
     };
 
+    authServiceMock = {
+      isAdmin: jest.fn().mockReturnValue(false)
+    };
+
     await TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
         provideRouter([]),
         { provide: PlayerService, useValue: playerServiceMock },
-        { provide: SoundService, useValue: soundServiceMock }
+        { provide: SoundService, useValue: soundServiceMock },
+        { provide: AuthService, useValue: authServiceMock }
       ]
     }).compileComponents();
 

@@ -25,6 +25,7 @@ import com.truholdem.model.Deck;
 import com.truholdem.model.Game;
 import com.truholdem.model.HandRanking;
 import com.truholdem.model.GamePhase;
+import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.config.AppProperties;
@@ -52,6 +53,7 @@ public class PokerGameService {
     private final TournamentTableShardService tournamentTableShardService;
     private final TournamentChipSyncService tournamentChipSyncService;
     private final GameTurnTimeoutService turnTimeoutService;
+    private final GameHandLifecycleService handLifecycleService;
 
     public PokerGameService(
             GameStateService gameStateService,
@@ -65,7 +67,8 @@ public class PokerGameService {
             GameMetricsService metricsService,
             TournamentTableShardService tournamentTableShardService,
             TournamentChipSyncService tournamentChipSyncService,
-            GameTurnTimeoutService turnTimeoutService) {
+            GameTurnTimeoutService turnTimeoutService,
+            GameHandLifecycleService handLifecycleService) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
@@ -78,6 +81,7 @@ public class PokerGameService {
         this.tournamentTableShardService = tournamentTableShardService;
         this.tournamentChipSyncService = tournamentChipSyncService;
         this.turnTimeoutService = turnTimeoutService;
+        this.handLifecycleService = handLifecycleService;
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -128,6 +132,7 @@ public class PokerGameService {
             game.setDeck(deck.getCards());
             postBlinds(game);
             game.setPhase(GamePhase.PRE_FLOP);
+            game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
 
             // Log who is first to act
             Player firstToAct = game.getCurrentPlayer();
@@ -278,6 +283,8 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game startNewHand(UUID gameId) {
+        handLifecycleService.cancel(gameId);
+
         Game game = findGameById(gameId);
 
         game.getPlayers().removeIf(p -> p.getChips() <= 0);
@@ -295,11 +302,52 @@ public class PokerGameService {
         game.setDeck(deck.getCards());
         postBlinds(game);
         game.setPhase(GamePhase.PRE_FLOP);
+        game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
 
         logger.info("Started new hand {} in game {}", game.getHandNumber(), gameId);
         Game saved = gameStateService.persistFull(game);
+        notificationService.broadcastGameUpdate(saved);
         turnTimeoutService.scheduleForCurrentTurn(saved);
         return saved;
+    }
+
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game transitionCompletedHandToResultDelay(UUID gameId, int expectedHandNumber) {
+        Game game = findGameById(gameId);
+        if (!isExpectedLifecycleState(game, expectedHandNumber, HandLifecycleState.HAND_COMPLETED)) {
+            logger.debug("Ignoring stale RESULT_DELAY transition for game {} hand {}", gameId, expectedHandNumber);
+            return game;
+        }
+
+        game.setHandLifecycleState(HandLifecycleState.RESULT_DELAY);
+        Game saved = gameStateService.persistFull(game);
+        notificationService.broadcastGameUpdate(saved);
+        logger.info("Game {} hand {} entered RESULT_DELAY", gameId, expectedHandNumber);
+        return saved;
+    }
+
+    @CacheEvict(value = "games", key = "#gameId")
+    public Optional<Game> startNextHandFromLifecycle(UUID gameId, int expectedHandNumber) {
+        Game game = findGameById(gameId);
+        if (!isExpectedLifecycleState(game, expectedHandNumber, HandLifecycleState.RESULT_DELAY)) {
+            logger.debug("Ignoring stale NEXT_HAND transition for game {} hand {}", gameId, expectedHandNumber);
+            return Optional.of(game);
+        }
+
+        long playersWithChips = game.getPlayers().stream()
+                .filter(player -> player.getChips() > 0)
+                .count();
+        if (playersWithChips < 2) {
+            logger.info("Game {} remains completed after hand {} - not enough players for next hand",
+                    gameId, expectedHandNumber);
+            return Optional.empty();
+        }
+
+        game.setHandLifecycleState(HandLifecycleState.NEXT_HAND);
+        Game pendingNextHand = gameStateService.persistFull(game);
+        notificationService.broadcastGameUpdate(pendingNextHand);
+
+        return Optional.of(startNewHand(gameId));
     }
 
     @CacheEvict(value = "games", key = "#gameId")
@@ -876,6 +924,7 @@ public class PokerGameService {
         }
 
         game.setFinished(true);
+        game.setHandLifecycleState(HandLifecycleState.HAND_COMPLETED);
         game.setCurrentPot(0);
 
         if (!allWinners.isEmpty()) {
@@ -968,6 +1017,7 @@ public class PokerGameService {
         game.setCurrentPot(0);
         game.setFinished(true);
         game.setPhase(GamePhase.SHOWDOWN);
+        game.setHandLifecycleState(HandLifecycleState.HAND_COMPLETED);
 
         playerStatisticsService.recordWin(winner.getName(), potAmount);
 
@@ -1099,11 +1149,21 @@ public class PokerGameService {
             playerStatisticsService.flushBufferedActionsForGame(game);
             Game saved = gameStateService.persistFull(game);
             syncTournamentChipsAfterHand(saved);
+            handLifecycleService.scheduleAfterHandCompleted(saved);
             return saved;
         }
         Game saved = gameStateService.afterPlayerAction(game);
         turnTimeoutService.scheduleForCurrentTurn(saved);
         return saved;
+    }
+
+    private boolean isExpectedLifecycleState(
+            Game game,
+            int expectedHandNumber,
+            HandLifecycleState expectedState) {
+        return game.isFinished()
+                && game.getHandNumber() == expectedHandNumber
+                && game.getHandLifecycleState() == expectedState;
     }
 
     private void syncTournamentChipsAfterHand(Game game) {

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
+import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
 
 @Service
@@ -44,6 +45,7 @@ public class GameTurnTimeoutService {
 
         Player currentPlayer = game.getCurrentPlayer();
         if (game.isFinished()
+                || game.getHandLifecycleState() != HandLifecycleState.IN_PROGRESS
                 || currentPlayer == null
                 || currentPlayer.isBot()
                 || !currentPlayer.canAct()) {
