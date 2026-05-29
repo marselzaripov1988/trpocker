@@ -30,6 +30,11 @@ import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.config.AppProperties;
 import com.truholdem.config.BotMode;
+import com.truholdem.config.GameEngine;
+import com.truholdem.domain.aggregate.PokerGame;
+import com.truholdem.domain.event.HandCompleted;
+import com.truholdem.domain.value.Chips;
+import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -54,6 +59,7 @@ public class PokerGameService {
     private final TournamentChipSyncService tournamentChipSyncService;
     private final GameTurnTimeoutService turnTimeoutService;
     private final GameHandLifecycleService handLifecycleService;
+    private final PokerGameMapper pokerGameMapper;
 
     public PokerGameService(
             GameStateService gameStateService,
@@ -68,7 +74,8 @@ public class PokerGameService {
             TournamentTableShardService tournamentTableShardService,
             TournamentChipSyncService tournamentChipSyncService,
             GameTurnTimeoutService turnTimeoutService,
-            GameHandLifecycleService handLifecycleService) {
+            GameHandLifecycleService handLifecycleService,
+            PokerGameMapper pokerGameMapper) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
@@ -82,6 +89,7 @@ public class PokerGameService {
         this.tournamentChipSyncService = tournamentChipSyncService;
         this.turnTimeoutService = turnTimeoutService;
         this.handLifecycleService = handLifecycleService;
+        this.pokerGameMapper = pokerGameMapper;
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -91,6 +99,10 @@ public class PokerGameService {
     public Game createNewGame(List<PlayerInfo> playersInfo, Integer smallBlind, Integer bigBlind) {
         return metricsService.timeGameCreation(() -> {
             validatePlayerCount(playersInfo);
+
+            if (usesAggregateEngine()) {
+                return createNewGameViaAggregate(playersInfo, smallBlind, bigBlind);
+            }
 
             // Log received player info
             logger.info("Received player info for game creation:");
@@ -159,6 +171,10 @@ public class PokerGameService {
     @CacheEvict(value = "games", key = "#gameId")
     public Game playerAct(UUID gameId, UUID playerId, PlayerAction action, int amount) {
         return metricsService.timeActionProcessing(() -> {
+            if (usesAggregateEngine()) {
+                return playerActViaAggregate(gameId, playerId, action, amount);
+            }
+
             Game game = findGameById(gameId);
             Player player = findPlayerInGame(game, playerId);
 
@@ -284,6 +300,10 @@ public class PokerGameService {
     @CacheEvict(value = "games", key = "#gameId")
     public Game startNewHand(UUID gameId) {
         handLifecycleService.cancel(gameId);
+
+        if (usesAggregateEngine()) {
+            return startNewHandViaAggregate(gameId);
+        }
 
         Game game = findGameById(gameId);
 
@@ -1137,6 +1157,183 @@ public class PokerGameService {
     }
 
     private record PotInfo(int amount, List<UUID> eligiblePlayerIds) {
+    }
+
+    private boolean usesAggregateEngine() {
+        return appProperties.getGame().getEngine() == GameEngine.AGGREGATE;
+    }
+
+    private Game createNewGameViaAggregate(
+            List<PlayerInfo> playersInfo, Integer smallBlind, Integer bigBlind) {
+        logger.info("Creating game via aggregate engine with {} players", playersInfo.size());
+
+        int sb = resolveBlind(smallBlind, appProperties.getGame().getDefaultSmallBlind());
+        int bb = resolveBlind(bigBlind, appProperties.getGame().getDefaultBigBlind());
+
+        PokerGame aggregate = PokerGame.create(playersInfo, Chips.of(sb), Chips.of(bb));
+        assignPlayerIdsFromInfo(aggregate, playersInfo);
+        aggregate.startNewHand();
+
+        Game game = new Game();
+        game.setId(aggregate.getId());
+        game.setSmallBlind(sb);
+        game.setBigBlind(bb);
+        game.setMinRaiseAmount(bb);
+        game.setLastRaiseAmount(bb);
+        game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
+        pokerGameMapper.applyToGame(aggregate, game);
+
+        for (PlayerInfo info : playersInfo) {
+            playerStatisticsService.startSession(info.getName());
+        }
+
+        Game savedGame = gameStateService.persistFullSync(game);
+        handHistoryService.startRecording(savedGame);
+        notificationService.broadcastGameUpdate(savedGame);
+        turnTimeoutService.scheduleForCurrentTurn(savedGame);
+
+        metricsService.incrementGamesCreated();
+        metricsService.setActivePlayers(playersInfo.size());
+        logger.info("Created new game {} with {} players (aggregate engine)", savedGame.getId(), playersInfo.size());
+        return savedGame;
+    }
+
+    private Game playerActViaAggregate(UUID gameId, UUID playerId, PlayerAction action, int amount) {
+        Game game = findGameById(gameId);
+        Player player = findPlayerInGame(game, playerId);
+
+        validatePlayerTurn(game, playerId);
+        validatePlayerCanAct(player);
+
+        logger.debug("Player {} performing action {} with amount {} (aggregate engine)",
+                player.getName(), action, amount);
+
+        metricsService.recordPlayerAction(action.name());
+
+        int chipsBefore = player.getChips();
+        PokerGame aggregate = pokerGameMapper.fromGame(game);
+        Chips betAmount = action == PlayerAction.BET || action == PlayerAction.RAISE
+                ? Chips.of(amount)
+                : null;
+
+        aggregate.executeAction(playerId, action, betAmount);
+        pokerGameMapper.applyToGame(aggregate, game);
+
+        int actualAmount = chipsBefore - player.getChips();
+        if (actualAmount < 0) {
+            actualAmount = 0;
+        }
+
+        if (game.isFinished()) {
+            finalizeAggregateHand(game, aggregate);
+        }
+
+        player.setHasActed(true);
+
+        handHistoryService.recordAction(gameId, player, action, actualAmount, game.getPhase());
+        playerStatisticsService.recordAction(player.getName(), action.name());
+
+        if (player.isAllIn()) {
+            playerStatisticsService.recordAllIn(player.getName());
+        }
+
+        notificationService.broadcastPlayerAction(game, player, action.name(), actualAmount);
+
+        Player nextPlayer = game.getCurrentPlayer();
+        logger.info("After {} by {} (aggregate): next player is {} (isBot: {}, index: {})",
+                action, player.getName(),
+                nextPlayer != null ? nextPlayer.getName() : "null",
+                nextPlayer != null ? nextPlayer.isBot() : "N/A",
+                game.getCurrentPlayerIndex());
+
+        return persistAfterAction(game);
+    }
+
+    private Game startNewHandViaAggregate(UUID gameId) {
+        Game game = findGameById(gameId);
+        game.getPlayers().removeIf(p -> p.getChips() <= 0);
+
+        if (game.getPlayers().size() < 2) {
+            throw new IllegalStateException("Not enough players with chips to continue");
+        }
+
+        PokerGame aggregate = pokerGameMapper.fromGame(game);
+        aggregate.startNewHand();
+        pokerGameMapper.applyToGame(aggregate, game);
+        game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
+
+        logger.info("Started new hand {} in game {} (aggregate engine)", game.getHandNumber(), gameId);
+        Game saved = gameStateService.persistFull(game);
+        notificationService.broadcastGameUpdate(saved);
+        turnTimeoutService.scheduleForCurrentTurn(saved);
+        return saved;
+    }
+
+    private void finalizeAggregateHand(Game game, PokerGame aggregate) {
+        game.setHandLifecycleState(HandLifecycleState.HAND_COMPLETED);
+
+        HandCompleted completed = aggregate.getDomainEvents().stream()
+                .filter(HandCompleted.class::isInstance)
+                .map(HandCompleted.class::cast)
+                .reduce((first, second) -> second)
+                .orElse(null);
+
+        if (completed == null || completed.getPotResults().isEmpty()) {
+            return;
+        }
+
+        List<WinnerInfo> winners = new ArrayList<>();
+        int totalWon = 0;
+        for (HandCompleted.PotResult potResult : completed.getPotResults()) {
+            int amount = potResult.amount().amount();
+            totalWon += amount;
+            playerStatisticsService.recordWin(potResult.winnerName(), amount);
+
+            Player winner = findPlayerInGame(game, potResult.winnerId());
+            winners.add(new WinnerInfo(
+                    potResult.winnerId(),
+                    potResult.winnerName(),
+                    amount,
+                    potResult.handDescription(),
+                    new ArrayList<>(winner.getHand())));
+
+            if (completed.wentToShowdown()) {
+                playerStatisticsService.recordShowdown(potResult.winnerName(), true);
+            }
+        }
+
+        WinnerInfo mainWinner = winners.stream()
+                .max(Comparator.comparingInt(WinnerInfo::getAmountWon))
+                .orElse(winners.get(0));
+
+        handHistoryService.recordCommunityCards(game.getId(), game.getCommunityCards());
+        handHistoryService.finishRecording(
+                game.getId(),
+                mainWinner.getPlayerName(),
+                mainWinner.getHandDescription() != null ? mainWinner.getHandDescription() : "Winner",
+                totalWon);
+
+        if (completed.wentToShowdown()) {
+            ShowdownResult result = new ShowdownResult(winners, totalWon, buildWinMessage(winners));
+            notificationService.broadcastShowdown(game, result);
+        }
+    }
+
+    private static int resolveBlind(Integer override, int defaultBlind) {
+        return override != null && override > 0 ? override : defaultBlind;
+    }
+
+    private static void assignPlayerIdsFromInfo(PokerGame aggregate, List<PlayerInfo> playersInfo) {
+        List<Player> players = aggregate.getPlayers();
+        for (int i = 0; i < playersInfo.size() && i < players.size(); i++) {
+            PlayerInfo info = playersInfo.get(i);
+            if (info.getPlayerId() != null) {
+                players.get(i).setId(info.getPlayerId());
+                if (!info.isBot()) {
+                    players.get(i).setUserId(info.getPlayerId());
+                }
+            }
+        }
     }
 
     private Game findGameById(UUID gameId) {

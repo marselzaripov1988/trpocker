@@ -190,6 +190,9 @@ public class AppProperties {
         /** {@link BotMode#ADVANCED} by default; use PASSIVE for mass bot / load tests. */
         private BotMode botMode = BotMode.ADVANCED;
 
+        /** {@link GameEngine#LEGACY} by default; {@link GameEngine#AGGREGATE} uses domain.PokerGame. */
+        private GameEngine engine = GameEngine.LEGACY;
+
         /** Seconds a human player has to act before auto-check/auto-fold. */
         @Min(1)
         private int turnActionTimeoutSeconds = 30;
@@ -293,6 +296,14 @@ public class AppProperties {
 
         public void setBotMode(BotMode botMode) {
             this.botMode = botMode;
+        }
+
+        public GameEngine getEngine() {
+            return engine;
+        }
+
+        public void setEngine(GameEngine engine) {
+            this.engine = engine;
         }
 
         public int getTurnActionTimeoutSeconds() {

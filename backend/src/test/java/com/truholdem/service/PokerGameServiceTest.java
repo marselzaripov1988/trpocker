@@ -36,6 +36,8 @@ import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
 import com.truholdem.config.AppProperties;
 import com.truholdem.config.BotMode;
+import com.truholdem.config.GameEngine;
+import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.repository.GameRepository;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -114,6 +116,9 @@ class PokerGameServiceTest {
         AppProperties.Game gameConfig = mock(AppProperties.Game.class);
         lenient().when(appProperties.getGame()).thenReturn(gameConfig);
         lenient().when(gameConfig.getBotMode()).thenReturn(BotMode.ADVANCED);
+        lenient().when(gameConfig.getEngine()).thenReturn(GameEngine.LEGACY);
+        lenient().when(gameConfig.getDefaultSmallBlind()).thenReturn(10);
+        lenient().when(gameConfig.getDefaultBigBlind()).thenReturn(20);
 
         pokerGameService = new PokerGameService(
                 gameStateService,
@@ -128,7 +133,8 @@ class PokerGameServiceTest {
                 tournamentTableShardService,
                 tournamentChipSyncService,
                 turnTimeoutService,
-                handLifecycleService);
+                handLifecycleService,
+                new PokerGameMapper());
     }
 
     
@@ -3144,6 +3150,48 @@ class PokerGameServiceTest {
 
                 assertEquals(0, game.getCurrentPot());
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Aggregate engine (app.game.engine=aggregate)")
+    class AggregateEngineTests {
+
+        @BeforeEach
+        void enableAggregateEngine() {
+            when(appProperties.getGame().getEngine()).thenReturn(GameEngine.AGGREGATE);
+        }
+
+        @Test
+        @DisplayName("createNewGame deals blinds and leaves a legal first actor")
+        void createNewGameViaAggregate() {
+            setupRepositorySaveToReturnArgument();
+            List<PlayerInfo> players = createPlayerInfoList(2);
+
+            Game game = pokerGameService.createNewGame(players);
+
+            assertNotNull(game.getId());
+            assertEquals(GamePhase.PRE_FLOP, game.getPhase());
+            assertEquals(HandLifecycleState.IN_PROGRESS, game.getHandLifecycleState());
+            assertTrue(game.getCurrentPot() > 0);
+            assertNotNull(game.getCurrentPlayer());
+            verify(handHistoryService).startRecording(game);
+            verify(turnTimeoutService).scheduleForCurrentTurn(game);
+        }
+
+        @Test
+        @DisplayName("playerAct via aggregate advances betting and persists")
+        void playerActViaAggregate() {
+            setupRepositorySaveToReturnArgument();
+            Game game = pokerGameService.createNewGame(createPlayerInfoList(2));
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+            Player actor = game.getCurrentPlayer();
+
+            Game updated = pokerGameService.playerAct(
+                    game.getId(), actor.getId(), PlayerAction.CALL, 0);
+
+            assertNotNull(updated.getCurrentPlayer());
+            verify(gameStateService).afterPlayerAction(updated);
         }
     }
 }

@@ -4,6 +4,7 @@ import com.truholdem.domain.aggregate.PersistedGameState;
 import com.truholdem.domain.aggregate.PokerGame;
 import com.truholdem.model.Card;
 import com.truholdem.model.Game;
+import com.truholdem.model.GamePhase;
 import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
 import org.springframework.stereotype.Component;
@@ -36,8 +37,7 @@ public class PokerGameMapper {
 
         HandLifecycleState lifecycle = game.getHandLifecycleState();
 
-        game.setPhase(aggregate.getPhase());
-        game.setCurrentPot(aggregate.getMainPotAmount());
+        applyPhaseAndPot(aggregate, game);
         game.setCurrentBet(aggregate.getCurrentBet().amount());
         game.setSmallBlind(aggregate.getSmallBlind().amount());
         game.setBigBlind(aggregate.getBigBlind().amount());
@@ -121,5 +121,21 @@ public class PokerGameMapper {
     private static void replaceCards(List<Card> target, List<Card> source) {
         target.clear();
         target.addAll(source);
+    }
+
+    /**
+     * Maps aggregate hand-end semantics to the legacy {@link Game} wire format
+     * ({@code isFinished=true}, {@code phase=SHOWDOWN}, pot cleared).
+     */
+    private static void applyPhaseAndPot(PokerGame aggregate, Game game) {
+        if (aggregate.getPhase() == GamePhase.FINISHED) {
+            game.setFinished(true);
+            game.setPhase(GamePhase.SHOWDOWN);
+            game.setCurrentPot(0);
+        } else {
+            game.setFinished(aggregate.isFinished());
+            game.setPhase(aggregate.getPhase());
+            game.setCurrentPot(aggregate.getMainPotAmount());
+        }
     }
 }
