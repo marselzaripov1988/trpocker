@@ -779,8 +779,9 @@ class PokerGameTest {
             assertEquals(BIG_BLIND, game.getMinRaise());
 
             
+            
             Player p1 = game.getCurrentPlayer();
-            game.executeAction(p1.getId(), PlayerAction.RAISE, Chips.of(40));
+            game.executeAction(p1.getId(), PlayerAction.RAISE, Chips.of(60));
 
             
             assertTrue(game.getMinRaise().amount() >= 40);

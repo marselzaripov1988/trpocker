@@ -44,8 +44,14 @@ public class PokerGame {
     
     private int currentBet;
     private int minRaise;
+    private int lastRaiseAmount;
     private int actionsThisRound;
     private UUID lastAggressorId;
+
+    
+    private int buttonSeatPosition;
+    private boolean deadButton;
+    private final Map<Integer, Integer> missedBlinds = new HashMap<>();
 
     
     private int potAmount;
@@ -88,7 +94,10 @@ public class PokerGame {
         this.finished = false;
         this.currentBet = 0;
         this.minRaise = bigBlind.amount();
+        this.lastRaiseAmount = bigBlind.amount();
         this.actionsThisRound = 0;
+        this.buttonSeatPosition = 0;
+        this.deadButton = false;
         this.potAmount = 0;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
@@ -163,6 +172,7 @@ public class PokerGame {
         sidePotAmounts.clear();
         currentBet = 0;
         minRaise = bigBlindAmount;
+        lastRaiseAmount = bigBlindAmount;
         actionsThisRound = 0;
         lastAggressorId = null;
         winnerName = null;
@@ -181,7 +191,7 @@ public class PokerGame {
 
         
         if (handNumber > 1) {
-            dealerPosition = findNextActivePlayerIndex(dealerPosition);
+            advanceButtonPosition();
         }
 
         
@@ -192,19 +202,36 @@ public class PokerGame {
         dealHoleCards();
 
         
-        int sbIndex = findNextActivePlayerIndex(dealerPosition);
-        int bbIndex = findNextActivePlayerIndex(sbIndex);
-        
+        int sbIndex;
+        int bbIndex;
+        int firstToActIndex;
+        if (getPlayersWithChips().size() == 2) {
+            
+            sbIndex = dealerPosition;
+            bbIndex = findNextActivePlayerIndex(dealerPosition);
+            firstToActIndex = sbIndex;
+        } else {
+            sbIndex = findNextActivePlayerIndex(dealerPosition);
+            bbIndex = findNextActivePlayerIndex(sbIndex);
+            firstToActIndex = findNextActivePlayerIndex(bbIndex);
+        }
+
         Player sbPlayer = players.get(sbIndex);
         Player bbPlayer = players.get(bbIndex);
+
+        
+        collectMissedBlinds(sbPlayer, bbPlayer);
 
         postBlind(sbPlayer, smallBlindAmount, PlayerActed.ActionType.POST_SMALL_BLIND);
         postBlind(bbPlayer, bigBlindAmount, PlayerActed.ActionType.POST_BIG_BLIND);
 
-        currentBet = bigBlindAmount;
-
         
-        currentPlayerIndex = findNextActivePlayerIndex(bbIndex);
+        int actualCurrentBet = Math.max(sbPlayer.getBetAmount(), bbPlayer.getBetAmount());
+        currentBet = Math.max(actualCurrentBet, bigBlindAmount);
+        lastRaiseAmount = bigBlindAmount;
+        minRaise = bigBlindAmount;
+
+        currentPlayerIndex = firstToActIndex;
 
         
         raiseEvent(new GameStarted(id, dealerPosition, sbPlayer.getId(), bbPlayer.getId(), handNumber));
@@ -328,6 +355,7 @@ public class PokerGame {
         addToPot(player, amount.amount());
         currentBet = amount.amount();
         minRaise = amount.amount();
+        lastRaiseAmount = amount.amount();
         lastAggressorId = player.getId();
         resetActionsForRaise();
     }
@@ -341,22 +369,25 @@ public class PokerGame {
             throw InvalidActionException.cannotRaiseNoBet(player.getId());
         }
 
-        int totalBetRequired = currentBet + amount.amount();
-        int amountNeeded = totalBetRequired - player.getBetAmount();
+        
+        int targetTotalBet = amount.amount();
+        int raiseIncrement = targetTotalBet - currentBet;
 
-        if (amount.amount() < minRaise) {
+        if (raiseIncrement < minRaise) {
             throw InvalidActionException.invalidRaiseAmount(
-                    player.getId(), amount, Chips.of(minRaise));
+                    player.getId(), Chips.of(Math.max(0, raiseIncrement)), Chips.of(minRaise));
         }
 
+        int amountNeeded = targetTotalBet - player.getBetAmount();
         if (amountNeeded > player.getChips()) {
             throw InvalidActionException.insufficientChips(
                     player.getId(), Chips.of(amountNeeded), Chips.of(player.getChips()));
         }
 
         addToPot(player, amountNeeded);
-        currentBet = totalBetRequired;
-        minRaise = amount.amount();
+        currentBet = targetTotalBet;
+        minRaise = raiseIncrement;
+        lastRaiseAmount = raiseIncrement;
         lastAggressorId = player.getId();
         resetActionsForRaise();
     }
@@ -370,6 +401,7 @@ public class PokerGame {
             currentBet = player.getBetAmount();
             if (raiseAmount >= minRaise) {
                 minRaise = raiseAmount;
+                lastRaiseAmount = raiseAmount;
                 lastAggressorId = player.getId();
                 resetActionsForRaise();
             }
@@ -426,6 +458,31 @@ public class PokerGame {
 
     public int getDealerPosition() {
         return dealerPosition;
+    }
+
+    public int getButtonSeatPosition() {
+        return buttonSeatPosition;
+    }
+
+    public boolean isDeadButton() {
+        return deadButton;
+    }
+
+    public int getLastRaiseAmount() {
+        return lastRaiseAmount;
+    }
+
+    public UUID getLastAggressorId() {
+        return lastAggressorId;
+    }
+
+    public Map<Integer, Integer> getMissedBlinds() {
+        return Collections.unmodifiableMap(missedBlinds);
+    }
+
+    
+    public void addMissedBlind(int seatPosition, int amount) {
+        missedBlinds.merge(seatPosition, amount, Integer::sum);
     }
 
     public String getWinnerName() {
@@ -548,6 +605,71 @@ public class PokerGame {
     private void addToPot(Player player, int amount) {
         int actualBet = player.placeBet(amount);
         potAmount += actualBet;
+    }
+
+    
+    private void advanceButtonPosition() {
+        if (players.isEmpty()) {
+            return;
+        }
+
+        int maxSeatPosition = players.stream()
+                .mapToInt(Player::getSeatPosition)
+                .max()
+                .orElse(0);
+
+        int nextButtonSeat = (buttonSeatPosition + 1) % (maxSeatPosition + 1);
+
+        Player playerAtButton = players.stream()
+                .filter(p -> p.getSeatPosition() == nextButtonSeat && p.getChips() > 0)
+                .findFirst()
+                .orElse(null);
+
+        if (playerAtButton != null) {
+            buttonSeatPosition = nextButtonSeat;
+            dealerPosition = players.indexOf(playerAtButton);
+            deadButton = false;
+        } else {
+            buttonSeatPosition = nextButtonSeat;
+            deadButton = true;
+
+            for (int i = 1; i <= maxSeatPosition + 1; i++) {
+                int checkSeat = (nextButtonSeat + i) % (maxSeatPosition + 1);
+                Player nextPlayer = players.stream()
+                        .filter(p -> p.getSeatPosition() == checkSeat && p.getChips() > 0)
+                        .findFirst()
+                        .orElse(null);
+                if (nextPlayer != null) {
+                    dealerPosition = players.indexOf(nextPlayer);
+                    break;
+                }
+            }
+        }
+    }
+
+    
+    private void collectMissedBlinds(Player sbPlayer, Player bbPlayer) {
+        if (missedBlinds.isEmpty()) {
+            return;
+        }
+        for (Player player : getPlayersWithChips()) {
+            if (player.equals(sbPlayer) || player.equals(bbPlayer)) {
+                continue;
+            }
+            int missedAmount = missedBlinds.getOrDefault(player.getSeatPosition(), 0);
+            if (missedAmount <= 0) {
+                continue;
+            }
+            int actualPosted = Math.min(missedAmount, player.getChips());
+            if (actualPosted > 0) {
+                player.setChips(player.getChips() - actualPosted);
+                potAmount += actualPosted;
+                missedBlinds.remove(player.getSeatPosition());
+                if (player.getChips() == 0) {
+                    player.setAllIn(true);
+                }
+            }
+        }
     }
 
     private int findNextActivePlayerIndex(int fromIndex) {
