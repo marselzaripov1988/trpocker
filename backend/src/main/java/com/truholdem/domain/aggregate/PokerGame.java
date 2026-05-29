@@ -6,6 +6,7 @@ import com.truholdem.domain.exception.InvalidActionException;
 import com.truholdem.domain.exception.PlayerNotFoundException;
 import com.truholdem.domain.value.BettingRound;
 import com.truholdem.domain.value.Chips;
+import com.truholdem.domain.value.HandRanker;
 import com.truholdem.domain.value.Pot;
 import com.truholdem.model.*;
 
@@ -60,6 +61,11 @@ public class PokerGame {
 
     
     private final List<Integer> sidePotAmounts = new ArrayList<>();
+
+    
+    private String winnerName;
+    private String winningHandDescription;
+    private final List<UUID> winnerIds = new ArrayList<>();
 
     
     private Instant handStartTime;
@@ -159,6 +165,9 @@ public class PokerGame {
         minRaise = bigBlindAmount;
         actionsThisRound = 0;
         lastAggressorId = null;
+        winnerName = null;
+        winningHandDescription = null;
+        winnerIds.clear();
 
         
         for (Player player : players) {
@@ -419,6 +428,18 @@ public class PokerGame {
         return dealerPosition;
     }
 
+    public String getWinnerName() {
+        return winnerName;
+    }
+
+    public String getWinningHandDescription() {
+        return winningHandDescription;
+    }
+
+    public List<UUID> getWinnerIds() {
+        return Collections.unmodifiableList(winnerIds);
+    }
+
     public List<Card> getCommunityCards() {
         return Collections.unmodifiableList(communityCards);
     }
@@ -666,40 +687,193 @@ public class PokerGame {
     }
 
     private void determineWinner() {
-        List<Player> eligiblePlayers = getActivePlayers();
-        
-        if (eligiblePlayers.isEmpty()) {
+        List<Player> playersInHand = getPlayersStillInHand();
+
+        if (playersInHand.isEmpty()) {
             throw GameStateException.noActivePlayers(id);
         }
 
-        
-        
-        Player winner = eligiblePlayers.get(0);
-        awardPot(winner, "Winner (showdown)");
-
-        completeHand(true);
+        List<HandCompleted.PotResult> potResults = distributePots(playersInHand);
+        completeHand(true, potResults);
     }
 
     private void awardPotToLastPlayer(Player winner) {
-        awardPot(winner, null);
-        completeHand(false);
-    }
-
-    private void awardPot(Player winner, String handDescription) {
         int amount = potAmount;
         winner.addWinnings(amount);
+
+        winnerName = winner.getName();
+        winningHandDescription = null;
+        winnerIds.clear();
+        winnerIds.add(winner.getId());
 
         raiseEvent(new PotAwarded(
                 id, winner.getId(), winner.getName(),
                 Chips.of(amount),
-                handDescription,
+                null,
                 Pot.PotType.MAIN
         ));
 
         potAmount = 0;
+
+        List<HandCompleted.PotResult> potResults = List.of(
+                new HandCompleted.PotResult(winner.getId(), winner.getName(), Chips.of(amount), null, false));
+        completeHand(false, potResults);
     }
 
-    private void completeHand(boolean wentToShowdown) {
+    
+    private List<HandCompleted.PotResult> distributePots(List<Player> playersInHand) {
+        List<PotShare> pots = calculateSidePots(playersInHand);
+        List<HandCompleted.PotResult> results = new ArrayList<>();
+
+        List<UUID> allWinnerIds = new ArrayList<>();
+        int bestAmountWon = -1;
+        String topWinnerName = null;
+        String topHandDesc = null;
+
+        for (PotShare pot : pots) {
+            List<Player> eligible = playersInHand.stream()
+                    .filter(p -> pot.eligiblePlayerIds().contains(p.getId()))
+                    .collect(Collectors.toList());
+            if (eligible.isEmpty()) {
+                continue;
+            }
+
+            Map<Player, HandRanking> rankings = new HashMap<>();
+            for (Player p : eligible) {
+                HandRanking ranking = HandRanker.evaluate(p.getHand(), communityCards);
+                if (ranking != null) {
+                    rankings.put(p, ranking);
+                }
+            }
+
+            List<Player> potWinners = findBestHands(rankings);
+            if (potWinners.isEmpty()) {
+                continue;
+            }
+
+            int winAmount = pot.amount() / potWinners.size();
+            int remainder = pot.amount() % potWinners.size();
+            boolean wasSplit = potWinners.size() > 1;
+
+            for (int i = 0; i < potWinners.size(); i++) {
+                Player winner = potWinners.get(i);
+                int amount = winAmount + (i == 0 ? remainder : 0);
+                winner.addWinnings(amount);
+
+                HandRanking ranking = rankings.get(winner);
+                String description = ranking != null ? ranking.getDescription() : "Winner (showdown)";
+
+                results.add(new HandCompleted.PotResult(
+                        winner.getId(), winner.getName(), Chips.of(amount), description, pot.isSide()));
+
+                raiseEvent(new PotAwarded(
+                        id, winner.getId(), winner.getName(), Chips.of(amount),
+                        description,
+                        pot.isSide() ? Pot.PotType.SIDE : Pot.PotType.MAIN,
+                        wasSplit, potWinners.size()));
+
+                if (!allWinnerIds.contains(winner.getId())) {
+                    allWinnerIds.add(winner.getId());
+                }
+                if (amount > bestAmountWon) {
+                    bestAmountWon = amount;
+                    topWinnerName = winner.getName();
+                    topHandDesc = description;
+                }
+            }
+        }
+
+        winnerName = topWinnerName;
+        winningHandDescription = topHandDesc;
+        winnerIds.clear();
+        winnerIds.addAll(allWinnerIds);
+        potAmount = 0;
+
+        return results;
+    }
+
+    
+    private List<PotShare> calculateSidePots(List<Player> playersInHand) {
+        List<Integer> allInLevels = playersInHand.stream()
+                .filter(Player::isAllIn)
+                .map(Player::getTotalBetInRound)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+
+        List<PotShare> pots = new ArrayList<>();
+
+        if (allInLevels.isEmpty()) {
+            List<UUID> eligibleIds = playersInHand.stream()
+                    .map(Player::getId)
+                    .collect(Collectors.toList());
+            pots.add(new PotShare(potAmount, eligibleIds, false));
+            return pots;
+        }
+
+        int previousLevel = 0;
+        for (int level : allInLevels) {
+            int amount = 0;
+            List<UUID> eligibleIds = new ArrayList<>();
+            for (Player p : playersInHand) {
+                int contribution = Math.min(p.getTotalBetInRound(), level) - previousLevel;
+                if (contribution > 0) {
+                    amount += contribution;
+                }
+                if (p.getTotalBetInRound() >= level) {
+                    eligibleIds.add(p.getId());
+                }
+            }
+            if (amount > 0) {
+                pots.add(new PotShare(amount, eligibleIds, !pots.isEmpty()));
+            }
+            previousLevel = level;
+        }
+
+        int maxAllIn = allInLevels.get(allInLevels.size() - 1);
+        int topPotAmount = 0;
+        List<UUID> topPotEligible = new ArrayList<>();
+        for (Player p : playersInHand) {
+            int extraContribution = p.getTotalBetInRound() - maxAllIn;
+            if (extraContribution > 0) {
+                topPotAmount += extraContribution;
+                topPotEligible.add(p.getId());
+            } else if (p.getTotalBetInRound() >= maxAllIn) {
+                topPotEligible.add(p.getId());
+            }
+        }
+        if (topPotAmount > 0 && !topPotEligible.isEmpty()) {
+            pots.add(new PotShare(topPotAmount, topPotEligible, !pots.isEmpty()));
+        }
+
+        return pots;
+    }
+
+    private List<Player> findBestHands(Map<Player, HandRanking> rankings) {
+        if (rankings.isEmpty()) {
+            return List.of();
+        }
+
+        HandRanking bestRanking = rankings.values().stream()
+                .max(Comparator.naturalOrder())
+                .orElse(null);
+        if (bestRanking == null) {
+            return List.of();
+        }
+
+        return rankings.entrySet().stream()
+                .filter(e -> e.getValue().compareTo(bestRanking) == 0)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    private List<Player> getPlayersStillInHand() {
+        return players.stream()
+                .filter(p -> !p.isFolded())
+                .collect(Collectors.toList());
+    }
+
+    private void completeHand(boolean wentToShowdown, List<HandCompleted.PotResult> potResults) {
         Duration duration = handStartTime != null 
                 ? Duration.between(handStartTime, Instant.now())
                 : Duration.ZERO;
@@ -713,7 +887,7 @@ public class PokerGame {
 
         raiseEvent(new HandCompleted(
                 id, handNumber,
-                List.of(), 
+                potResults,
                 playerChipsAfter,
                 duration,
                 actionsThisRound,
@@ -727,6 +901,10 @@ public class PokerGame {
         if (getPlayersWithChips().size() < MIN_PLAYERS) {
             finished = true;
         }
+    }
+
+    
+    private record PotShare(int amount, List<UUID> eligiblePlayerIds, boolean isSide) {
     }
 
     private void checkForEliminatedPlayers() {
