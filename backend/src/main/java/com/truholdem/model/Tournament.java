@@ -157,8 +157,6 @@ public class Tournament {
             case PYRAMID -> {
                 this.maxPlayers = 10_000;
                 this.minPlayers = 2;
-                this.seatsPerTable = 10;
-                this.handsPerRound = 3;
                 this.payoutStructure = List.of(100);
             }
             default -> {
