@@ -1,6 +1,7 @@
 package com.truholdem.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.truholdem.config.OAuth2Config;
 import com.truholdem.config.TestSecurityConfig;
 import com.truholdem.dto.*;
 import com.truholdem.exception.InvalidCredentialsException;
@@ -39,7 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("AuthController Integration Tests")
 class AuthControllerIT {
 
-    private static final String BASE_URL = "/api/auth";
+    // The controller is mapped at "/auth"; the production "/api" context-path is not
+    // applied by MockMvc in a @WebMvcTest slice, so requests target "/auth" directly.
+    private static final String BASE_URL = "/auth";
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,6 +52,9 @@ class AuthControllerIT {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private OAuth2Config oAuth2Config;
 
     private JwtResponseDto jwtResponse;
     private MessageResponseDto successMessage;

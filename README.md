@@ -405,6 +405,115 @@ docker-compose up -d
 
 ---
 
+## 🔍 Code Review Findings (May 2026)
+
+A full read-only review of the backend (Spring Boot) and frontend (Angular) surfaced the
+following actionable items, ordered by impact. File references use `path:line`.
+
+### Critical — security & game integrity
+
+| Area | Finding | Location |
+|------|---------|----------|
+| Card leakage | Full `deck` and every player's hole cards are serialized in REST/WebSocket payloads (raw `model.Game`, no `@JsonIgnore`/DTO). | `model/Game.java:79-82`, `model/Player.java:26-29`, `GameNotificationService.java:33-44` |
+| Auth bypass | `/poker/**` is `permitAll`; `LegacyPokerController` performs game actions with no auth/ownership check. | `config/SecurityConfig.java:85-86`, `controller/LegacyPokerController.java:60-68` |
+| Weak JWT default | `app.jwt.secret` falls back to a hardcoded value long enough to pass validation, so prod can boot with a public secret. | `application.properties:49` |
+| Error handling | Prod `GlobalExceptionHandler` lacks auth handlers (auth errors → 500); a duplicate `@RestControllerAdvice` with the same FQCN lives under `src/test`. | `exception/GlobalExceptionHandler.java`, `test/.../controller/GlobalExceptionHandler.java` |
+| WebSocket broken | SockJS/STOMP used as globals but not bundled (no deps in `package.json`, no script tags). | `services/websocket.service.ts:188-189`, `package.json` |
+
+### High — architecture & consistency
+
+| Area | Finding | Location |
+|------|---------|----------|
+| Dual game models | Rich `domain.aggregate.PokerGame` is never used on the live path; all logic lives in `PokerGameService` over the anemic `model.Game`. | `domain/aggregate/PokerGame.java`, `service/PokerGameService.java` |
+| Dead events | `HandCompleted` is never published live; `StatisticsEventListener` is an unreachable stub. | `service/PokerGameService.java`, `application/listener/StatisticsEventListener.java` |
+| Schedulers | Turn-timeout / hand-lifecycle / blind-level schedulers keep `ScheduledFuture` in per-JVM maps — not cluster-safe; tournament resume can leak timers. | `service/GameTurnTimeoutService.java`, `service/GameHandLifecycleService.java`, `service/TournamentStartService.java` |
+| Optimistic locking | `@Version` exists but no conflict handling; hot-state + async persist can silently lose updates. | `model/Game.java:49-51`, `service/AsyncGamePersistService.java` |
+| CORS | Origins configured in three contradictory places (hardcoded `SecurityConfig`, `app.cors.*`, WebMvc `CorsConfiguration`). | `config/SecurityConfig.java:147-156`, `application.properties:97`, `config/CorsConfiguration.java` |
+| Config conflicts | Duplicate keys `app.game.max-players`(6) vs `app.game.maxPlayers`(8); `validatePlayerCount` ignores config (hardcoded 2–10). | `application.properties:106-122`, `service/PokerGameService.java:385-388` |
+| Frontend timers/polling | `TournamentStore.startPollingFallback` stacks RxJS timers; turn-timer + bot orchestration duplicated across both table components. | `store/tournament.store.ts:567-574`, `game-table.component.ts:245-258`, `tournament-table.component.ts:876-889` |
+| Fragile global CSS | `styles.scss` targets build-generated `[_ngcontent-ng-cXXXX]` hashes with `!important`; rules silently break on each build. | `styles.scss:40-49` |
+
+### Medium — cleanup
+
+- Controllers return JPA entities instead of DTOs (couples API to persistence, worsens card leakage).
+- `@Cacheable getGame` caches full mutable state (incl. deck) for 5 minutes.
+- Dead code: `GameUpdateType.NEW_HAND/GAME_ENDED/PLAYER_JOINED/PLAYER_LEFT`, `broadcastPhaseChange`/`broadcastGameEnded`, unused `RedisGameEventBroadcaster` on the live path.
+- `model/game.ts` `handLifecycleState` is defined but unused; "finished" state duplicated as `isFinished || phase === 'SHOWDOWN'`.
+- Dev (`ddl-auto=update`, Liquibase off) vs prod (`validate`, Liquibase on) schema drift risk.
+- `console.log` inside hot store selectors; legacy `PokerService`/`GameStateService` parallel to `GameStore`.
+
+### Suggested fix order
+
+1. Stop card/deck leakage (player-scoped DTOs / `@JsonView`).
+2. Lock down or remove the unauthenticated legacy game API; fail startup without `JWT_SECRET` in prod.
+3. Merge auth handlers into the prod exception handler; delete the test-side duplicate.
+4. Bundle SockJS/STOMP so WebSocket works at runtime.
+5. Decide on a single game model and remove the dead DDD/event path.
+6. Frontend: dedupe turn-timer/bot logic, fix polling stacking, move `_ngcontent` CSS into component styles.
+
+---
+
+## 🧭 Poker Engine Migration Plan (Production DDD)
+
+The current engine has two parallel models: a rich `domain.aggregate.PokerGame` (added first,
+never wired to live traffic) and an anemic `model.Game` driven by a large `PokerGameService`.
+For a real high-load product the target is a genuine domain core with event sourcing and CQRS,
+introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
+Each risky step is guarded by a feature flag for fast rollback.
+
+### Phase 0 — Safety net (current)
+- Golden black-box scenario tests on the existing `PokerGameService`: all-in, side pot, short
+  all-in, fold-to-showdown, timeout, next-hand transition, showdown order, dead button, missed blinds.
+- Snapshot tests for REST/WS JSON contracts so the frontend can't silently break.
+- Remove the duplicate exception handler (`exception.GlobalExceptionHandler` vs the test-side copy)
+  by merging auth handlers into the production advice.
+- **Exit:** a stable regression suite that passes on the current code.
+- **TODO (deferred, pre-existing):** three full-context `@SpringBootTest` classes
+  (`ApiVersionConfigTest`, `GameControllerIntegrationTest`, `FullGameIntegrationTest`) fail to load
+  their context because the datasource resolves to the PostgreSQL URL while the H2 driver is active
+  (they are written for a Testcontainers-managed Postgres that is not wired up). This is unrelated to
+  the engine migration and pre-dates Phase 0 (verified on a clean baseline); fix the Testcontainers
+  wiring so `mvnw verify` is fully green.
+
+### Phase 1 — Clean domain core behind a facade
+- Flesh out `domain.aggregate.PokerGame` with commands and protected invariants; `PokerGameService`
+  becomes a thin orchestration facade. `model.Game` is demoted to a JPA snapshot (aggregate ⇄ entity mapping).
+- Move the golden scenarios down to fast, Spring-free unit tests on the aggregate.
+- **Exit:** hand logic is testable in isolation; `PokerGameService` shrinks to orchestration.
+
+### Phase 2 — Commands, idempotency, single-writer per table
+- Introduce `GameCommand` with a `commandId`; idempotent handling kills double-clicks / duplicate WS.
+- Serialize processing per `tableId` (actor / single-thread owner); timers post commands to that queue.
+- **Exit:** no races on a single node; concurrent-action load test on one table passes.
+
+### Phase 3 — Domain events & read projections (CQRS)
+- Aggregate emits `HandStarted`, `PlayerActed`, `PotAwarded`, `HandCompleted`; side effects
+  (statistics, hand history, notifications) move to listeners.
+- Player / spectator / history read-models are projections — REST/WS return sanitized views
+  (no deck, no opponents' cards), closing the card-leakage and full-state cache issues.
+- **Exit:** reads use sanitized projections; statistics flow through events.
+
+### Phase 4 — Event log / snapshots & audit
+- Append-only event log per hand in Postgres (state = snapshot + event tail).
+- Reconnect/resume and hand-history/replay are rebuilt from the log.
+- **Exit:** any hand can be replayed from events; reconnect doesn't break the session.
+
+### Phase 5 — Clustering & scale
+- Per-table owner node (consistent hashing / Redis lock / leader election); only the owner
+  schedules timers/blind increases. Hot state in memory (+Redis for failover), cold state async to Postgres.
+- **Exit:** horizontal scaling; a node failure doesn't lose tables or timers.
+
+### Phase 6 — Cleanup & enforcement
+- Delete dead code (unused `GameUpdateType` values, unused broadcast methods, parallel notification
+  stacks, legacy frontend services); add ArchUnit rules forbidding controllers returning `model.*`
+  and orphaned domain classes.
+
+**Value order if constrained:** Phases 0 → 1 → 3 deliver ~80% of the benefit (correctness,
+testability, no card leakage, real events). Phases 2, 4, 5 add the high-load / fault-tolerance
+properties and can be staged as traffic grows.
+
+---
+
 ## 🛣 Roadmap
 
 ### Completed
