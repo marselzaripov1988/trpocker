@@ -161,7 +161,7 @@ class ArchitectureTest {
                     .whereLayer("Model").mayOnlyBeAccessedByLayers("Controller", "Service", "Repository", "DTO", "Config", "Security", "Handler", "Mapper", "Domain", "Application", "WebSocket")
                     .whereLayer("DTO").mayOnlyBeAccessedByLayers("Controller", "Service", "Config", "Handler", "Mapper", "WebSocket")
                     .whereLayer("Exception").mayOnlyBeAccessedByLayers("Controller", "Service", "Config", "Handler", "Domain")
-                    .whereLayer("Domain").mayOnlyBeAccessedByLayers("Controller", "Service", "Config", "Handler", "Application", "Exception")
+                    .whereLayer("Domain").mayOnlyBeAccessedByLayers("Controller", "Service", "Config", "Handler", "Application", "Exception", "Mapper")
                     .whereLayer("Application").mayOnlyBeAccessedByLayers("Controller", "Config")
                     .whereLayer("Mapper").mayOnlyBeAccessedByLayers("Service", "Controller", "Config")
                     .whereLayer("WebSocket").mayOnlyBeAccessedByLayers("Controller", "Config", "Listener", "Application")

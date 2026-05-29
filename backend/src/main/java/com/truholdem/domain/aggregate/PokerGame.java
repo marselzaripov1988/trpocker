@@ -84,6 +84,10 @@ public class PokerGame {
     
 
     private PokerGame(UUID id, Chips smallBlind, Chips bigBlind) {
+        this(id, smallBlind, bigBlind, Instant.now());
+    }
+
+    private PokerGame(UUID id, Chips smallBlind, Chips bigBlind, Instant createdAt) {
         this.id = id;
         this.smallBlindAmount = smallBlind.amount();
         this.bigBlindAmount = bigBlind.amount();
@@ -99,8 +103,98 @@ public class PokerGame {
         this.buttonSeatPosition = 0;
         this.deadButton = false;
         this.potAmount = 0;
-        this.createdAt = Instant.now();
+        this.createdAt = createdAt;
         this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Rebuilds an in-memory aggregate from a persisted {@link com.truholdem.model.Game}
+     * snapshot. Player instances are shared by reference so mutations stay visible on
+     * the entity the service will save.
+     */
+    public static PokerGame reconstitute(PersistedGameState state) {
+        Objects.requireNonNull(state, "Persisted game state cannot be null");
+        Objects.requireNonNull(state.id(), "Game id cannot be null");
+        Objects.requireNonNull(state.players(), "Players cannot be null");
+
+        Instant createdAt = state.createdAt() != null ? state.createdAt() : Instant.now();
+        PokerGame game = new PokerGame(
+                state.id(),
+                Chips.of(state.smallBlindAmount()),
+                Chips.of(state.bigBlindAmount()),
+                createdAt);
+
+        game.version = state.version();
+        game.updatedAt = state.updatedAt() != null ? state.updatedAt() : Instant.now();
+        game.phase = state.phase() != null ? state.phase() : GamePhase.PRE_FLOP;
+        game.dealerPosition = state.dealerPosition();
+        game.currentPlayerIndex = state.currentPlayerIndex();
+        game.handNumber = state.handNumber();
+        game.finished = state.finished();
+        game.currentBet = state.currentBet();
+        game.minRaise = state.minRaise();
+        game.lastRaiseAmount = state.lastRaiseAmount();
+        game.actionsThisRound = state.actionsThisRound();
+        game.lastAggressorId = state.lastAggressorId();
+        game.buttonSeatPosition = state.buttonSeatPosition();
+        game.deadButton = state.deadButton();
+        game.missedBlinds.clear();
+        if (state.missedBlinds() != null) {
+            game.missedBlinds.putAll(state.missedBlinds());
+        }
+        game.potAmount = state.potAmount();
+        game.winnerName = state.winnerName();
+        game.winningHandDescription = state.winningHandDescription();
+        game.winnerIds.clear();
+        if (state.winnerIds() != null) {
+            game.winnerIds.addAll(state.winnerIds());
+        }
+
+        game.players.clear();
+        game.players.addAll(state.players());
+
+        game.communityCards.clear();
+        if (state.communityCards() != null) {
+            game.communityCards.addAll(state.communityCards());
+        }
+
+        game.deck.clear();
+        if (state.deck() != null) {
+            game.deck.addAll(state.deck());
+        }
+
+        game.domainEvents.clear();
+        return game;
+    }
+
+    public PersistedGameState captureState() {
+        return new PersistedGameState(
+                id,
+                version,
+                createdAt,
+                updatedAt,
+                smallBlindAmount,
+                bigBlindAmount,
+                phase,
+                dealerPosition,
+                currentPlayerIndex,
+                handNumber,
+                finished,
+                currentBet,
+                minRaise,
+                lastRaiseAmount,
+                actionsThisRound,
+                lastAggressorId,
+                buttonSeatPosition,
+                deadButton,
+                Map.copyOf(missedBlinds),
+                potAmount,
+                List.copyOf(players),
+                List.copyOf(communityCards),
+                List.copyOf(deck),
+                winnerName,
+                winningHandDescription,
+                List.copyOf(winnerIds));
     }
 
     
@@ -440,12 +534,24 @@ public class PokerGame {
         return Chips.of(bigBlindAmount);
     }
 
+    public int getMainPotAmount() {
+        return potAmount;
+    }
+
     public Chips getPotSize() {
         int total = potAmount;
         for (int sidePot : sidePotAmounts) {
             total += sidePot;
         }
         return Chips.of(total);
+    }
+
+    public int getCurrentPlayerIndex() {
+        return currentPlayerIndex;
+    }
+
+    public List<Card> getDeck() {
+        return Collections.unmodifiableList(deck);
     }
 
     public Chips getCurrentBet() {
