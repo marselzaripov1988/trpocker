@@ -79,6 +79,7 @@ public class Game {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "game_deck", joinColumns = @JoinColumn(name = "game_id"))
     @OrderColumn
+    @JsonIgnore
     private List<Card> deck = new ArrayList<>();
 
     private int currentPot;

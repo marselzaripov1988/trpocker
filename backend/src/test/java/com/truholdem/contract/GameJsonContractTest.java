@@ -133,11 +133,18 @@ class GameJsonContractTest {
         }
 
         @Test
-        @DisplayName("Known card-leakage contract (deck + hands) — pinned until Phase 3 removes it")
-        void documentsCurrentCardExposure() throws Exception {
+        @DisplayName("Deck is never serialized (no future-card leakage)")
+        void deckIsNotLeaked() throws Exception {
             JsonNode json = mapper.valueToTree(sampleGame());
 
-            assertTrue(json.has("deck"), "deck currently leaks; Phase 3 must remove and update this test");
+            assertFalse(json.has("deck"), "deck must not leak the remaining card order");
+        }
+
+        @Test
+        @DisplayName("Hands still serialize — pending viewer-aware masking of opponents' cards")
+        void documentsRemainingHandExposure() throws Exception {
+            JsonNode json = mapper.valueToTree(sampleGame());
+
             assertTrue(json.get("players").get(0).get("hand").isArray());
             assertEquals(2, json.get("players").get(0).get("hand").size());
         }

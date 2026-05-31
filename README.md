@@ -461,7 +461,12 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-### Phase 0 — Safety net (current)
+> **Status (current):** Phases 0–1 are done; Phase 3 is partially in place (domain
+> events + listeners exist). Next gap is Phase 2 (commandId/idempotency, single-writer).
+> Card leakage is partly closed — the remaining deck is no longer serialized; per-viewer
+> hole-card masking (opponents' cards before showdown) still needs a viewer-aware projection.
+
+### Phase 0 — Safety net ✅ done
 - Golden black-box scenario tests on the existing `PokerGameService`: all-in, side pot, short
   all-in, fold-to-showdown, timeout, next-hand transition, showdown order, dead button, missed blinds.
 - Snapshot tests for REST/WS JSON contracts so the frontend can't silently break.
@@ -475,22 +480,23 @@ Each risky step is guarded by a feature flag for fast rollback.
   the engine migration and pre-dates Phase 0 (verified on a clean baseline); fix the Testcontainers
   wiring so `mvnw verify` is fully green.
 
-### Phase 1 — Clean domain core behind a facade
+### Phase 1 — Clean domain core behind a facade ✅ done
 - Flesh out `domain.aggregate.PokerGame` with commands and protected invariants; `PokerGameService`
   becomes a thin orchestration facade. `model.Game` is demoted to a JPA snapshot (aggregate ⇄ entity mapping).
 - Move the golden scenarios down to fast, Spring-free unit tests on the aggregate.
 - **Exit:** hand logic is testable in isolation; `PokerGameService` shrinks to orchestration.
 
-### Phase 2 — Commands, idempotency, single-writer per table
+### Phase 2 — Commands, idempotency, single-writer per table ❌ not started
 - Introduce `GameCommand` with a `commandId`; idempotent handling kills double-clicks / duplicate WS.
 - Serialize processing per `tableId` (actor / single-thread owner); timers post commands to that queue.
 - **Exit:** no races on a single node; concurrent-action load test on one table passes.
 
-### Phase 3 — Domain events & read projections (CQRS)
-- Aggregate emits `HandStarted`, `PlayerActed`, `PotAwarded`, `HandCompleted`; side effects
-  (statistics, hand history, notifications) move to listeners.
-- Player / spectator / history read-models are projections — REST/WS return sanitized views
-  (no deck, no opponents' cards), closing the card-leakage and full-state cache issues.
+### Phase 3 — Domain events & read projections (CQRS) 🚧 partial
+- ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`;
+  side effects (statistics, websocket) moved to `application/listener/*EventListener`.
+- 🚧 Player / spectator / history read-models as projections — REST/WS should return sanitized
+  views (no deck, no opponents' cards). The remaining **deck is no longer serialized**
+  (`@JsonIgnore`); **opponents' hole cards** before showdown still need a viewer-aware projection.
 - **Exit:** reads use sanitized projections; statistics flow through events.
 
 ### Phase 4 — Event log / snapshots & audit
