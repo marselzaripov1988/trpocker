@@ -11,7 +11,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service for authorizing game-related operations.
@@ -161,6 +163,31 @@ public class GameAuthorizationService {
         // For now, allow any authenticated user to view any game
         // In a production system, you might restrict this to participants only
         logger.debug("User {} viewing game {}", currentUser.getUsername(), gameId);
+    }
+
+    /**
+     * Resolves which players' hole cards the current viewer is allowed to see.
+     *
+     * <p>An authenticated user sees the seats they own. When there is no
+     * authenticated user (e.g. the single-player legacy flow), the human
+     * (non-bot) seats are revealed so the local player can see their own cards
+     * while bots stay hidden until showdown.
+     *
+     * @param game the game being viewed
+     * @return the set of player ids whose hole cards may be revealed to the viewer
+     */
+    public Set<UUID> resolveVisiblePlayerIds(Game game) {
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            return game.getPlayers().stream()
+                    .filter(p -> !p.isBot())
+                    .map(Player::getId)
+                    .collect(Collectors.toSet());
+        }
+        return game.getPlayers().stream()
+                .filter(p -> p.isOwnedBy(currentUser.getId()))
+                .map(Player::getId)
+                .collect(Collectors.toSet());
     }
 
     /**

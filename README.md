@@ -463,8 +463,10 @@ Each risky step is guarded by a feature flag for fast rollback.
 
 > **Status (current):** Phases 0–1 are done; Phase 3 is partially in place (domain
 > events + listeners exist). Next gap is Phase 2 (commandId/idempotency, single-writer).
-> Card leakage is partly closed — the remaining deck is no longer serialized; per-viewer
-> hole-card masking (opponents' cards before showdown) still needs a viewer-aware projection.
+> Card leakage is closed: the deck is never serialized, and REST/WS responses run through
+> a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
+> (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
+> the frontend preserves the local player's own hand across masked updates.
 
 ### Phase 0 — Safety net ✅ done
 - Golden black-box scenario tests on the existing `PokerGameService`: all-in, side pot, short
@@ -494,9 +496,11 @@ Each risky step is guarded by a feature flag for fast rollback.
 ### Phase 3 — Domain events & read projections (CQRS) 🚧 partial
 - ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`;
   side effects (statistics, websocket) moved to `application/listener/*EventListener`.
-- 🚧 Player / spectator / history read-models as projections — REST/WS should return sanitized
-  views (no deck, no opponents' cards). The remaining **deck is no longer serialized**
-  (`@JsonIgnore`); **opponents' hole cards** before showdown still need a viewer-aware projection.
+- ✅ Sanitized read projection: REST/WS responses go through a viewer-aware `HoleCardSanitizer`.
+  The **deck is never serialized** (`@JsonIgnore`); **opponents' hole cards** are masked until
+  showdown (own seats revealed, folded hands stay hidden). WS broadcasts mask all hands and the
+  Angular store restores the local player's own hand across masked updates.
+- 🚧 Dedicated spectator/history read-models (separate from the live `Game` shape) still pending.
 - **Exit:** reads use sanitized projections; statistics flow through events.
 
 ### Phase 4 — Event log / snapshots & audit

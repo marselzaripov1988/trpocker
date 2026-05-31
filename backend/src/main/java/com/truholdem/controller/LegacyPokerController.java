@@ -1,7 +1,10 @@
 package com.truholdem.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.truholdem.dto.ShowdownResult;
 import com.truholdem.model.*;
+import com.truholdem.service.GameAuthorizationService;
+import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.PokerGameService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,17 +24,28 @@ public class LegacyPokerController {
     private static final Logger logger = LoggerFactory.getLogger(LegacyPokerController.class);
 
     private final PokerGameService pokerGameService;
+    private final GameAuthorizationService authorizationService;
+    private final HoleCardSanitizer holeCardSanitizer;
 
     
     private UUID currentGameId;
 
-    public LegacyPokerController(PokerGameService pokerGameService) {
+    public LegacyPokerController(
+            PokerGameService pokerGameService,
+            GameAuthorizationService authorizationService,
+            HoleCardSanitizer holeCardSanitizer) {
         this.pokerGameService = pokerGameService;
+        this.authorizationService = authorizationService;
+        this.holeCardSanitizer = holeCardSanitizer;
+    }
+
+    private JsonNode sanitized(Game game) {
+        return holeCardSanitizer.sanitize(game, authorizationService.resolveVisiblePlayerIds(game));
     }
 
     @PostMapping("/start")
     @Operation(summary = "Start a new game", description = "Creates a new poker game with the provided players")
-    public ResponseEntity<Game> startGame(@RequestBody List<PlayerInfo> playersInfo) {
+    public ResponseEntity<JsonNode> startGame(@RequestBody List<PlayerInfo> playersInfo) {
         logger.info("Starting new game with {} players", playersInfo.size());
 
         
@@ -42,18 +56,18 @@ public class LegacyPokerController {
         Game game = pokerGameService.createNewGame(playersInfo);
         currentGameId = game.getId();
 
-        return ResponseEntity.ok(game);
+        return ResponseEntity.ok(sanitized(game));
     }
 
     @GetMapping("/status")
     @Operation(summary = "Get current game status", description = "Returns the current game state")
-    public ResponseEntity<Game> getGameStatus() {
+    public ResponseEntity<JsonNode> getGameStatus() {
         if (currentGameId == null) {
             return ResponseEntity.notFound().build();
         }
 
         return pokerGameService.getGame(currentGameId)
-                .map(ResponseEntity::ok)
+                .map(game -> ResponseEntity.ok(sanitized(game)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -142,14 +156,14 @@ public class LegacyPokerController {
 
     @PostMapping("/bot-action/{botId}")
     @Operation(summary = "Execute bot action", description = "Triggers the AI to make a decision")
-    public ResponseEntity<Game> botAction(@PathVariable UUID botId) {
+    public ResponseEntity<JsonNode> botAction(@PathVariable UUID botId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().build();
         }
 
         try {
             Game game = pokerGameService.executeBotAction(currentGameId, botId);
-            return ResponseEntity.ok(game);
+            return ResponseEntity.ok(sanitized(game));
         } catch (Exception e) {
             logger.error("Error during bot action", e);
             return ResponseEntity.badRequest().build();
@@ -191,14 +205,14 @@ public class LegacyPokerController {
 
     @PostMapping("/new-match")
     @Operation(summary = "Start new match", description = "Starts a new hand with existing players")
-    public ResponseEntity<Game> newMatch() {
+    public ResponseEntity<JsonNode> newMatch() {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().build();
         }
 
         try {
             Game game = pokerGameService.startNewHand(currentGameId);
-            return ResponseEntity.ok(game);
+            return ResponseEntity.ok(sanitized(game));
         } catch (Exception e) {
             logger.error("Error starting new match", e);
             return ResponseEntity.badRequest().build();

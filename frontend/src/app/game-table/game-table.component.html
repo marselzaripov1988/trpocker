@@ -59,7 +59,7 @@
 				data-cy="player-card"
 				role="listitem">
 				<div class="card-inner"
-					[class.is-flipped]="!player.folded && (phase() === 'SHOWDOWN' || !(player.name && player.name.startsWith('Bot')))">
+					[class.is-flipped]="shouldRevealCards(player)">
 					<div class="card-front">
 						<img [src]="getCardImage(card)" [alt]="card.value + ' of ' + card.suit" class="card-image" />
 					</div>

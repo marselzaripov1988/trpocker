@@ -141,8 +141,10 @@ class GameJsonContractTest {
         }
 
         @Test
-        @DisplayName("Hands still serialize — pending viewer-aware masking of opponents' cards")
-        void documentsRemainingHandExposure() throws Exception {
+        @DisplayName("Raw entity keeps hands — wire responses are masked by HoleCardSanitizer at the boundary")
+        void rawEntityStillCarriesHands() throws Exception {
+            // The Game entity itself is not sanitized; controllers/broadcasts apply
+            // HoleCardSanitizer (see HoleCardSanitizerTest) before sending to clients.
             JsonNode json = mapper.valueToTree(sampleGame());
 
             assertTrue(json.get("players").get(0).get("hand").isArray());

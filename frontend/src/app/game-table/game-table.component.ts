@@ -450,6 +450,18 @@ export class GameTableComponent implements OnInit, OnDestroy {
   }
 
   
+  shouldRevealCards(player: Player): boolean {
+    if (player.folded) {
+      return false;
+    }
+    if (this.phase() === 'SHOWDOWN') {
+      return true;
+    }
+    const own = this.humanPlayer();
+    return !!own && own.id === player.id;
+  }
+
+  
   isPlayerTurn(player: Player): boolean {
     return this.isCurrentPlayer(player);
   }

@@ -17,12 +17,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.ErrorResponse;
 import com.truholdem.dto.PlayerActionRequest;
 import com.truholdem.model.Game;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.GameAuthorizationService;
+import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.PokerGameService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,10 +49,19 @@ public class PokerGameController {
 
     private final PokerGameService pokerGameService;
     private final GameAuthorizationService authorizationService;
+    private final HoleCardSanitizer holeCardSanitizer;
 
-    public PokerGameController(PokerGameService pokerGameService, GameAuthorizationService authorizationService) {
+    public PokerGameController(
+            PokerGameService pokerGameService,
+            GameAuthorizationService authorizationService,
+            HoleCardSanitizer holeCardSanitizer) {
         this.pokerGameService = pokerGameService;
         this.authorizationService = authorizationService;
+        this.holeCardSanitizer = holeCardSanitizer;
+    }
+
+    private JsonNode sanitized(Game game) {
+        return holeCardSanitizer.sanitize(game, authorizationService.resolveVisiblePlayerIds(game));
     }
 
     @PostMapping("/start")
@@ -88,14 +99,14 @@ public class PokerGameController {
             )
         )
     })
-    public ResponseEntity<Game> startGame(
+    public ResponseEntity<JsonNode> startGame(
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
                 description = "List of players to join the game",
                 required = true
             )
             @RequestBody @NotEmpty(message = "Players list cannot be empty") @Valid List<PlayerInfo> playersInfo) {
         Game newGame = pokerGameService.createNewGame(playersInfo);
-        return ResponseEntity.status(HttpStatus.CREATED).body(newGame);
+        return ResponseEntity.status(HttpStatus.CREATED).body(sanitized(newGame));
     }
 
     @GetMapping("/{gameId}")
@@ -115,11 +126,11 @@ public class PokerGameController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
-    public ResponseEntity<Game> getGameStatus(
+    public ResponseEntity<JsonNode> getGameStatus(
             @Parameter(description = "UUID of the game", example = "550e8400-e29b-41d4-a716-446655440000")
             @PathVariable UUID gameId) {
         Optional<Game> game = pokerGameService.getGame(gameId);
-        return game.map(ResponseEntity::ok)
+        return game.map(g -> ResponseEntity.ok(sanitized(g)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -173,7 +184,7 @@ public class PokerGameController {
                     playerId,
                     request.getAction(),
                     request.getAmount());
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(sanitized(updated));
 
         } catch (NoSuchElementException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -231,7 +242,7 @@ public class PokerGameController {
             authorizationService.validateBotAction(gameId, botId);
 
             Game updatedGame = pokerGameService.executeBotAction(gameId, botId);
-            return ResponseEntity.ok(updatedGame);
+            return ResponseEntity.ok(sanitized(updatedGame));
 
         } catch (AccessDeniedException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -283,7 +294,7 @@ public class PokerGameController {
             authorizationService.validateNewHandAction(gameId);
 
             Game game = pokerGameService.startNewHand(gameId);
-            return ResponseEntity.ok(game);
+            return ResponseEntity.ok(sanitized(game));
 
         } catch (AccessDeniedException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)

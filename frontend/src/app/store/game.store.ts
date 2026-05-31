@@ -134,10 +134,36 @@ export class GameStore extends ComponentStore<GameStoreState> {
       .subscribe(update => {
         const current = this.get().game;
         if (update.gameState && current?.id === update.gameState.id) {
-          this.setGame(update.gameState);
-          this.maybeProcessBots(update.gameState);
+          const merged = this.preserveOwnHand(current, update.gameState);
+          this.setGame(merged);
+          this.maybeProcessBots(merged);
         }
       });
+  }
+
+  
+  private preserveOwnHand(current: Game | null, incoming: Game): Game {
+    const incomingPlayers = incoming?.players;
+    const currentPlayers = current?.players;
+    if (!incomingPlayers || !currentPlayers) {
+      return incoming;
+    }
+    const own = incomingPlayers.find(p => !p.isBot && !p.name?.startsWith('Bot'));
+    if (!own) {
+      return incoming;
+    }
+    const masked = !own.hand?.length || own.hand.some(c => !c.suit || !c.value);
+    if (!masked) {
+      return incoming;
+    }
+    const prevHand = currentPlayers.find(p => p.id === own.id)?.hand;
+    if (!prevHand?.length) {
+      return incoming;
+    }
+    return {
+      ...incoming,
+      players: incomingPlayers.map(p => p.id === own.id ? ({ ...p, hand: prevHand } as Player) : p)
+    } as Game;
   }
 
   private maybeProcessBots(game: Game): void {

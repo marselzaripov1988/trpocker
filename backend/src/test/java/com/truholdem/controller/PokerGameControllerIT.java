@@ -5,6 +5,7 @@ import com.truholdem.config.TestSecurityConfig;
 import com.truholdem.dto.PlayerActionRequest;
 import com.truholdem.model.*;
 import com.truholdem.service.GameAuthorizationService;
+import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.PokerGameService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +49,9 @@ class PokerGameControllerIT {
     @MockitoBean
     private GameAuthorizationService authorizationService;
 
+    @MockitoBean
+    private HoleCardSanitizer holeCardSanitizer;
+
     private Game testGame;
     private List<PlayerInfo> validPlayers;
     private UUID gameId;
@@ -67,6 +71,10 @@ class PokerGameControllerIT {
         );
 
         testGame = createTestGame();
+
+        // Passthrough: masking logic is verified separately in HoleCardSanitizerTest.
+        when(holeCardSanitizer.sanitize(any(), any()))
+                .thenAnswer(invocation -> objectMapper.valueToTree(invocation.getArgument(0)));
     }
 
     private Game createTestGame() {

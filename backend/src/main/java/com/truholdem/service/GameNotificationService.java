@@ -1,5 +1,6 @@
 package com.truholdem.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.truholdem.dto.PlayerActionMessageDto;
 import com.truholdem.dto.ShowdownResult;
 import com.truholdem.dto.WebSocketGameUpdateMessage;
@@ -12,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -22,12 +24,23 @@ public class GameNotificationService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final TournamentTableShardService tableShardService;
+    private final HoleCardSanitizer holeCardSanitizer;
 
     public GameNotificationService(
             SimpMessagingTemplate messagingTemplate,
-            TournamentTableShardService tableShardService) {
+            TournamentTableShardService tableShardService,
+            HoleCardSanitizer holeCardSanitizer) {
         this.messagingTemplate = messagingTemplate;
         this.tableShardService = tableShardService;
+        this.holeCardSanitizer = holeCardSanitizer;
+    }
+
+    /**
+     * Broadcasts go to a shared topic, so no viewer can be identified: all hole
+     * cards are masked and only non-folded hands are revealed at showdown.
+     */
+    private JsonNode forBroadcast(Game game) {
+        return holeCardSanitizer.sanitize(game, Collections.emptySet());
     }
 
     public void broadcastGameUpdate(Game game) {
@@ -35,7 +48,7 @@ public class GameNotificationService {
 
         WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
             GameUpdateType.GAME_STATE,
-            game,
+            forBroadcast(game),
             null,
             "Game state updated"
         );
@@ -57,7 +70,7 @@ public class GameNotificationService {
 
         WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
             GameUpdateType.PLAYER_ACTION,
-            game,
+            forBroadcast(game),
             actionMessage,
             player.getName() + " performed " + action
         );
@@ -71,7 +84,7 @@ public class GameNotificationService {
 
         WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
             GameUpdateType.PHASE_CHANGE,
-            game,
+            forBroadcast(game),
             null,
             "Phase changed to " + game.getPhase()
         );
@@ -85,7 +98,7 @@ public class GameNotificationService {
 
         WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
             GameUpdateType.SHOWDOWN,
-            game,
+            forBroadcast(game),
             result,
             result.getMessage()
         );
@@ -99,7 +112,7 @@ public class GameNotificationService {
 
         WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
             GameUpdateType.GAME_ENDED,
-            game,
+            forBroadcast(game),
             Map.of("winner", winnerName),
             "Game ended. Winner: " + winnerName
         );
