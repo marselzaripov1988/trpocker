@@ -15,10 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ClusterFailoverService` scans the set ~twice per lease TTL and, for any table whose lease has expired
   (no current owner), re-acquires it and resumes the stalled turn timer. Finished/missing games are pruned.
 - Gated by `app.cluster.takeover-enabled` (default off, requires `ownership-enabled`); inert otherwise.
+- Takeover resumes whatever timer the dead owner was driving: the in-progress turn timer **and** the
+  between-hands transition. `GameHandLifecycleService.resumePendingTransition` re-schedules a table
+  orphaned in `HAND_COMPLETED`/`RESULT_DELAY` (so a game does not stall forever between hands either);
+  each branch is state-guarded. Prune is keyed on the game being absent from shared state — not on
+  `isFinished()`, which is also true between hands — so an active between-hands table is no longer
+  mistakenly dropped.
 - `MultiNodeClusterIT` adds a kill-node test: node-A is shut down and its lease expired, then node-B takes
-  over the orphaned table and resumes its timer. `ClusterFailoverServiceTest` covers the claim/resume,
-  still-owned-skip, lost-race, and finished-game-prune paths. (v1 resumes the turn timer only; proactive
-  next-hand takeover for a table orphaned between hands remains a follow-up.)
+  over the orphaned table and resumes its timer. `ClusterFailoverServiceTest` covers claim/resume,
+  still-owned-skip, lost-race, and missing-game-prune; `GameHandLifecycleServiceTest` covers
+  `resumePendingTransition` routing per state. (The narrow transient `NEXT_HAND` crash window is not
+  resumed; it remains a documented follow-up.)
 - Doc correction: WebSocket-origin actions were already routed cross-node (the WS handler calls the same
   `playerAct`); the earlier "WS-origin forwarding remaining" note was overly cautious.
 

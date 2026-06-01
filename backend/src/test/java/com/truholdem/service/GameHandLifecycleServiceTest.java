@@ -100,6 +100,36 @@ class GameHandLifecycleServiceTest {
     }
 
     @Test
+    @DisplayName("resumePendingTransition re-schedules a HAND_COMPLETED table (takeover)")
+    void resumeReschedulesHandCompleted() {
+        Game completed = game(UUID.randomUUID(), HandLifecycleState.HAND_COMPLETED);
+
+        service.resumePendingTransition(completed);
+
+        verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("resumePendingTransition re-schedules a RESULT_DELAY table (takeover)")
+    void resumeReschedulesResultDelay() {
+        Game delayed = game(UUID.randomUUID(), HandLifecycleState.RESULT_DELAY);
+
+        service.resumePendingTransition(delayed);
+
+        verify(taskScheduler).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    @Test
+    @DisplayName("resumePendingTransition is a no-op for an in-progress hand (turn timer drives it)")
+    void resumeNoOpForInProgress() {
+        Game active = game(UUID.randomUUID(), HandLifecycleState.IN_PROGRESS);
+
+        service.resumePendingTransition(active);
+
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
+    }
+
+    @Test
     @DisplayName("Should cancel existing transition")
     void shouldCancelExistingTransition() {
         UUID gameId = UUID.randomUUID();

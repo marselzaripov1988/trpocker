@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
+import com.truholdem.service.GameHandLifecycleService;
 import com.truholdem.service.GameTurnTimeoutService;
 import com.truholdem.service.PokerGameService;
 
@@ -25,9 +26,9 @@ import com.truholdem.service.PokerGameService;
  * turn timeout would stall until the timed-out player (or another) happened to act.
  *
  * <p>Gated by {@code app.cluster.takeover-enabled} (requires {@code ownership-enabled}); inert otherwise.
- * Note (v1): only the turn timer is resumed. A table orphaned <em>between hands</em> (NEXT_HAND timer on
- * the dead owner) gets a live owner again but its next-hand transition is not proactively resumed — that
- * remains a documented follow-up.
+ * On takeover both the turn timer (for an in-progress hand) and the between-hands transition (for a table
+ * orphaned in {@code HAND_COMPLETED}/{@code RESULT_DELAY}) are resumed; each is state-guarded so exactly the
+ * applicable one fires.
  */
 @Service
 public class ClusterFailoverService {
@@ -38,16 +39,19 @@ public class ClusterFailoverService {
     private final TableOwnershipService ownership;
     private final PokerGameService pokerGameService;
     private final GameTurnTimeoutService turnTimeoutService;
+    private final GameHandLifecycleService handLifecycleService;
 
     public ClusterFailoverService(
             AppProperties appProperties,
             TableOwnershipService ownership,
             @Lazy PokerGameService pokerGameService,
-            GameTurnTimeoutService turnTimeoutService) {
+            GameTurnTimeoutService turnTimeoutService,
+            GameHandLifecycleService handLifecycleService) {
         this.appProperties = appProperties;
         this.ownership = ownership;
         this.pokerGameService = pokerGameService;
         this.turnTimeoutService = turnTimeoutService;
+        this.handLifecycleService = handLifecycleService;
     }
 
     /** Scan twice per lease so an orphaned table is taken over within roughly one lease TTL of the death. */
@@ -77,14 +81,20 @@ public class ClusterFailoverService {
         }
 
         Game game = pokerGameService.getGame(gameId).orElse(null);
-        if (game == null || game.isFinished()) {
-            ownership.release(gameId); // truly done / gone → prune from the active set + drop the lease
+        if (game == null) {
+            ownership.release(gameId); // game no longer in shared state → prune the active-set entry + lease
             return false;
         }
+        // NB: do NOT prune on game.isFinished() — that flag means "current hand finished", which is also
+        // true between hands. A genuinely-over game is already removed from the active set by the
+        // next-hand path (which releases when there are too few players to continue).
 
-        log.info("Took over orphaned table {} (previous owner gone); resuming turn timer", gameId);
-        // Re-arms the turn timer for the current human turn (no-op for a bot turn / between hands).
+        log.info("Took over orphaned table {} (previous owner gone); resuming timers", gameId);
+        // Both are state-guarded internally, so exactly the applicable one acts:
+        //  - in-progress hand → re-arm the current player's turn timer;
+        //  - between hands (HAND_COMPLETED/RESULT_DELAY) → resume the next-hand transition.
         turnTimeoutService.scheduleForCurrentTurn(game);
+        handLifecycleService.resumePendingTransition(game);
         return true;
     }
 }

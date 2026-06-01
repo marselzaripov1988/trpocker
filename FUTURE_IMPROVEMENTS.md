@@ -38,9 +38,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   actions route, since both call `PokerGameService.playerAct`.
 - **Failover takeover** — ✅ landed: `app.cluster.takeover-enabled` — `ClusterFailoverService` scans the
   `truholdem:cluster:tables` active set and re-acquires + resumes any table whose owner died, instead of
-  recovering only on the next action. Remaining Phase 5 work: proactive **next-hand** takeover for a table
-  orphaned *between hands* (the turn timer is resumed; the NEXT_HAND transition is not yet); partition /
-  split-brain hardening (fencing tokens, behaviour on Redis loss mid-game) + multi-hop retry orchestration.
+  recovering only on the next action. Resumes **both** the in-progress turn timer and the between-hands
+  transition (`HAND_COMPLETED`/`RESULT_DELAY` → next hand, via `GameHandLifecycleService.resumePendingTransition`).
+  Remaining Phase 5 work: recover the narrow transient `NEXT_HAND` crash window (state persisted but
+  `startNewHandInternal` interrupted mid-flight); partition / split-brain hardening (fencing tokens,
+  behaviour on Redis loss mid-game) + multi-hop retry orchestration.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

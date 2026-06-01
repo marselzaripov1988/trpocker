@@ -76,6 +76,28 @@ public class GameHandLifecycleService {
         }
     }
 
+    /**
+     * Resume a pending between-hands transition after this node takes over an orphaned table whose
+     * previous owner died with the timer pending. Each branch re-checks the lifecycle state and only
+     * the owning node proceeds, so it is safe to call unconditionally on takeover.
+     *
+     * <p>No-op for {@code IN_PROGRESS} (the turn timer drives that) and for the transient
+     * {@code NEXT_HAND} state (set synchronously within {@code startNextHandFromLifecycle}; a crash in
+     * that narrow window is not resumed here).
+     */
+    public void resumePendingTransition(Game game) {
+        if (game == null || game.getId() == null || game.getHandLifecycleState() == null) {
+            return;
+        }
+        switch (game.getHandLifecycleState()) {
+            case HAND_COMPLETED -> scheduleAfterHandCompleted(game);
+            case RESULT_DELAY -> scheduleNextHand(game);
+            default -> {
+                // IN_PROGRESS → turn timer; NEXT_HAND → transient, not resumable here
+            }
+        }
+    }
+
     private void transitionToResultDelay(UUID gameId, int handNumber) {
         if (!ownership.isOwner(gameId)) {
             return; // lease moved to another node

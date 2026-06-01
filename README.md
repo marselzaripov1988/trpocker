@@ -474,8 +474,9 @@ Each risky step is guarded by a feature flag for fast rollback.
 > (`app.cluster.ownership-enabled`), **cross-node command routing** (a node that receives an action for a
 > table it doesn't own forwards it over HTTP to the owning node, `app.cluster.routing-enabled`), and
 > **failover takeover** (a surviving node re-acquires a dead owner's table and resumes its stalled timer,
-> `app.cluster.takeover-enabled`) — all verified on a two-node Testcontainers harness. Remaining: proactive
-> next-hand takeover + partition/split-brain hardening (see FUTURE_IMPROVEMENTS).
+> `app.cluster.takeover-enabled`, resuming both the in-progress turn timer and the between-hands
+> transition) — all verified on a two-node Testcontainers harness. Remaining: partition/split-brain
+> hardening (see FUTURE_IMPROVEMENTS).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -577,19 +578,20 @@ Each risky step is guarded by a feature flag for fast rollback.
 - ✅ **Failover takeover** (`app.cluster.takeover-enabled`, default off, requires ownership): each node
   records active tables in a Redis set (`truholdem:cluster:tables`, added when a turn timer is armed,
   removed when the game ends) and `ClusterFailoverService` periodically scans it. A table whose owner
-  died (lease expired → no current owner) is re-acquired by a surviving node, which resumes the stalled
-  turn timer — so a game no longer hangs waiting on a player the dead owner was meant to time out
-  (previously it recovered only lazily, on the next action). Finished/missing games are pruned from the
-  set. (v1 resumes the turn timer; a table orphaned *between hands* gets a live owner but its next-hand
-  transition is not yet proactively resumed.)
+  died (lease expired → no current owner) is re-acquired by a surviving node, which then resumes whatever
+  timer the dead owner was driving — **both** the in-progress turn timer **and** the between-hands
+  transition (`HAND_COMPLETED`/`RESULT_DELAY` → next hand), each state-guarded so exactly the applicable
+  one fires. So a game no longer hangs waiting on a player the dead owner was meant to time out, nor stalls
+  forever between hands (previously it recovered only lazily, on the next action). Games no longer in
+  shared state are pruned from the set; a genuinely-over game is removed by the next-hand path itself.
 - ✅ A **multi-instance harness** exists (`MultiNodeClusterIT`): boots two full **web** app instances against
   one shared Postgres + Redis (cluster mode + routing + takeover on) and asserts (a) cross-node ownership
   exclusivity, (b) an action sent to the non-owner node is forwarded over real HTTP to the owner and applied
   once, and (c) **kill-node failover** — after node-A is shut down and its lease expires, node-B takes over
   the orphaned table and resumes its timer. (It already surfaced + fixed a real cluster-mode bug: a duplicate
   `WebSocketEventListener` bean that crashed startup whenever `app.websocket.cluster.enabled=true`.)
-- 🚧 Remaining: proactive **next-hand** takeover for a table orphaned between hands, and partition /
-  split-brain hardening (fencing, behaviour on Redis loss mid-game).
+- 🚧 Remaining: partition / split-brain hardening (fencing tokens, behaviour on Redis loss mid-game) and
+  recovery of the narrow transient `NEXT_HAND` crash window.
 - **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; ✅ cross-node
   action routing applied exactly once on the owner; ✅ kill-node takeover of an orphaned table's turn timer,
   all verified on the two-node harness.
