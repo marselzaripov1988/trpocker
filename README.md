@@ -466,10 +466,10 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–3 are done (single node). Phase 2 added per-table single-writer
-> serialization with `commandId` idempotency behind `app.game.single-writer-enabled` (default off);
-> Phase 3 wired domain events to statistics on the aggregate path and gave reads dedicated
-> projections (sanitized live view + `HandHistoryResponse`). Next gap is Phase 4 (event log / snapshots).
+> **Status (current):** Phases 0–4 are done (single node). Phase 2 added per-table single-writer
+> serialization with `commandId` idempotency; Phase 3 wired domain events to statistics and gave reads
+> dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit + replay-from-
+> events). Next gap is Phase 5 (clustering / per-table owner & failover).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -529,10 +529,20 @@ Each risky step is guarded by a feature flag for fast rollback.
 - **Exit:** ✅ reads use dedicated projections (sanitized live view + `HandHistoryResponse`); ✅ statistics
   flow through events (aggregate path).
 
-### Phase 4 — Event log / snapshots & audit
-- Append-only event log per hand in Postgres (state = snapshot + event tail).
-- Reconnect/resume and hand-history/replay are rebuilt from the log.
-- **Exit:** any hand can be replayed from events; reconnect doesn't break the session.
+### Phase 4 — Event log / snapshots & audit ✅ done (single node)
+- ✅ Append-only `game_event_log` table in Postgres: a synchronous `GameEventLogListener` persists every
+  published domain event (JSON payload, global `seq_no` ordering, stamped `gameId`/`handNumber`). The
+  `Game` row (+Redis hot state) is the snapshot half; the log is the event tail. The writer is
+  best-effort (`REQUIRES_NEW`, errors logged not propagated) so audit never blocks gameplay; gated by
+  `app.game.event-log-enabled` (default on, aggregate engine path only).
+- ✅ Replay-from-events read API: `GET /history/game/{id}/events` and
+  `GET /history/game/{id}/hand/{n}/events` return the ordered event stream
+  (`GameStarted → PlayerActed… → PotAwarded → HandCompleted`). Hole cards are not present (never
+  emitted as events) — hole-card replay stays on the `HandHistory`/`ReplayData` path.
+- ✅ Reconnect/resume was already satisfied before this slice by the Redis `websocket/GameEventStore`
+  (per-game sequence) + `ReconnectionController /app/reconnect`; left unchanged (re-basing it on Postgres
+  is deferred to clustering, Phase 5).
+- **Exit:** ✅ any hand can be replayed from events; ✅ reconnect doesn't break the session.
 
 ### Phase 5 — Clustering & scale
 - Per-table owner node (consistent hashing / Redis lock / leader election); only the owner

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 4 (append-only event log + replay)
+- New `game_event_log` table (Liquibase changeset 13): a synchronous `GameEventLogListener` persists
+  every published domain event (JSON payload, global `seq_no` ordering, stamped `gameId`/`handNumber`).
+  The writer runs in its own `REQUIRES_NEW` transaction and is best-effort, so an audit failure never
+  blocks or rolls back a game action. Gated by `app.game.event-log-enabled` (default on; aggregate path).
+- Replay-from-events read API on `HandHistoryController`: `GET /history/game/{id}/events` and
+  `GET /history/game/{id}/hand/{n}/events` return the ordered domain-event stream for audit/replay.
+- Reconnect/resume was already provided by the Redis `GameEventStore` layer and is left unchanged.
+
 ### 🏗️ Architecture — Engine migration Phase 3 (hand-history read-model)
 - `HandHistoryController` now returns a dedicated `HandHistoryResponse` read DTO instead of the raw
   `HandHistory` JPA entity, decoupling the API from persistence. The wire JSON is byte-for-byte
