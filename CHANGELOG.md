@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 6 (cleanup & enforcement)
+- Removed dead code: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/
+  `PHASE_CHANGE`/`GAME_ENDED`) and the never-called `broadcastPhaseChange`/`broadcastGameEnded` methods.
+- `StatisticsController` and `AchievementController` now return DTOs (`PlayerStatisticsResponse`,
+  `AchievementResponse`, `PlayerAchievementResponse`) instead of JPA entities; the tournament
+  table-hand endpoint returns the sanitized projection. Wire JSON unchanged (contract-tested).
+- New ArchUnit rule fails the build if any `@RestController` exposes `com.truholdem.model.*` in a
+  return type (reflective generic-type scan), enforcing the controller↔persistence decoupling.
+
 ### 🏗️ Architecture — Engine migration Phase 4 (append-only event log + replay)
 - New `game_event_log` table (Liquibase changeset 13): a synchronous `GameEventLogListener` persists
   every published domain event (JSON payload, global `seq_no` ordering, stamped `gameId`/`handNumber`).

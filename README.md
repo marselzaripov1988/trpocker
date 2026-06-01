@@ -466,10 +466,11 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–4 are done (single node). Phase 2 added per-table single-writer
+> **Status (current):** Phases 0–4 and 6 are done (single node). Phase 2 added per-table single-writer
 > serialization with `commandId` idempotency; Phase 3 wired domain events to statistics and gave reads
 > dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit + replay-from-
-> events). Next gap is Phase 5 (clustering / per-table owner & failover).
+> events); Phase 6 removed dead code and added ArchUnit enforcement (controllers return DTOs, not
+> `model.*`). The only remaining phase is Phase 5 (clustering / per-table owner & failover).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -549,10 +550,17 @@ Each risky step is guarded by a feature flag for fast rollback.
   schedules timers/blind increases. Hot state in memory (+Redis for failover), cold state async to Postgres.
 - **Exit:** horizontal scaling; a node failure doesn't lose tables or timers.
 
-### Phase 6 — Cleanup & enforcement
-- Delete dead code (unused `GameUpdateType` values, unused broadcast methods, parallel notification
-  stacks, legacy frontend services); add ArchUnit rules forbidding controllers returning `model.*`
-  and orphaned domain classes.
+### Phase 6 — Cleanup & enforcement ✅ done
+- ✅ Dead code removed: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/
+  `PHASE_CHANGE`/`GAME_ENDED`) and the never-called `broadcastPhaseChange`/`broadcastGameEnded`
+  methods in `GameNotificationService` + `RedisGameEventBroadcaster`.
+- ✅ Controllers no longer return JPA `model.*` entities: `StatisticsController` and
+  `AchievementController` now return DTOs (`PlayerStatisticsResponse`, `AchievementResponse`,
+  `PlayerAchievementResponse`); the tournament table-hand endpoint returns the sanitized projection.
+  All shape-preserving (contract tests assert DTO JSON ≡ entity JSON).
+- ✅ ArchUnit enforcement: a reflective rule fails the build if any `@RestController` exposes
+  `com.truholdem.model.*` in a (generic) return type; the existing domain-independence rule guards
+  orphaned domain classes.
 
 **Value order if constrained:** Phases 0 → 1 → 3 deliver ~80% of the benefit (correctness,
 testability, no card leakage, real events). Phases 2, 4, 5 add the high-load / fault-tolerance

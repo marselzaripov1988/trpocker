@@ -6,6 +6,29 @@ Ez a dokumentum a TruHoldem alkalmazás lehetséges továbbfejlesztéseit tartal
 
 ---
 
+## 🧪 TODO — Integration-test layer (Testcontainers)
+
+**Status:** deferred (own focused task). The full-context integration tests are intentionally
+excluded from the gating build (`pom.xml` Surefire excludes `*IT` and `PokerGameIntegrationTest`).
+
+**Problem:** the heavy `@SpringBootTest` / `*IT` tests (e.g. `TournamentIT`, the two
+`PokerGameIntegrationTest` copies) were written for a Testcontainers-managed Postgres that was never
+wired up. On the shared in-memory H2 they hit cross-context `create-drop` contamination
+(`Table "poker_games" not found (this database is empty)`). The H2 reserved-word DDL blocker
+(`hand_history_board.value`) is already fixed, which is why the schema now builds — exposing this
+deeper isolation issue.
+
+**To do:**
+- Add a Testcontainers PostgreSQL container (`@Testcontainers` + `@ServiceConnection` or
+  `@DynamicPropertySource`) shared via a base test class; run Liquibase against it.
+- Give each Spring test context an isolated database (or a single shared, properly-managed context)
+  to stop `create-drop` cross-contamination.
+- Remove the duplicate `com.truholdem.PokerGameIntegrationTest` (root package) vs
+  `com.truholdem.integration.PokerGameIntegrationTest`.
+- Re-include the integration tests in `mvnw verify` once green (Docker required in CI).
+
+---
+
 ## 🔴 HIGH PRIORITY (Erősen ajánlott)
 
 ### 1. WebSocket Real-Time Updates
