@@ -16,6 +16,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
+import com.truholdem.service.cluster.TableOwnershipService;
 
 @Service
 public class GameTurnTimeoutService {
@@ -25,15 +26,18 @@ public class GameTurnTimeoutService {
     private final TaskScheduler taskScheduler;
     private final AppProperties appProperties;
     private final PokerGameService pokerGameService;
+    private final TableOwnershipService ownership;
     private final Map<UUID, ScheduledFuture<?>> scheduledTimeouts = new ConcurrentHashMap<>();
 
     public GameTurnTimeoutService(
             TaskScheduler taskScheduler,
             AppProperties appProperties,
-            @Lazy PokerGameService pokerGameService) {
+            @Lazy PokerGameService pokerGameService,
+            TableOwnershipService ownership) {
         this.taskScheduler = taskScheduler;
         this.appProperties = appProperties;
         this.pokerGameService = pokerGameService;
+        this.ownership = ownership;
     }
 
     public void scheduleForCurrentTurn(Game game) {
@@ -52,20 +56,30 @@ public class GameTurnTimeoutService {
             return;
         }
 
-        int timeoutSeconds = appProperties.getGame().getTurnActionTimeoutSeconds();
         UUID gameId = game.getId();
+        // Only the owning node schedules this table's timer (no double-fire on a cluster).
+        if (!ownership.acquire(gameId)) {
+            return;
+        }
+
+        int timeoutSeconds = appProperties.getGame().getTurnActionTimeoutSeconds();
         UUID playerId = currentPlayer.getId();
         String phase = game.getPhase().name();
         int currentBet = game.getCurrentBet();
         int communityCardCount = game.getCommunityCards().size();
 
         ScheduledFuture<?> future = taskScheduler.schedule(
-                () -> pokerGameService.handleTurnTimeout(
-                        gameId,
-                        playerId,
-                        phase,
-                        currentBet,
-                        communityCardCount),
+                () -> {
+                    if (!ownership.isOwner(gameId)) {
+                        return; // lease moved to another node before firing
+                    }
+                    pokerGameService.handleTurnTimeout(
+                            gameId,
+                            playerId,
+                            phase,
+                            currentBet,
+                            communityCardCount);
+                },
                 Instant.now().plusSeconds(timeoutSeconds));
 
         scheduledTimeouts.put(gameId, future);

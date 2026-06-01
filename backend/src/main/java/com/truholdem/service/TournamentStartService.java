@@ -2,6 +2,7 @@ package com.truholdem.service;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.*;
+import com.truholdem.service.cluster.TableOwnershipService;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
@@ -44,6 +45,7 @@ public class TournamentStartService {
     private final AppProperties.Tournament tournamentProperties;
     private final TournamentTimingService timingService;
 
+    private final TableOwnershipService ownership;
     private final Map<UUID, ScheduledFuture<?>> scheduledLevelIncreases = new ConcurrentHashMap<>();
 
     public TournamentStartService(
@@ -53,7 +55,8 @@ public class TournamentStartService {
             ApplicationEventPublisher eventPublisher,
             TaskScheduler taskScheduler,
             AppProperties appProperties,
-            TournamentTimingService timingService) {
+            TournamentTimingService timingService,
+            TableOwnershipService ownership) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
@@ -61,6 +64,7 @@ public class TournamentStartService {
         this.taskScheduler = taskScheduler;
         this.tournamentProperties = appProperties.getTournament();
         this.timingService = timingService;
+        this.ownership = ownership;
     }
 
     public boolean shouldStartAsynchronously(int registeredPlayerCount) {
@@ -177,13 +181,21 @@ public class TournamentStartService {
     }
 
     public void scheduleLevelIncrease(Tournament tournament) {
+        UUID tournamentId = tournament.getId();
+        // Only the owning node drives this tournament's blind-level progression.
+        if (!ownership.acquire(tournamentId)) {
+            return;
+        }
         Duration levelDuration = timingService.levelDuration(tournament);
 
         Runnable task = () -> {
+            if (!ownership.isOwner(tournamentId)) {
+                return; // lease moved to another node
+            }
             try {
-                advanceLevel(tournament.getId());
+                advanceLevel(tournamentId);
             } catch (Exception e) {
-                log.error("Error advancing level for tournament {}", tournament.getId(), e);
+                log.error("Error advancing level for tournament {}", tournamentId, e);
             }
         };
 
@@ -225,6 +237,7 @@ public class TournamentStartService {
         if (future != null) {
             future.cancel(false);
         }
+        ownership.release(tournamentId);
     }
 
     private int calculateTableCount(Tournament tournament, int playerCount) {

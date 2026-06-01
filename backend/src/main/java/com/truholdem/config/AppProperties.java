@@ -36,7 +36,11 @@ public class AppProperties {
     @NotNull
     private final Tournament tournament = new Tournament();
 
-    
+    @Valid
+    @NotNull
+    private final Cluster cluster = new Cluster();
+
+
     public Jwt getJwt() {
         return jwt;
     }
@@ -55,6 +59,36 @@ public class AppProperties {
 
     public Tournament getTournament() {
         return tournament;
+    }
+
+    public Cluster getCluster() {
+        return cluster;
+    }
+
+    /** Engine-migration Phase 5: per-table ownership for multi-node clustering. */
+    public static class Cluster {
+        /** When true, schedulers only run for tables this node owns (Redis lease). Default off = single node. */
+        private boolean ownershipEnabled = false;
+
+        /** Ownership lease TTL; a dead owner's tables become claimable after this. */
+        @Min(1000)
+        private long leaseTtlMillis = 30_000;
+
+        public boolean isOwnershipEnabled() {
+            return ownershipEnabled;
+        }
+
+        public void setOwnershipEnabled(boolean ownershipEnabled) {
+            this.ownershipEnabled = ownershipEnabled;
+        }
+
+        public long getLeaseTtlMillis() {
+            return leaseTtlMillis;
+        }
+
+        public void setLeaseTtlMillis(long leaseTtlMillis) {
+            this.leaseTtlMillis = leaseTtlMillis;
+        }
     }
 
     public static class Jwt {

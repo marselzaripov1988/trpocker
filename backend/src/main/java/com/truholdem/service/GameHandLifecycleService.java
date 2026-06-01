@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.model.HandLifecycleState;
+import com.truholdem.service.cluster.TableOwnershipService;
 
 @Service
 public class GameHandLifecycleService {
@@ -24,15 +25,18 @@ public class GameHandLifecycleService {
     private final TaskScheduler taskScheduler;
     private final AppProperties appProperties;
     private final PokerGameService pokerGameService;
+    private final TableOwnershipService ownership;
     private final Map<UUID, ScheduledFuture<?>> scheduledTransitions = new ConcurrentHashMap<>();
 
     public GameHandLifecycleService(
             TaskScheduler taskScheduler,
             AppProperties appProperties,
-            @Lazy PokerGameService pokerGameService) {
+            @Lazy PokerGameService pokerGameService,
+            TableOwnershipService ownership) {
         this.taskScheduler = taskScheduler;
         this.appProperties = appProperties;
         this.pokerGameService = pokerGameService;
+        this.ownership = ownership;
     }
 
     public void scheduleAfterHandCompleted(Game game) {
@@ -46,6 +50,11 @@ public class GameHandLifecycleService {
         UUID gameId = game.getId();
         int handNumber = game.getHandNumber();
         cancel(gameId);
+
+        // Only the owning node drives this table's hand-lifecycle transitions.
+        if (!ownership.acquire(gameId)) {
+            return;
+        }
 
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> transitionToResultDelay(gameId, handNumber),
@@ -68,6 +77,9 @@ public class GameHandLifecycleService {
     }
 
     private void transitionToResultDelay(UUID gameId, int handNumber) {
+        if (!ownership.isOwner(gameId)) {
+            return; // lease moved to another node
+        }
         try {
             Game delayed = pokerGameService.transitionCompletedHandToResultDelay(gameId, handNumber);
             scheduleNextHand(delayed);
@@ -97,9 +109,16 @@ public class GameHandLifecycleService {
     }
 
     private void startNextHand(UUID gameId, int handNumber) {
+        scheduledTransitions.remove(gameId);
+        if (!ownership.isOwner(gameId)) {
+            return; // lease moved to another node
+        }
         try {
-            scheduledTransitions.remove(gameId);
-            pokerGameService.startNextHandFromLifecycle(gameId, handNumber);
+            java.util.Optional<Game> next = pokerGameService.startNextHandFromLifecycle(gameId, handNumber);
+            if (next.isEmpty()) {
+                // game is over (not enough players) — stop owning this table so its lease can expire
+                ownership.release(gameId);
+            }
         } catch (RuntimeException e) {
             log.warn("Failed to start next hand for game {} after hand {}", gameId, handNumber, e);
         }
