@@ -91,6 +91,15 @@ docker compose -f docker-compose.cluster.yml logs -f backend2 | grep -i "took ov
 The game keeps playing through the LB — surviving clients were pinned to node 2, and node 2 re-acquired the
 lease (after node 1's lease expired) and resumed the timer.
 
+## Scaling benchmark
+
+To measure the horizontal-scaling benefit on the action path (1 node vs 2 nodes behind a round-robin LB),
+use the k6 harness — `docker-compose.scale.yml` + `load/k6/run-scaling.sh` (or `.ps1`). It plays many
+independent bot games so the tables distribute across nodes. An example saturating run (VUS=30) showed
+**~+60% throughput and lower action p95 on two nodes**; see [load/k6/README.md](../load/k6/README.md#scaling-benchmark--1-node-vs-2-nodes-game-actionsjs)
+for the full numbers and an honest reading (CPU-bound bot AI; round-robin forces cross-node forwards that a
+sticky `ip_hash` deployment avoids).
+
 ## Notes
 
 - `CLUSTER_SHARED_SECRET` guards the node-to-node `/api/internal/cluster/**` endpoint (constant-time

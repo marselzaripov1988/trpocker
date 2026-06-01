@@ -137,3 +137,6 @@ secrets/
 *.temp
 .cache/
 .backend-port
+
+# k6 scaling benchmark exports
+load/k6/.scale-*.json

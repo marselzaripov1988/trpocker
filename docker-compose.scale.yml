@@ -1,0 +1,101 @@
+# Scaling benchmark stack: measure throughput/latency on 1 node vs 2 nodes (behind a round-robin LB).
+#
+# Tuned for load generation, NOT production: game authorization + rate limiting are disabled (so a single
+# k6 token can drive many bot games), Liquibase is off and Hibernate manages the schema. All Phase 5
+# cluster features are on, so the 2-node run exercises ownership + cross-node routing + fencing.
+#
+# Driven by load/k6/run-scaling.(ps1|sh):
+#   1 node : up -d backend1            → k6 against http://localhost:8081
+#   2 nodes: up -d backend1 backend2 nginx → k6 against http://localhost:8092 (round-robin LB)
+name: truholdem-scale
+
+x-backend-env: &backend-env
+  SPRING_PROFILES_ACTIVE: docker
+  DB_USERNAME: user
+  DB_PASSWORD: password
+  REDIS_HOST: redis
+  JWT_SECRET: your-super-secret-jwt-key-that-should-be-very-long-and-secure-in-production
+  OTEL_ENABLED: "false"
+  SPRING_LIQUIBASE_ENABLED: "false"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: update
+  RATE_LIMIT_ENABLED: "false"
+  APP_SECURITY_AUTHORIZATION_ENABLED: "false"
+  WEBSOCKET_CLUSTER_ENABLED: "true"
+  CLUSTER_OWNERSHIP_ENABLED: "true"
+  CLUSTER_ROUTING_ENABLED: "true"
+  CLUSTER_TAKEOVER_ENABLED: "true"
+  CLUSTER_FENCING_ENABLED: "true"
+  CLUSTER_SHARED_SECRET: scale-shared-secret
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: truholdem-scale-postgres
+    environment:
+      POSTGRES_DB: truholdem
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d truholdem"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [truholdem-scale-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: truholdem-scale-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [truholdem-scale-net]
+
+  backend1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: truholdem-cluster-backend:latest   # reuse the image built for docker-compose.cluster.yml
+    container_name: truholdem-scale-node-1
+    hostname: truholdem-scale-node-1
+    environment:
+      <<: *backend-env
+      CLUSTER_NODE_BASE_URL: http://backend1:8080/api
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [truholdem-scale-net]
+
+  backend2:
+    image: truholdem-cluster-backend:latest
+    container_name: truholdem-scale-node-2
+    hostname: truholdem-scale-node-2
+    environment:
+      <<: *backend-env
+      CLUSTER_NODE_BASE_URL: http://backend2:8080/api
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      backend1: { condition: service_healthy }
+    networks: [truholdem-scale-net]
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: truholdem-scale-lb
+    volumes:
+      - ./docker/nginx/scale.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8092:80"   # round-robin LB entry point for the 2-node run
+    depends_on:
+      backend1: { condition: service_healthy }
+      backend2: { condition: service_healthy }
+    networks: [truholdem-scale-net]
+
+networks:
+  truholdem-scale-net:
+    driver: bridge
