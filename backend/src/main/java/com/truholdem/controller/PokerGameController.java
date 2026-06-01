@@ -26,6 +26,7 @@ import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.GameAuthorizationService;
 import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.PokerGameService;
+import com.truholdem.service.game.TableCommandDispatcher;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -181,6 +182,7 @@ public class PokerGameController {
 
             Game updated = pokerGameService.playerAct(
                     gameId,
+                    TableCommandDispatcher.parseCommandId(request.getCommandId()),
                     playerId,
                     request.getAction(),
                     request.getAmount());

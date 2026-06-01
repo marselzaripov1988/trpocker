@@ -201,7 +201,33 @@ public class AppProperties {
         @Min(1)
         private int handResultDelaySeconds = 3;
 
-        
+        /**
+         * Phase 2: serialize all mutations for a table through a single-writer queue and apply
+         * commandId-based idempotency. Default off keeps the legacy (lock-free) path for rollback.
+         */
+        private boolean singleWriterEnabled = false;
+
+        /** Worker threads shared across all tables; 0 → {@code max(8, cores*2)}. */
+        @Min(0)
+        private int singleWriterPoolSize = 0;
+
+        /** Bounded submit queue across all tables; excess submits are rejected fast. */
+        @Min(1)
+        private int singleWriterQueueCapacity = 10_000;
+
+        /** Max time a request waits for its table command to run before failing. */
+        @Min(1)
+        private long singleWriterAwaitMillis = 10_000;
+
+        /** How long a processed commandId stays cached for idempotent replay. */
+        @Min(1)
+        private long commandDedupTtlMillis = 60_000;
+
+        /** Max distinct commandIds remembered per table (LRU). */
+        @Min(1)
+        private int commandDedupMaxPerGame = 256;
+
+
         public int getDefaultChips() {
             return defaultChips;
         }
@@ -320,6 +346,54 @@ public class AppProperties {
 
         public void setHandResultDelaySeconds(int handResultDelaySeconds) {
             this.handResultDelaySeconds = handResultDelaySeconds;
+        }
+
+        public boolean isSingleWriterEnabled() {
+            return singleWriterEnabled;
+        }
+
+        public void setSingleWriterEnabled(boolean singleWriterEnabled) {
+            this.singleWriterEnabled = singleWriterEnabled;
+        }
+
+        public int getSingleWriterPoolSize() {
+            return singleWriterPoolSize;
+        }
+
+        public void setSingleWriterPoolSize(int singleWriterPoolSize) {
+            this.singleWriterPoolSize = singleWriterPoolSize;
+        }
+
+        public int getSingleWriterQueueCapacity() {
+            return singleWriterQueueCapacity;
+        }
+
+        public void setSingleWriterQueueCapacity(int singleWriterQueueCapacity) {
+            this.singleWriterQueueCapacity = singleWriterQueueCapacity;
+        }
+
+        public long getSingleWriterAwaitMillis() {
+            return singleWriterAwaitMillis;
+        }
+
+        public void setSingleWriterAwaitMillis(long singleWriterAwaitMillis) {
+            this.singleWriterAwaitMillis = singleWriterAwaitMillis;
+        }
+
+        public long getCommandDedupTtlMillis() {
+            return commandDedupTtlMillis;
+        }
+
+        public void setCommandDedupTtlMillis(long commandDedupTtlMillis) {
+            this.commandDedupTtlMillis = commandDedupTtlMillis;
+        }
+
+        public int getCommandDedupMaxPerGame() {
+            return commandDedupMaxPerGame;
+        }
+
+        public void setCommandDedupMaxPerGame(int commandDedupMaxPerGame) {
+            this.commandDedupMaxPerGame = commandDedupMaxPerGame;
         }
     }
 

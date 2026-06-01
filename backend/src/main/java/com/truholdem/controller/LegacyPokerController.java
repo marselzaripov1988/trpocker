@@ -6,6 +6,7 @@ import com.truholdem.model.*;
 import com.truholdem.service.GameAuthorizationService;
 import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.PokerGameService;
+import com.truholdem.service.game.TableCommandDispatcher;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -85,14 +86,16 @@ public class LegacyPokerController {
 
     @PostMapping("/fold")
     @Operation(summary = "Fold", description = "Player folds their hand")
-    public ResponseEntity<String> fold(@RequestParam UUID playerId) {
+    public ResponseEntity<String> fold(@RequestParam UUID playerId,
+            @RequestHeader(value = "X-Command-Id", required = false) String commandId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
         authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
-            pokerGameService.playerAct(currentGameId, playerId, PlayerAction.FOLD, 0);
+            pokerGameService.playerAct(currentGameId, TableCommandDispatcher.parseCommandId(commandId),
+                    playerId, PlayerAction.FOLD, 0);
             return ResponseEntity.ok("Fold successful");
         } catch (Exception e) {
             logger.error("Error during fold", e);
@@ -102,14 +105,16 @@ public class LegacyPokerController {
 
     @PostMapping("/check")
     @Operation(summary = "Check", description = "Player checks (passes without betting)")
-    public ResponseEntity<String> check(@RequestParam UUID playerId) {
+    public ResponseEntity<String> check(@RequestParam UUID playerId,
+            @RequestHeader(value = "X-Command-Id", required = false) String commandId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
         authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
-            pokerGameService.playerAct(currentGameId, playerId, PlayerAction.CHECK, 0);
+            pokerGameService.playerAct(currentGameId, TableCommandDispatcher.parseCommandId(commandId),
+                    playerId, PlayerAction.CHECK, 0);
             return ResponseEntity.ok("Check successful");
         } catch (Exception e) {
             logger.error("Error during check", e);
@@ -119,14 +124,16 @@ public class LegacyPokerController {
 
     @PostMapping("/call")
     @Operation(summary = "Call", description = "Player calls the current bet")
-    public ResponseEntity<String> call(@RequestParam UUID playerId) {
+    public ResponseEntity<String> call(@RequestParam UUID playerId,
+            @RequestHeader(value = "X-Command-Id", required = false) String commandId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
         authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
-            pokerGameService.playerAct(currentGameId, playerId, PlayerAction.CALL, 0);
+            pokerGameService.playerAct(currentGameId, TableCommandDispatcher.parseCommandId(commandId),
+                    playerId, PlayerAction.CALL, 0);
             return ResponseEntity.ok("Call successful");
         } catch (Exception e) {
             logger.error("Error during call", e);
@@ -136,7 +143,8 @@ public class LegacyPokerController {
 
     @PostMapping("/bet")
     @Operation(summary = "Bet", description = "Player places a bet")
-    public ResponseEntity<String> bet(@RequestBody BetRequest request) {
+    public ResponseEntity<String> bet(@RequestBody BetRequest request,
+            @RequestHeader(value = "X-Command-Id", required = false) String commandId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
@@ -146,7 +154,8 @@ public class LegacyPokerController {
             Game game = pokerGameService.getGame(currentGameId).orElseThrow();
             PlayerAction action = game.getCurrentBet() > 0 ? PlayerAction.RAISE : PlayerAction.BET;
 
-            pokerGameService.playerAct(currentGameId, request.getPlayerId(), action, request.getAmount());
+            pokerGameService.playerAct(currentGameId, TableCommandDispatcher.parseCommandId(commandId),
+                    request.getPlayerId(), action, request.getAmount());
             return ResponseEntity.ok("Bet successful");
         } catch (Exception e) {
             logger.error("Error during bet", e);
@@ -156,14 +165,16 @@ public class LegacyPokerController {
 
     @PostMapping("/raise")
     @Operation(summary = "Raise", description = "Player raises the bet")
-    public ResponseEntity<String> raise(@RequestBody BetRequest request) {
+    public ResponseEntity<String> raise(@RequestBody BetRequest request,
+            @RequestHeader(value = "X-Command-Id", required = false) String commandId) {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
         authorizationService.validatePlayerAction(currentGameId, request.getPlayerId());
 
         try {
-            pokerGameService.playerAct(currentGameId, request.getPlayerId(), PlayerAction.RAISE, request.getAmount());
+            pokerGameService.playerAct(currentGameId, TableCommandDispatcher.parseCommandId(commandId),
+                    request.getPlayerId(), PlayerAction.RAISE, request.getAmount());
             return ResponseEntity.ok("Raise successful");
         } catch (Exception e) {
             logger.error("Error during raise", e);

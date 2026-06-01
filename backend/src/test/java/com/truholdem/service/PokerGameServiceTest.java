@@ -2,6 +2,7 @@ package com.truholdem.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import java.util.ArrayList;
@@ -40,6 +41,7 @@ import com.truholdem.config.GameEngine;
 import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.repository.GameRepository;
 import com.truholdem.service.game.GameStateService;
+import com.truholdem.service.game.TableCommandDispatcher;
 import com.truholdem.service.tournament.TournamentChipSyncService;
 import com.truholdem.service.tournament.TournamentTableShardService;
 
@@ -90,6 +92,11 @@ class PokerGameServiceTest {
     @Mock
     private GameHandLifecycleService handLifecycleService;
 
+    @Mock
+    private TableCommandDispatcher commandDispatcher;
+
+    private AppProperties.Game gameConfig;
+
     private PokerGameService pokerGameService;
 
     @BeforeEach
@@ -113,7 +120,7 @@ class PokerGameServiceTest {
         lenient().when(gameStateService.persistFullSync(any(Game.class)))
                 .thenAnswer(invocation -> gameRepository.save(invocation.getArgument(0)));
 
-        AppProperties.Game gameConfig = mock(AppProperties.Game.class);
+        gameConfig = mock(AppProperties.Game.class);
         lenient().when(appProperties.getGame()).thenReturn(gameConfig);
         lenient().when(gameConfig.getBotMode()).thenReturn(BotMode.ADVANCED);
         lenient().when(gameConfig.getEngine()).thenReturn(GameEngine.LEGACY);
@@ -134,12 +141,26 @@ class PokerGameServiceTest {
                 tournamentChipSyncService,
                 turnTimeoutService,
                 handLifecycleService,
-                new PokerGameMapper());
+                new PokerGameMapper(),
+                commandDispatcher,
+                null); // single-writer disabled in these tests → self (proxy) is never used
     }
 
-    
-    
-    
+    @Test
+    @DisplayName("single-writer ON: playerAct is routed through the table command dispatcher")
+    void singleWriterEnabledRoutesPlayerActThroughDispatcher() {
+        when(gameConfig.isSingleWriterEnabled()).thenReturn(true);
+        UUID gameId = UUID.randomUUID();
+        UUID commandId = UUID.randomUUID();
+        UUID playerId = UUID.randomUUID();
+        Game routed = new Game();
+        when(commandDispatcher.submit(eq(gameId), eq(commandId), any())).thenReturn(routed);
+
+        Game result = pokerGameService.playerAct(gameId, commandId, playerId, PlayerAction.CHECK, 0);
+
+        assertSame(routed, result);
+        verify(commandDispatcher).submit(eq(gameId), eq(commandId), any());
+    }
 
     private void setupRepositorySaveToReturnArgument() {
         when(gameRepository.save(any(Game.class))).thenAnswer(invocation -> {

@@ -17,6 +17,12 @@ public class PlayerActionRequest {
     @Min(value = 0, message = "Amount cannot be negative")
     private int amount;
 
+    /**
+     * Optional client-supplied idempotency key. Re-sending the same id (double-click, WebSocket
+     * retry) replays the first result instead of acting twice. Absent → server generates one.
+     */
+    private String commandId;
+
     public PlayerActionRequest() {
     }
 
@@ -26,7 +32,16 @@ public class PlayerActionRequest {
         this.amount = amount;
     }
 
-    
+
+    public String getCommandId() {
+        return commandId;
+    }
+
+    public void setCommandId(String commandId) {
+        this.commandId = commandId;
+    }
+
+
     public String getPlayerId() {
         return playerId;
     }

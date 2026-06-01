@@ -4,6 +4,7 @@ import com.truholdem.dto.GameUpdateMessage;
 import com.truholdem.dto.PlayerActionRequest;
 import com.truholdem.model.Game;
 import com.truholdem.service.PokerGameService;
+import com.truholdem.service.game.TableCommandDispatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.*;
@@ -38,11 +39,12 @@ public class GameWebSocketController {
                 gameId, actionRequest.getAction(), principal.getName());
 
         try {
-            // Execute the action
+            // Execute the action (commandId makes a duplicate WebSocket frame idempotent)
             Game updatedGame = pokerGameService.playerAct(
-                gameId, 
-                UUID.fromString(actionRequest.getPlayerId()), 
-                actionRequest.getAction(), 
+                gameId,
+                TableCommandDispatcher.parseCommandId(actionRequest.getCommandId()),
+                UUID.fromString(actionRequest.getPlayerId()),
+                actionRequest.getAction(),
                 actionRequest.getAmount()
             );
 

@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,6 +38,7 @@ import com.truholdem.domain.value.Chips;
 import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.game.GameStateService;
+import com.truholdem.service.game.TableCommandDispatcher;
 import com.truholdem.service.tournament.TournamentChipSyncService;
 import com.truholdem.service.tournament.TournamentTableShardService;
 
@@ -60,6 +62,8 @@ public class PokerGameService {
     private final GameTurnTimeoutService turnTimeoutService;
     private final GameHandLifecycleService handLifecycleService;
     private final PokerGameMapper pokerGameMapper;
+    private final TableCommandDispatcher commandDispatcher;
+    private final PokerGameService self;
 
     public PokerGameService(
             GameStateService gameStateService,
@@ -75,7 +79,9 @@ public class PokerGameService {
             TournamentChipSyncService tournamentChipSyncService,
             GameTurnTimeoutService turnTimeoutService,
             GameHandLifecycleService handLifecycleService,
-            PokerGameMapper pokerGameMapper) {
+            PokerGameMapper pokerGameMapper,
+            TableCommandDispatcher commandDispatcher,
+            @Lazy PokerGameService self) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
         this.handHistoryService = handHistoryService;
@@ -90,6 +96,8 @@ public class PokerGameService {
         this.turnTimeoutService = turnTimeoutService;
         this.handLifecycleService = handLifecycleService;
         this.pokerGameMapper = pokerGameMapper;
+        this.commandDispatcher = commandDispatcher;
+        this.self = self;
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -170,6 +178,25 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game playerAct(UUID gameId, UUID playerId, PlayerAction action, int amount) {
+        return playerAct(gameId, (UUID) null, playerId, action, amount);
+    }
+
+    /**
+     * Player action entry point with an explicit idempotency key. When single-writer is enabled the
+     * action is serialized on the table's command queue and a duplicate {@code commandId} replays
+     * the recorded outcome instead of acting twice.
+     */
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game playerAct(UUID gameId, UUID commandId, UUID playerId, PlayerAction action, int amount) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return playerActInternal(gameId, playerId, action, amount);
+        }
+        // self (proxy) so @Transactional opens on the worker thread, not the caller's.
+        return commandDispatcher.submit(gameId, commandId,
+                () -> self.playerActInternal(gameId, playerId, action, amount));
+    }
+
+    public Game playerActInternal(UUID gameId, UUID playerId, PlayerAction action, int amount) {
         return metricsService.timeActionProcessing(() -> {
             if (usesAggregateEngine()) {
                 return playerActViaAggregate(gameId, playerId, action, amount);
@@ -225,6 +252,18 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game executeBotAction(UUID gameId, UUID botId) {
+        return executeBotAction(gameId, null, botId);
+    }
+
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game executeBotAction(UUID gameId, UUID commandId, UUID botId) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return executeBotActionInternal(gameId, botId);
+        }
+        return commandDispatcher.submit(gameId, commandId, () -> self.executeBotActionInternal(gameId, botId));
+    }
+
+    public Game executeBotActionInternal(UUID gameId, UUID botId) {
         Game game = findGameById(gameId);
         Player bot = findPlayerInGame(game, botId);
 
@@ -277,7 +316,8 @@ public class PokerGameService {
         logger.info("Bot {} decided: {} (amount: {}, reason: {})",
                 bot.getName(), finalAction, finalAmount, decision.reasoning());
 
-        return playerAct(gameId, botId, finalAction, finalAmount);
+        // Already on this table's command (when single-writer is on) — call the core, never re-submit.
+        return playerActInternal(gameId, botId, finalAction, finalAmount);
     }
 
     private AdvancedBotAIService.BotDecision resolveBotDecision(Game game, Player bot) {
@@ -299,6 +339,18 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game startNewHand(UUID gameId) {
+        return startNewHand(gameId, (UUID) null);
+    }
+
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game startNewHand(UUID gameId, UUID commandId) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return startNewHandInternal(gameId);
+        }
+        return commandDispatcher.submit(gameId, commandId, () -> self.startNewHandInternal(gameId));
+    }
+
+    public Game startNewHandInternal(UUID gameId) {
         handLifecycleService.cancel(gameId);
 
         if (usesAggregateEngine()) {
@@ -333,6 +385,14 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game transitionCompletedHandToResultDelay(UUID gameId, int expectedHandNumber) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return transitionCompletedHandToResultDelayInternal(gameId, expectedHandNumber);
+        }
+        return commandDispatcher.submit(gameId, UUID.randomUUID(),
+                () -> self.transitionCompletedHandToResultDelayInternal(gameId, expectedHandNumber));
+    }
+
+    public Game transitionCompletedHandToResultDelayInternal(UUID gameId, int expectedHandNumber) {
         Game game = findGameById(gameId);
         if (!isExpectedLifecycleState(game, expectedHandNumber, HandLifecycleState.HAND_COMPLETED)) {
             logger.debug("Ignoring stale RESULT_DELAY transition for game {} hand {}", gameId, expectedHandNumber);
@@ -348,6 +408,14 @@ public class PokerGameService {
 
     @CacheEvict(value = "games", key = "#gameId")
     public Optional<Game> startNextHandFromLifecycle(UUID gameId, int expectedHandNumber) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return startNextHandFromLifecycleInternal(gameId, expectedHandNumber);
+        }
+        return commandDispatcher.submit(gameId, UUID.randomUUID(),
+                () -> self.startNextHandFromLifecycleInternal(gameId, expectedHandNumber));
+    }
+
+    public Optional<Game> startNextHandFromLifecycleInternal(UUID gameId, int expectedHandNumber) {
         Game game = findGameById(gameId);
         if (!isExpectedLifecycleState(game, expectedHandNumber, HandLifecycleState.RESULT_DELAY)) {
             logger.debug("Ignoring stale NEXT_HAND transition for game {} hand {}", gameId, expectedHandNumber);
@@ -367,11 +435,27 @@ public class PokerGameService {
         Game pendingNextHand = gameStateService.persistFull(game);
         notificationService.broadcastGameUpdate(pendingNextHand);
 
-        return Optional.of(startNewHand(gameId));
+        // Already serialized on this table's chain — call the core, never re-submit.
+        return Optional.of(startNewHandInternal(gameId));
     }
 
     @CacheEvict(value = "games", key = "#gameId")
     public Game handleTurnTimeout(
+            UUID gameId,
+            UUID expectedPlayerId,
+            String expectedPhase,
+            int expectedCurrentBet,
+            int expectedCommunityCardCount) {
+        if (!appProperties.getGame().isSingleWriterEnabled()) {
+            return handleTurnTimeoutInternal(gameId, expectedPlayerId, expectedPhase,
+                    expectedCurrentBet, expectedCommunityCardCount);
+        }
+        return commandDispatcher.submit(gameId, UUID.randomUUID(),
+                () -> self.handleTurnTimeoutInternal(gameId, expectedPlayerId, expectedPhase,
+                        expectedCurrentBet, expectedCommunityCardCount));
+    }
+
+    public Game handleTurnTimeoutInternal(
             UUID gameId,
             UUID expectedPlayerId,
             String expectedPhase,
@@ -399,7 +483,8 @@ public class PokerGameService {
         logger.info("Turn timeout for player {} in game {} - auto {}",
                 currentPlayer.getName(), gameId, timeoutAction);
 
-        return playerAct(gameId, expectedPlayerId, timeoutAction, 0);
+        // Already on this table's command — call the core directly to avoid re-submitting (deadlock).
+        return playerActInternal(gameId, expectedPlayerId, timeoutAction, 0);
     }
 
     private void validatePlayerCount(List<PlayerInfo> playersInfo) {
