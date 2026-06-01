@@ -556,11 +556,14 @@ Each risky step is guarded by a feature flag for fast rollback.
   is unavailable.
 - ✅ Hot state already shared (Redis `RedisGameStateStore` + Postgres `game_event_log`), so a node failure
   loses no state, and a dead owner's lease expires so another node re-acquires on the next action.
-- 🚧 Remaining (need the multi-node / Testcontainers harness in FUTURE_IMPROVEMENTS): cross-node
-  command/action routing to the owner, and automatic failover **takeover** (proactively resuming a dead
-  node's timers rather than lazily on the next action).
-- **Exit:** ✅ no timer double-fire across nodes; horizontal scaling + verified kill-node failover pending
-  the multi-node harness.
+- ✅ The lease semantics are verified against **real Redis** (`TableOwnershipRedisIT`, Testcontainers):
+  two `TableOwnershipService` nodes contend for one table — exclusive acquire, release handoff, and
+  TTL-expiry failover all pass.
+- 🚧 Remaining (need a multi-**app-instance** harness): cross-node command/action routing to the owner,
+  and automatic failover **takeover** (proactively resuming a dead node's timers rather than lazily on
+  the next action for that table).
+- **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; full
+  horizontal-scaling/kill-node verification of a live game pending the multi-instance harness.
 
 ### Phase 6 — Cleanup & enforcement ✅ done
 - ✅ Dead code removed: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/

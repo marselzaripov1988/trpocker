@@ -14,7 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scheduling and re-check on fire, so on a multi-node cluster each timer fires on exactly one node
   (eliminating the per-JVM double-fire). Gated by `app.cluster.ownership-enabled` (default off);
   degrades to single-node behavior when disabled or Redis is unavailable.
-- Cross-node command routing and automatic failover takeover remain (need a multi-node harness).
+- The lease is verified against real Redis (`TableOwnershipRedisIT`, Testcontainers): exclusive
+  acquire, release handoff, and TTL-expiry failover. Cross-node command routing and live kill-node
+  failover takeover remain (need a multi-app-instance harness).
 
 ### 🏗️ Architecture — Engine migration Phase 6 (cleanup & enforcement)
 - Removed dead code: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/

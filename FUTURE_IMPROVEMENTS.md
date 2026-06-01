@@ -18,14 +18,20 @@ wired up. On the shared in-memory H2 they hit cross-context `create-drop` contam
 (`hand_history_board.value`) is already fixed, which is why the schema now builds — exposing this
 deeper isolation issue.
 
+**Done so far:** a Testcontainers base already exists (`config/IntegrationTestConfig`: Postgres + Redis,
+profile `integration`) and the `*IT` tests use it. Phase 5's ownership lease is verified against real
+Redis (`service/cluster/TableOwnershipRedisIT`).
+
 **To do:**
-- Add a Testcontainers PostgreSQL container (`@Testcontainers` + `@ServiceConnection` or
-  `@DynamicPropertySource`) shared via a base test class; run Liquibase against it.
-- Give each Spring test context an isolated database (or a single shared, properly-managed context)
-  to stop `create-drop` cross-contamination.
-- Remove the duplicate `com.truholdem.PokerGameIntegrationTest` (root package) vs
-  `com.truholdem.integration.PokerGameIntegrationTest`.
-- Re-include the integration tests in `mvnw verify` once green (Docker required in CI).
+- Fix the H2-based `PokerGameIntegrationTest` (both the root-package and `integration`-package copies):
+  either move them onto the Testcontainers Postgres base or give each Spring context an isolated H2 DB —
+  the `create-drop` cross-context contamination (`Table "poker_games" not found`) is why they're excluded
+  in `pom.xml` Surefire today. Remove the duplicate class.
+- **Multi-app-instance harness** for the rest of Phase 5: stand up ≥2 backend instances against shared
+  Redis/Postgres (Testcontainers or docker-compose) to verify cross-node command routing to the owner
+  and live kill-node failover takeover (the ownership *lease* itself is already covered by
+  `TableOwnershipRedisIT`).
+- Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---
 
