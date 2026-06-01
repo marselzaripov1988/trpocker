@@ -52,6 +52,8 @@ class TournamentStartServiceTest {
     @Mock
     private TournamentTimingService timingService;
     @Mock
+    private com.truholdem.service.cluster.TableOwnershipService ownership;
+    @Mock
     private ScheduledFuture<?> scheduledFuture;
 
     private TournamentStartService tournamentStartService;
@@ -63,6 +65,8 @@ class TournamentStartServiceTest {
         when(tableRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
         doReturn(scheduledFuture).when(taskScheduler)
                 .scheduleAtFixedRate(any(Runnable.class), any(), any());
+        when(ownership.acquire(any())).thenReturn(true);
+        lenient().when(ownership.isOwner(any())).thenReturn(true);
 
         tournamentStartService = new TournamentStartService(
                 tournamentRepository,
@@ -71,7 +75,8 @@ class TournamentStartServiceTest {
                 eventPublisher,
                 taskScheduler,
                 appProperties,
-                timingService);
+                timingService,
+                ownership);
     }
 
     @Test
@@ -114,7 +119,8 @@ class TournamentStartServiceTest {
                 eventPublisher,
                 taskScheduler,
                 appProperties,
-                timingService);
+                timingService,
+                ownership);
         when(tournamentProperties.getAsyncStartThreshold()).thenReturn(100);
         assertThat(service.shouldStartAsynchronously(99)).isFalse();
         assertThat(service.shouldStartAsynchronously(100)).isTrue();

@@ -40,6 +40,9 @@ class GameHandLifecycleServiceTest {
     @Mock
     private ScheduledFuture<Object> scheduledFuture;
 
+    @Mock
+    private com.truholdem.service.cluster.TableOwnershipService ownership;
+
     private GameHandLifecycleService service;
 
     @BeforeEach
@@ -49,7 +52,9 @@ class GameHandLifecycleServiceTest {
                 .schedule(any(Runnable.class), any(Instant.class));
         lenient().when(appProperties.getGame()).thenReturn(gameProperties);
         lenient().when(gameProperties.getHandResultDelaySeconds()).thenReturn(3);
-        service = new GameHandLifecycleService(taskScheduler, appProperties, pokerGameService);
+        lenient().when(ownership.acquire(any())).thenReturn(true);
+        lenient().when(ownership.isOwner(any())).thenReturn(true);
+        service = new GameHandLifecycleService(taskScheduler, appProperties, pokerGameService, ownership);
     }
 
     @Test
@@ -69,6 +74,18 @@ class GameHandLifecycleServiceTest {
 
         verify(pokerGameService).transitionCompletedHandToResultDelay(gameId, completed.getHandNumber());
         verify(pokerGameService).startNextHandFromLifecycle(gameId, completed.getHandNumber());
+    }
+
+    @Test
+    @DisplayName("Should not schedule when this node does not own the table")
+    void shouldNotScheduleWhenNotOwner() {
+        UUID gameId = UUID.randomUUID();
+        Game completed = game(gameId, HandLifecycleState.HAND_COMPLETED);
+        when(ownership.acquire(gameId)).thenReturn(false);
+
+        service.scheduleAfterHandCompleted(completed);
+
+        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
     }
 
     @Test
