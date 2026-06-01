@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <changeSet id="13-game-event-log" author="truholdem">
+        <createTable tableName="game_event_log">
+            <column name="seq_no" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="event_id" type="UUID">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="game_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="hand_number" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="CLOB">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="game_event_log" indexName="idx_game_event_log_game">
+            <column name="game_id"/>
+        </createIndex>
+        <createIndex tableName="game_event_log" indexName="idx_game_event_log_game_hand">
+            <column name="game_id"/>
+            <column name="hand_number"/>
+            <column name="seq_no"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
