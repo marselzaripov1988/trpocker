@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      'value' is a reserved word in H2 (used for the test schema via Hibernate ddl-auto), which broke
+      full-context integration tests. Rename hand_history_board.value -> card_value to match the
+      convention already used by model.Card (card_value) and the hole_card*_value columns.
+    -->
+    <changeSet id="14-rename-hand-history-board-value" author="truholdem">
+        <renameColumn tableName="hand_history_board"
+                      oldColumnName="value"
+                      newColumnName="card_value"
+                      columnDataType="VARCHAR(20)"/>
+    </changeSet>
+
+</databaseChangeLog>

@@ -18,5 +18,6 @@
     <include file="db/changelog/11-pyramid-tournament.xml"/>
     <include file="db/changelog/12-hand-lifecycle-state.xml"/>
     <include file="db/changelog/13-game-event-log.xml"/>
+    <include file="db/changelog/14-rename-hand-history-board-value.xml"/>
 
 </databaseChangeLog>

@@ -207,7 +207,7 @@ public class HandHistory {
     }
 
     @Embeddable
-    public record CardRecord(String suit, String value) {
+    public record CardRecord(String suit, @Column(name = "card_value") String value) {
         public CardRecord() {
             this(null, null);
         }
