@@ -82,8 +82,9 @@ public class SecurityConfig {
                 // WebSocket handshake - allow, actual messages secured via token
                 .requestMatchers("/ws/**").permitAll()
 
-                // Poker game endpoints - allow guest play
-                .requestMatchers("/poker/**").permitAll()
+                // Legacy poker game endpoints - require authentication; each action
+                // additionally enforces player/seat ownership in LegacyPokerController.
+                .requestMatchers("/poker/**").authenticated()
 
                 // Lobby for quick play - allow guests
                 .requestMatchers("/lobby/**").permitAll()

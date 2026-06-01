@@ -10,7 +10,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -45,13 +47,23 @@ public class LegacyPokerController {
 
     @PostMapping("/start")
     @Operation(summary = "Start a new game", description = "Creates a new poker game with the provided players")
-    public ResponseEntity<JsonNode> startGame(@RequestBody List<PlayerInfo> playersInfo) {
-        logger.info("Starting new game with {} players", playersInfo.size());
+    public ResponseEntity<JsonNode> startGame(@RequestBody List<PlayerInfo> playersInfo,
+                                              @AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-        
         if (playersInfo == null || playersInfo.isEmpty()) {
             playersInfo = createDefaultPlayers();
         }
+
+        logger.info("Starting new game for user {} with {} players",
+                currentUser.getUsername(), playersInfo.size());
+
+        // Tie the human seat to the authenticated user so the ownership checks on
+        // subsequent actions succeed. Both engine paths map a non-bot
+        // PlayerInfo.playerId onto the player's userId.
+        assignOwnerToHumanSeat(playersInfo, currentUser.getId());
 
         Game game = pokerGameService.createNewGame(playersInfo);
         currentGameId = game.getId();
@@ -77,6 +89,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
+        authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
             pokerGameService.playerAct(currentGameId, playerId, PlayerAction.FOLD, 0);
@@ -93,6 +106,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
+        authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
             pokerGameService.playerAct(currentGameId, playerId, PlayerAction.CHECK, 0);
@@ -109,6 +123,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
+        authorizationService.validatePlayerAction(currentGameId, playerId);
 
         try {
             pokerGameService.playerAct(currentGameId, playerId, PlayerAction.CALL, 0);
@@ -125,6 +140,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
+        authorizationService.validatePlayerAction(currentGameId, request.getPlayerId());
 
         try {
             Game game = pokerGameService.getGame(currentGameId).orElseThrow();
@@ -144,6 +160,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body("No active game");
         }
+        authorizationService.validatePlayerAction(currentGameId, request.getPlayerId());
 
         try {
             pokerGameService.playerAct(currentGameId, request.getPlayerId(), PlayerAction.RAISE, request.getAmount());
@@ -160,6 +177,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().build();
         }
+        authorizationService.validateBotAction(currentGameId, botId);
 
         try {
             Game game = pokerGameService.executeBotAction(currentGameId, botId);
@@ -176,6 +194,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().body(Map.of("message", "No active game"));
         }
+        authorizationService.validateNewHandAction(currentGameId);
 
         try {
             Game game = pokerGameService.getGame(currentGameId).orElseThrow();
@@ -209,6 +228,7 @@ public class LegacyPokerController {
         if (currentGameId == null) {
             return ResponseEntity.badRequest().build();
         }
+        authorizationService.validateNewHandAction(currentGameId);
 
         try {
             Game game = pokerGameService.startNewHand(currentGameId);
@@ -239,6 +259,21 @@ public class LegacyPokerController {
     }
 
     
+
+    /**
+     * Assigns the authenticated user's id to the first human (non-bot) seat that
+     * does not already carry an explicit id. The engine maps a non-bot
+     * PlayerInfo.playerId onto the player's userId, which is what the per-action
+     * ownership checks in {@link GameAuthorizationService} validate against.
+     */
+    private void assignOwnerToHumanSeat(List<PlayerInfo> playersInfo, UUID ownerId) {
+        for (PlayerInfo info : playersInfo) {
+            if (!info.isBot() && info.getPlayerId() == null) {
+                info.setPlayerId(ownerId);
+                break;
+            }
+        }
+    }
 
     private List<PlayerInfo> createDefaultPlayers() {
         List<PlayerInfo> players = new ArrayList<>();
