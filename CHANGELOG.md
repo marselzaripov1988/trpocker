@@ -5,6 +5,27 @@ All notable changes to TruHoldem will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🏗️ Architecture — Engine migration Phase 2 (single-writer per table)
+- **`TableCommandDispatcher`**: every mutation for a table (`gameId`) is now serialized on a
+  per-game command chain running over a shared bounded thread pool (no thread-per-table — scales
+  to thousands of tables). Player actions, bot actions, turn timeouts and hand-lifecycle
+  transitions all funnel through the same queue, eliminating the action-vs-timeout interleave and
+  the `@Version` lost-update race on a single node.
+- **`commandId` idempotency**: a per-table bounded TTL cache replays the recorded result/exception
+  for a duplicate command, so a double-click or a duplicate WebSocket frame is applied exactly
+  once. The id is supplied by the client (`X-Command-Id` header on REST, `commandId` field on the
+  WS payload; the Angular `PokerService`/`WebSocketService` reuse the id across retries of the same
+  action) and generated server-side when absent.
+- **Feature flag** `app.game.single-writer-enabled` (default **off** → legacy lock-free path) gates
+  the whole mechanism for fast rollback.
+
+### 🧪 Testing
+- `TableCommandDispatcherTest`: serialized no-lost-updates under concurrent load, parallelism across
+  tables, exactly-once idempotency, original-type exception propagation, re-entrancy safety.
+- `PokerGameService` routing test; frontend Jest specs for `X-Command-Id` send + retry reuse.
+
 ## [2.0.0] - 2024-12-16
 
 ### ✨ Features

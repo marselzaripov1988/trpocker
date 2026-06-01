@@ -466,8 +466,10 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–1 are done; Phase 3 is partially in place (domain
-> events + listeners exist). Next gap is Phase 2 (commandId/idempotency, single-writer).
+> **Status (current):** Phases 0–2 are done (single node); Phase 3 is partially in place
+> (domain events + listeners exist). Phase 2 added per-table single-writer serialization with
+> `commandId` idempotency behind `app.game.single-writer-enabled` (default off). Next gap is
+> Phase 4 (event log / snapshots).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -493,10 +495,21 @@ Each risky step is guarded by a feature flag for fast rollback.
 - Move the golden scenarios down to fast, Spring-free unit tests on the aggregate.
 - **Exit:** hand logic is testable in isolation; `PokerGameService` shrinks to orchestration.
 
-### Phase 2 — Commands, idempotency, single-writer per table ❌ not started
-- Introduce `GameCommand` with a `commandId`; idempotent handling kills double-clicks / duplicate WS.
-- Serialize processing per `tableId` (actor / single-thread owner); timers post commands to that queue.
-- **Exit:** no races on a single node; concurrent-action load test on one table passes.
+### Phase 2 — Commands, idempotency, single-writer per table ✅ done (single node)
+- ✅ `TableCommandDispatcher` serializes every mutation per `tableId` on a per-game chain over a
+  shared bounded pool (no thread-per-table; scales to thousands of tables). Player actions, bot
+  actions, turn timeouts and hand-lifecycle transitions all funnel through the same queue, so the
+  action-vs-timeout interleave and the `@Version` lost-update race cannot occur on one node.
+- ✅ `commandId` idempotency: a per-table bounded TTL cache replays the recorded result/exception
+  for a duplicate id, so a double-click or a duplicate WebSocket frame applies exactly once. The id
+  flows from the client (`X-Command-Id` header on REST, `commandId` on the WS payload; the Angular
+  services reuse the id across retries of the same action) and is server-generated when absent.
+- Gated by `app.game.single-writer-enabled` (default **off** → legacy lock-free path) for rollback.
+- **Exit:** ✅ no races on a single node; `TableCommandDispatcherTest` proves serialized
+  no-lost-updates under concurrent load + exactly-once idempotency.
+- **Follow-up (Phase 3+):** async-Postgres writes for one game may still land out of order on the
+  shared persist pool; harmless today because Redis hot-state is authoritative, but worth ordering
+  per table when the event log lands.
 
 ### Phase 3 — Domain events & read projections (CQRS) 🚧 partial
 - ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`;
@@ -536,6 +549,7 @@ properties and can be staged as traffic grows.
 - [x] Short all-in support per official rules
 - [x] Advanced bot AI with all-in handling
 - [x] Dark theme raise modal
+- [x] Per-table single-writer engine + `commandId` idempotency (migration Phase 2, single node)
 
 ### Planned
 - [ ] Mobile-responsive redesign
