@@ -1,14 +1,10 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
+import SockJS from 'sockjs-client';
+import { Stomp } from '@stomp/stompjs';
 import { AuthService } from './auth.service';
 import { Game } from '../model/game';
 import { environment } from '../../environments/environment';
-
-// External globals from SockJS/STOMP libraries - type definitions not available
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const SockJS: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-declare const Stomp: any;
 
 
 

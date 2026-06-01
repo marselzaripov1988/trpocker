@@ -1,7 +1,14 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import SockJSModule from 'sockjs-client';
+import { Stomp } from '@stomp/stompjs';
 import { WebSocketService, GameUpdateMessage, PlayerActionMessage } from './websocket.service';
 import { AuthService } from './auth.service';
 import { BehaviorSubject } from 'rxjs';
+
+// Replace the real SockJS/STOMP libraries with mocks so the service can be
+// tested without a live WebSocket connection.
+jest.mock('sockjs-client', () => jest.fn().mockImplementation(() => ({})));
+jest.mock('@stomp/stompjs', () => ({ Stomp: { over: jest.fn() } }));
 
 interface MockStompClient {
   connect: jest.Mock;
@@ -25,13 +32,8 @@ const mockStompClient: MockStompClient = {
   }
 };
 
-const mockSockJS = jest.fn().mockImplementation(() => ({}));
-
-
-(global as typeof globalThis & { SockJS: unknown; Stomp: unknown }).SockJS = mockSockJS;
-(global as typeof globalThis & { SockJS: unknown; Stomp: unknown }).Stomp = {
-  over: jest.fn().mockReturnValue(mockStompClient)
-};
+const mockSockJS = SockJSModule as unknown as jest.Mock;
+const mockStompOver = Stomp.over as jest.Mock;
 
 describe('WebSocketService', () => {
   let service: WebSocketService;
@@ -40,6 +42,8 @@ describe('WebSocketService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSockJS.mockImplementation(() => ({}));
+    mockStompOver.mockReturnValue(mockStompClient);
     mockStompClient.connected = false;
 
     isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
