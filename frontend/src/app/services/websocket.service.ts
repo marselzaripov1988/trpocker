@@ -34,6 +34,8 @@ export interface PlayerActionMessage {
   amount: number;
   remainingChips?: number;
   currentBet?: number;
+  /** Idempotency key; a duplicate frame with the same id is applied once by the backend. */
+  commandId?: string;
 }
 
 export interface ReconnectRequest {
@@ -80,7 +82,16 @@ const RECONNECT_CONFIG = {
 })
 export class WebSocketService {
   private readonly authService = inject(AuthService);
-  
+
+  /** Generate a commandId for idempotent player actions (falls back when crypto is unavailable). */
+  static newCommandId(): string {
+    const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+    if (c?.randomUUID) {
+      return c.randomUUID();
+    }
+    return `cmd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   
   private readonly WEBSOCKET_URL = environment.wsUrl || 'http://localhost:8080/ws';
   
@@ -640,12 +651,16 @@ export class WebSocketService {
     }
 
     try {
+      const payload: PlayerActionMessage = {
+        ...action,
+        commandId: action.commandId ?? WebSocketService.newCommandId()
+      };
       this.stompClient.send(
         `/app/game/${gameId}/action`,
         {},
-        JSON.stringify(action)
+        JSON.stringify(payload)
       );
-      console.log('[WebSocket] Player action sent:', action);
+      console.log('[WebSocket] Player action sent:', payload);
     } catch (error: unknown) {
       console.error('[WebSocket] Failed to send player action:', error);
       this.errorSubject.next('Failed to send player action');

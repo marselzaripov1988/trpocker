@@ -329,6 +329,51 @@ describe('PokerService', () => {
     });
   });
 
+  describe('Command idempotency (commandId)', () => {
+    it('sends an X-Command-Id header on fold', () => {
+      service.fold('p1').subscribe();
+
+      const req = httpMock.expectOne(`${apiUrl}/fold?playerId=p1`);
+      expect(req.request.headers.has('X-Command-Id')).toBe(true);
+      expect(req.request.headers.get('X-Command-Id')).toBeTruthy();
+      req.flush('Fold successful');
+      httpMock.expectOne(`${apiUrl}/status`).flush({});
+    });
+
+    it('sends an X-Command-Id header on bet', () => {
+      service.bet('p1', 50).subscribe();
+
+      const req = httpMock.expectOne(`${apiUrl}/bet`);
+      expect(req.request.headers.has('X-Command-Id')).toBe(true);
+      req.flush('Bet successful');
+      httpMock.expectOne(`${apiUrl}/status`).flush({});
+    });
+
+    it('reuses the same commandId for a double-clicked action, then a fresh id once it settles', () => {
+      const playerId = 'player-123';
+
+      // Two clicks before the first request resolves → same idempotency key.
+      service.fold(playerId).subscribe();
+      service.fold(playerId).subscribe();
+
+      const pending = httpMock.match(`${apiUrl}/fold?playerId=${playerId}`);
+      expect(pending.length).toBe(2);
+      const firstId = pending[0].request.headers.get('X-Command-Id');
+      expect(firstId).toBeTruthy();
+      expect(pending[1].request.headers.get('X-Command-Id')).toBe(firstId);
+
+      pending.forEach((r) => r.flush('Fold successful'));
+      httpMock.match(`${apiUrl}/status`).forEach((r) => r.flush({}));
+
+      // A new action after the previous one settled gets a different id.
+      service.fold(playerId).subscribe();
+      const next = httpMock.expectOne(`${apiUrl}/fold?playerId=${playerId}`);
+      expect(next.request.headers.get('X-Command-Id')).not.toBe(firstId);
+      next.flush('Fold successful');
+      httpMock.expectOne(`${apiUrl}/status`).flush({});
+    });
+  });
+
   describe('Error Handling', () => {
     it('should handle HTTP errors gracefully', () => {
       service.getGameStatus().subscribe({

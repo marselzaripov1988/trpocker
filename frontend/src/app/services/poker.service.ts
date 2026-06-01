@@ -36,6 +36,35 @@ export class PokerService {
   private readonly gameState = inject(GameStateService);
   private readonly apiUrl = `${environment.apiUrl}/poker`;
 
+  /**
+   * In-flight idempotency keys per logical action (e.g. "fold:p1"). A rapid double-click or retry
+   * of the same action reuses the same commandId so the backend applies it exactly once; the id is
+   * released once the request settles, so the next genuine action gets a fresh id.
+   */
+  private readonly pendingCommandIds = new Map<string, string>();
+
+  private commandIdFor(key: string): string {
+    const existing = this.pendingCommandIds.get(key);
+    if (existing) {
+      return existing;
+    }
+    const id = PokerService.newCommandId();
+    this.pendingCommandIds.set(key, id);
+    return id;
+  }
+
+  private releaseCommandId(key: string): void {
+    this.pendingCommandIds.delete(key);
+  }
+
+  private static newCommandId(): string {
+    const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+    if (c?.randomUUID) {
+      return c.randomUUID();
+    }
+    return `cmd-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   
   
   
@@ -118,8 +147,10 @@ export class PokerService {
   
   fold(playerId: string): Observable<string> {
     const player = this.gameState.getPlayerById(playerId);
-    
-    return this.performAction('fold', { playerId }).pipe(
+    const key = `fold:${playerId}`;
+
+    return this.performAction('fold', { playerId }, this.commandIdFor(key)).pipe(
+      finalize(() => this.releaseCommandId(key)),
       tap(() => {
         if (player) {
           this.gameState.recordAction('FOLD', playerId, player.name);
@@ -129,11 +160,13 @@ export class PokerService {
     );
   }
 
-  
+
   check(playerId: string): Observable<string> {
     const player = this.gameState.getPlayerById(playerId);
-    
-    return this.performAction('check', { playerId }).pipe(
+    const key = `check:${playerId}`;
+
+    return this.performAction('check', { playerId }, this.commandIdFor(key)).pipe(
+      finalize(() => this.releaseCommandId(key)),
       tap(() => {
         if (player) {
           this.gameState.recordAction('CHECK', playerId, player.name);
@@ -143,12 +176,14 @@ export class PokerService {
     );
   }
 
-  
+
   call(playerId: string): Observable<string> {
     const player = this.gameState.getPlayerById(playerId);
     const callAmount = this.gameState.callAmount();
-    
-    return this.performAction('call', { playerId }).pipe(
+    const key = `call:${playerId}`;
+
+    return this.performAction('call', { playerId }, this.commandIdFor(key)).pipe(
+      finalize(() => this.releaseCommandId(key)),
       tap(() => {
         if (player) {
           this.gameState.recordAction('CALL', playerId, player.name, callAmount);
@@ -158,15 +193,17 @@ export class PokerService {
     );
   }
 
-  
+
   bet(playerId: string, amount: number): Observable<string> {
     const player = this.gameState.getPlayerById(playerId);
-    
+    const key = `bet:${playerId}`;
+
     return this.http.post(
-      `${this.apiUrl}/bet`, 
-      { playerId, amount }, 
-      { responseType: 'text' }
+      `${this.apiUrl}/bet`,
+      { playerId, amount },
+      { responseType: 'text', headers: { 'X-Command-Id': this.commandIdFor(key) } }
     ).pipe(
+      finalize(() => this.releaseCommandId(key)),
       tap(() => {
         if (player) {
           this.gameState.recordAction('BET', playerId, player.name, amount);
@@ -177,15 +214,17 @@ export class PokerService {
     );
   }
 
-  
+
   raise(playerId: string, amount: number): Observable<string> {
     const player = this.gameState.getPlayerById(playerId);
-    
+    const key = `raise:${playerId}`;
+
     return this.http.post(
-      `${this.apiUrl}/raise`, 
-      { playerId, amount }, 
-      { responseType: 'text' }
+      `${this.apiUrl}/raise`,
+      { playerId, amount },
+      { responseType: 'text', headers: { 'X-Command-Id': this.commandIdFor(key) } }
     ).pipe(
+      finalize(() => this.releaseCommandId(key)),
       tap(() => {
         if (player) {
           const isAllIn = amount >= ((player.chips ?? 0) + (player.betAmount ?? 0));
@@ -264,12 +303,19 @@ export class PokerService {
   
 
   
-  private performAction(action: string, params: Record<string, string>): Observable<string> {
+  private performAction(
+    action: string,
+    params: Record<string, string>,
+    commandId?: string
+  ): Observable<string> {
     const queryParams = new URLSearchParams(params).toString();
+    const options = commandId
+      ? { responseType: 'text' as const, headers: { 'X-Command-Id': commandId } }
+      : { responseType: 'text' as const };
     return this.http.post(
-      `${this.apiUrl}/${action}?${queryParams}`, 
-      null, 
-      { responseType: 'text' }
+      `${this.apiUrl}/${action}?${queryParams}`,
+      null,
+      options
     ).pipe(
       catchError(error => this.handleError(error))
     );

@@ -310,13 +310,15 @@ describe('WebSocketService', () => {
       service.subscribeToGame('game-123');
     }));
 
-    it('should send player action', () => {
+    it('should send player action (preserving a caller-supplied commandId)', () => {
       const action: PlayerActionMessage = {
         playerId: 'player-1',
         action: 'FOLD',
-        amount: 0
+        amount: 0,
+        commandId: 'fixed-command-id'
       };
 
+      mockStompClient.send.mockClear();
       service.sendPlayerAction(action);
 
       expect(mockStompClient.send).toHaveBeenCalledWith(
@@ -324,6 +326,16 @@ describe('WebSocketService', () => {
         {},
         JSON.stringify(action)
       );
+    });
+
+    it('attaches a generated commandId when the caller omits one', () => {
+      mockStompClient.send.mockClear();
+      service.sendPlayerAction({ playerId: 'player-1', action: 'CALL', amount: 0 });
+
+      expect(mockStompClient.send).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(mockStompClient.send.mock.calls[0][2]);
+      expect(body.playerId).toBe('player-1');
+      expect(body.commandId).toBeTruthy();
     });
 
     it('should not send action when not connected', () => {
