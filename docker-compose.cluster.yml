@@ -1,0 +1,159 @@
+# Runnable two-node TruHoldem cluster for Phase 5 (clustering & scale).
+#
+# Topology: nginx LB → { backend1, backend2 } → shared Postgres + Redis.
+# All Phase 5 cluster features are enabled (per-table ownership, cross-node HTTP routing, failover
+# takeover, fencing tokens). The same image is run twice; each node gets a distinct instance id (its
+# hostname) and a peer-reachable base URL so the other node can forward actions to it.
+#
+#   docker compose -f docker-compose.cluster.yml up --build
+#   open http://localhost:8090/api/actuator/health   (via the load balancer)
+#   open http://localhost:4200                        (frontend → LB)
+#
+# See docs/cluster.md for a guided run + failover verification.
+name: truholdem-cluster
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: truholdem-cluster-postgres
+    environment:
+      POSTGRES_DB: truholdem
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - cluster_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d truholdem"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - truholdem-cluster-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: truholdem-cluster-redis
+    volumes:
+      - cluster_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - truholdem-cluster-net
+
+  backend1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: truholdem-cluster-backend:latest   # built once, reused by backend2
+    container_name: truholdem-node-1
+    hostname: truholdem-node-1            # → app.websocket.cluster.instance-id (from $HOSTNAME)
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_USERNAME: user
+      DB_PASSWORD: password
+      REDIS_HOST: redis
+      JWT_SECRET: your-super-secret-jwt-key-that-should-be-very-long-and-secure-in-production
+      OTEL_ENABLED: "false"
+      # The dev cluster uses Hibernate-managed schema (the Liquibase changelogs have a pre-existing
+      # duplicate-changeset issue, tracked separately). node 1 creates/updates the shared schema; node 2
+      # waits for it (depends_on healthy) and then just updates idempotently.
+      SPRING_LIQUIBASE_ENABLED: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # --- Phase 5 clustering ---
+      WEBSOCKET_CLUSTER_ENABLED: "true"
+      CLUSTER_OWNERSHIP_ENABLED: "true"
+      CLUSTER_ROUTING_ENABLED: "true"
+      CLUSTER_TAKEOVER_ENABLED: "true"
+      CLUSTER_FENCING_ENABLED: "true"
+      CLUSTER_FAIL_CLOSED: "false"
+      CLUSTER_SHARED_SECRET: cluster-shared-secret-change-me
+      CLUSTER_NODE_BASE_URL: http://backend1:8080/api   # peer-reachable URL incl. context-path
+      CORS_ORIGINS: http://localhost:8090,http://localhost:4200
+      WEBSOCKET_ORIGINS: http://localhost:8090,http://localhost:4200
+    ports:
+      - "8081:8080"   # direct access to node 1 (debugging)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - truholdem-cluster-net
+
+  backend2:
+    image: truholdem-cluster-backend:latest   # reuse the image built by backend1
+    container_name: truholdem-node-2
+    hostname: truholdem-node-2
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_USERNAME: user
+      DB_PASSWORD: password
+      REDIS_HOST: redis
+      JWT_SECRET: your-super-secret-jwt-key-that-should-be-very-long-and-secure-in-production
+      OTEL_ENABLED: "false"
+      SPRING_LIQUIBASE_ENABLED: "false"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      WEBSOCKET_CLUSTER_ENABLED: "true"
+      CLUSTER_OWNERSHIP_ENABLED: "true"
+      CLUSTER_ROUTING_ENABLED: "true"
+      CLUSTER_TAKEOVER_ENABLED: "true"
+      CLUSTER_FENCING_ENABLED: "true"
+      CLUSTER_FAIL_CLOSED: "false"
+      CLUSTER_SHARED_SECRET: cluster-shared-secret-change-me
+      CLUSTER_NODE_BASE_URL: http://backend2:8080/api
+      CORS_ORIGINS: http://localhost:8090,http://localhost:4200
+      WEBSOCKET_ORIGINS: http://localhost:8090,http://localhost:4200
+    ports:
+      - "8082:8080"   # direct access to node 2 (debugging)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend1:
+        condition: service_healthy   # let node 1 run Liquibase first; node 2 then validates the schema
+    networks:
+      - truholdem-cluster-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: truholdem-cluster-lb
+    volumes:
+      - ./docker/nginx/cluster.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8090:80"     # the cluster entry point (REST + WebSocket); 8090 avoids clashing with the
+                      # single-node docker-compose.yml backend on 8080
+
+    depends_on:
+      backend1:
+        condition: service_healthy
+      backend2:
+        condition: service_healthy
+    networks:
+      - truholdem-cluster-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_URL: http://localhost:8090/api   # talks to the cluster through the LB
+    container_name: truholdem-cluster-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - nginx
+    networks:
+      - truholdem-cluster-net
+
+volumes:
+  cluster_postgres_data:
+  cluster_redis_data:
+
+networks:
+  truholdem-cluster-net:
+    driver: bridge

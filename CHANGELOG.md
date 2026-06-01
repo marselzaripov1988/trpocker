@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚀 Ops — Runnable two-node cluster (Phase 5)
+- `docker-compose.cluster.yml`: two backend nodes behind an nginx load balancer on a shared Postgres +
+  Redis, with all Phase 5 flags on (ownership, cross-node routing, failover takeover, fencing, ws-cluster).
+  Each node gets a distinct instance id (its hostname) and a peer-reachable `CLUSTER_NODE_BASE_URL`; node 1
+  runs Liquibase first, node 2 waits for it. Entry point http://localhost:8080 (LB); nodes also on 8081/8082.
+- `docker/nginx/cluster.conf`: `ip_hash` stickiness (keeps a client's WebSocket + REST on one node),
+  SockJS/STOMP upgrade proxying, long read/send timeouts, and a 403 on `/api/internal/**` so the
+  node-to-node endpoints are never reachable from clients via the LB.
+- `docs/cluster.md`: guided run + failover verification (inspect leases / node registry / active-table set
+  / fencing tokens in Redis; observe cross-node forwarding; kill a node and watch the survivor take over).
+- Verified end-to-end on Docker: both nodes boot on shared Postgres + Redis, register in the node registry
+  (`truholdem:cluster:node:*`), the nginx LB (host **8090**, to coexist with the single-node compose on 8080)
+  serves `/api/actuator/health`, and `/api/internal/**` is blocked (403) at the LB.
+
+### 🐛 Fixes
+- `db/changelog/10-tournament-scale-phase1.xml` used the wrong XSI namespace
+  (`http://www.w3.org/2003/XMLSchema-instance` instead of `…/2001/…`), so Liquibase could not resolve the
+  schema and failed to parse the changelog (`Cannot find the declaration of element 'databaseChangeLog'`).
+  Corrected to `2001`. (Note: the dev cluster compose uses Hibernate-managed schema — `ddl-auto=update`,
+  Liquibase disabled — because the changelogs additionally have a duplicate `hand_histories` create across
+  `04`/`05` that is tracked as a separate fix.)
+
 ### 🏗️ Architecture — Engine migration Phase 5 (fencing tokens)
 - Optional fencing tokens (`app.cluster.fencing-enabled`, default off, requires ownership + hot-state) to
   stop a stale former owner from clobbering state after a lease handoff (e.g. a long GC pause during which

@@ -608,6 +608,11 @@ Each risky step is guarded by a feature flag for fast rollback.
   another node took over — cannot wake up and clobber the new owner's state; its stale write is fenced
   out at the store. (Postgres is independently guarded by the `@Version` optimistic lock; Redis is the
   authoritative copy.)
+- ✅ **Runnable cluster**: `docker-compose.cluster.yml` boots two nodes behind an nginx load balancer on a
+  shared Postgres + Redis with all the above flags on (`docker compose -f docker-compose.cluster.yml up
+  --build` → http://localhost:8090). nginx uses `ip_hash` stickiness, proxies the WebSocket upgrade, and
+  blocks `/api/internal/**` from clients. See **[docs/cluster.md](docs/cluster.md)** for a guided run +
+  failover verification (inspecting leases, the node registry, fencing tokens, and a kill-node takeover).
 - 🚧 Remaining: recovery of the narrow transient `NEXT_HAND` crash window (state persisted but the
   synchronous next-hand deal interrupted mid-flight).
 - **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; ✅ cross-node
