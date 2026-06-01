@@ -414,11 +414,11 @@ following actionable items, ordered by impact. File references use `path:line`.
 
 | Area | Finding | Location |
 |------|---------|----------|
-| Card leakage | Full `deck` and every player's hole cards are serialized in REST/WebSocket payloads (raw `model.Game`, no `@JsonIgnore`/DTO). | `model/Game.java:79-82`, `model/Player.java:26-29`, `GameNotificationService.java:33-44` |
-| Auth bypass | `/poker/**` is `permitAll`; `LegacyPokerController` performs game actions with no auth/ownership check. | `config/SecurityConfig.java:85-86`, `controller/LegacyPokerController.java:60-68` |
-| Weak JWT default | `app.jwt.secret` falls back to a hardcoded value long enough to pass validation, so prod can boot with a public secret. | `application.properties:49` |
-| Error handling | Prod `GlobalExceptionHandler` lacks auth handlers (auth errors → 500); a duplicate `@RestControllerAdvice` with the same FQCN lives under `src/test`. | `exception/GlobalExceptionHandler.java`, `test/.../controller/GlobalExceptionHandler.java` |
-| WebSocket broken | SockJS/STOMP used as globals but not bundled (no deps in `package.json`, no script tags). | `services/websocket.service.ts:188-189`, `package.json` |
+| Card leakage | ✅ **Fixed.** Deck is `@JsonIgnore` and responses go through a viewer-aware `HoleCardSanitizer` (see Engine Migration status). | `model/Game.java`, `service/HoleCardSanitizer.java` |
+| Auth bypass | ✅ **Fixed.** `/poker/**` now requires authentication and `LegacyPokerController` validates seat/bot ownership via `GameAuthorizationService` on every action (the `/start` human seat is bound to the caller's user id). | `config/SecurityConfig.java`, `controller/LegacyPokerController.java` |
+| Weak JWT default | ✅ **Fixed.** The `prod` profile sets `app.jwt.secret=${JWT_SECRET}` with no fallback, so production fails fast at startup if `JWT_SECRET` is unset. The insecure default remains only for dev/test. | `application-prod.properties` |
+| Error handling | ✅ **Fixed.** Prod `GlobalExceptionHandler` now maps `AccessDeniedException`→403 and `AuthenticationException`→401. (No `src/test` duplicate advice exists anymore.) | `exception/GlobalExceptionHandler.java` |
+| WebSocket broken | ✅ **Fixed.** `sockjs-client` / `@stomp/stompjs` are declared in `package.json` and imported as real modules (no more undefined globals); `esModuleInterop` unified across build/test tsconfig. | `services/websocket.service.ts`, `frontend/package.json` |
 
 ### High — architecture & consistency
 
@@ -444,12 +444,17 @@ following actionable items, ordered by impact. File references use `path:line`.
 
 ### Suggested fix order
 
-1. Stop card/deck leakage (player-scoped DTOs / `@JsonView`).
-2. Lock down or remove the unauthenticated legacy game API; fail startup without `JWT_SECRET` in prod.
-3. Merge auth handlers into the prod exception handler; delete the test-side duplicate.
-4. Bundle SockJS/STOMP so WebSocket works at runtime.
+1. ✅ Stop card/deck leakage (player-scoped DTOs / `@JsonView`).
+2. ✅ Lock down or remove the unauthenticated legacy game API; fail startup without `JWT_SECRET` in prod.
+3. ✅ Merge auth handlers into the prod exception handler; delete the test-side duplicate.
+4. ✅ Bundle SockJS/STOMP so WebSocket works at runtime.
 5. Decide on a single game model and remove the dead DDD/event path.
 6. Frontend: dedupe turn-timer/bot logic, fix polling stacking, move `_ngcontent` CSS into component styles.
+
+> **Note (June 2026):** Items 1–4 are done. A residual limitation remains on the legacy
+> `/poker/**` API: `LegacyPokerController` still tracks a single shared `currentGameId` field, so
+> it supports one game at a time per backend instance. Per-session isolation (or migrating the
+> frontend onto the authenticated `/game` API, item 5) is the recommended next step.
 
 ---
 
