@@ -2,10 +2,21 @@ package com.truholdem.architecture;
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
+import java.util.HashSet;
+import java.util.Set;
 import com.tngtech.archunit.library.Architectures;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 import org.junit.jupiter.api.BeforeAll;
@@ -748,6 +759,78 @@ class ArchitectureTest {
                     .because("Listener classes should be in listener, application, or config packages");
 
             rule.check(importedClasses);
+        }
+    }
+
+    @Nested
+    @DisplayName("9. Controller Return Type Rules")
+    class ControllerReturnTypeRules {
+
+        @Test
+        @DisplayName("REST controllers must not expose model.* JPA entities in return types")
+        void controllersShouldNotReturnModelEntities() {
+            ArchRule rule = methods()
+                    .that().areDeclaredInClassesThat().areAnnotatedWith(RestController.class)
+                    .and().arePublic()
+                    .should(notExposeModelEntitiesInReturnType())
+                    .because("Controllers must return DTOs, not com.truholdem.model.* JPA entities, "
+                            + "to decouple the API from the persistence layer");
+
+            rule.check(importedClasses);
+        }
+
+        private ArchCondition<JavaMethod> notExposeModelEntitiesInReturnType() {
+            return new ArchCondition<>("not expose com.truholdem.model.* in the return type") {
+                @Override
+                public void check(JavaMethod method, ConditionEvents events) {
+                    Type returnType;
+                    try {
+                        returnType = method.reflect().getGenericReturnType();
+                    } catch (Throwable t) {
+                        return; // cannot reflect the method — skip rather than fail spuriously
+                    }
+                    String offending = findModelType(returnType, new HashSet<>());
+                    if (offending != null) {
+                        events.add(SimpleConditionEvent.violated(method,
+                                method.getFullName() + " exposes model entity " + offending
+                                        + " in its return type"));
+                    }
+                }
+            };
+        }
+
+        /** Recursively scan a (possibly generic) type for any com.truholdem.model.* class. */
+        private String findModelType(Type type, Set<Type> seen) {
+            if (type == null || !seen.add(type)) {
+                return null;
+            }
+            if (type instanceof Class<?> clazz) {
+                return clazz.getName().startsWith("com.truholdem.model.") ? clazz.getName() : null;
+            }
+            if (type instanceof ParameterizedType pt) {
+                String raw = findModelType(pt.getRawType(), seen);
+                if (raw != null) {
+                    return raw;
+                }
+                for (Type arg : pt.getActualTypeArguments()) {
+                    String found = findModelType(arg, seen);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+            if (type instanceof WildcardType wt) {
+                for (Type bound : wt.getUpperBounds()) {
+                    String found = findModelType(bound, seen);
+                    if (found != null) {
+                        return found;
+                    }
+                }
+            }
+            if (type instanceof GenericArrayType gat) {
+                return findModelType(gat.getGenericComponentType(), seen);
+            }
+            return null;
         }
     }
 }
