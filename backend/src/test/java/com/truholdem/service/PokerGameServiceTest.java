@@ -2,6 +2,7 @@ package com.truholdem.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -40,6 +41,7 @@ import com.truholdem.config.BotMode;
 import com.truholdem.config.GameEngine;
 import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.repository.GameRepository;
+import com.truholdem.domain.event.DomainEventPublisher;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.game.TableCommandDispatcher;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -95,6 +97,9 @@ class PokerGameServiceTest {
     @Mock
     private TableCommandDispatcher commandDispatcher;
 
+    @Mock
+    private DomainEventPublisher domainEventPublisher;
+
     private AppProperties.Game gameConfig;
 
     private PokerGameService pokerGameService;
@@ -143,6 +148,7 @@ class PokerGameServiceTest {
                 handLifecycleService,
                 new PokerGameMapper(),
                 commandDispatcher,
+                domainEventPublisher,
                 null); // single-writer disabled in these tests → self (proxy) is never used
     }
 
@@ -3213,6 +3219,23 @@ class PokerGameServiceTest {
 
             assertNotNull(updated.getCurrentPlayer());
             verify(gameStateService).afterPlayerAction(updated);
+        }
+
+        @Test
+        @DisplayName("playerAct publishes domain events and no longer records stats imperatively")
+        void playerActPublishesEventsInsteadOfImperativeStats() {
+            setupRepositorySaveToReturnArgument();
+            Game game = pokerGameService.createNewGame(createPlayerInfoList(2));
+            when(gameRepository.findById(game.getId())).thenReturn(Optional.of(game));
+            Player actor = game.getCurrentPlayer();
+
+            pokerGameService.playerAct(game.getId(), actor.getId(), PlayerAction.CALL, 0);
+
+            // Aggregate path now drives statistics through domain events (StatisticsEventListener),
+            // not direct imperative calls.
+            verify(domainEventPublisher, atLeastOnce()).publishAll(anyList());
+            verify(playerStatisticsService, never()).recordAction(any(), any());
+            verify(playerStatisticsService, never()).recordAllIn(any());
         }
     }
 }
