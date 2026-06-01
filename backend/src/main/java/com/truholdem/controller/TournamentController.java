@@ -5,8 +5,11 @@ import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.*;
 import com.truholdem.model.*;
 import com.truholdem.model.Game;
+import com.truholdem.service.GameAuthorizationService;
+import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.TournamentTableGameService;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,14 +45,25 @@ public class TournamentController {
     private final TournamentService tournamentService;
     private final TournamentTableGameService tableGameService;
     private final AppProperties appProperties;
+    private final HoleCardSanitizer holeCardSanitizer;
+    private final GameAuthorizationService authorizationService;
 
     public TournamentController(
             TournamentService tournamentService,
             TournamentTableGameService tableGameService,
-            AppProperties appProperties) {
+            AppProperties appProperties,
+            HoleCardSanitizer holeCardSanitizer,
+            GameAuthorizationService authorizationService) {
         this.tournamentService = tournamentService;
         this.tableGameService = tableGameService;
         this.appProperties = appProperties;
+        this.holeCardSanitizer = holeCardSanitizer;
+        this.authorizationService = authorizationService;
+    }
+
+    /** Viewer-aware sanitized projection of live game state (masks opponents' hole cards, drops deck). */
+    private JsonNode sanitized(Game game) {
+        return holeCardSanitizer.sanitize(game, authorizationService.resolveVisiblePlayerIds(game));
     }
 
     
@@ -241,12 +255,12 @@ public class TournamentController {
         @ApiResponse(responseCode = "404", description = "Tournament or table not found"),
         @ApiResponse(responseCode = "409", description = "Cannot start hand in current state")
     })
-    public ResponseEntity<Game> getOrStartTableHand(
+    public ResponseEntity<JsonNode> getOrStartTableHand(
             @PathVariable UUID id,
             @PathVariable UUID tableId) {
         log.debug("Get or start hand for tournament {} table {}", id, tableId);
         Game game = tableGameService.getOrStartTableHand(id, tableId);
-        return ResponseEntity.ok(game);
+        return ResponseEntity.ok(sanitized(game));
     }
 
     

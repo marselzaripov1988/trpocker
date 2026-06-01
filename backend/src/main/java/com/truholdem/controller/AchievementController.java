@@ -1,8 +1,9 @@
 package com.truholdem.controller;
 
 import com.truholdem.config.api.ApiV1Config;
+import com.truholdem.dto.AchievementResponse;
+import com.truholdem.dto.PlayerAchievementResponse;
 import com.truholdem.model.Achievement;
-import com.truholdem.model.PlayerAchievement;
 import com.truholdem.service.AchievementService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,8 +38,8 @@ public class AchievementController {
         description = "Retrieve all available achievements including hidden ones"
     )
     @ApiResponse(responseCode = "200", description = "Achievements retrieved successfully")
-    public ResponseEntity<List<Achievement>> getAllAchievements() {
-        return ResponseEntity.ok(achievementService.getAllAchievements());
+    public ResponseEntity<List<AchievementResponse>> getAllAchievements() {
+        return ResponseEntity.ok(toAchievementResponses(achievementService.getAllAchievements()));
     }
 
     @GetMapping("/visible")
@@ -47,8 +48,8 @@ public class AchievementController {
         description = "Retrieve all achievements excluding hidden/secret achievements"
     )
     @ApiResponse(responseCode = "200", description = "Visible achievements retrieved successfully")
-    public ResponseEntity<List<Achievement>> getVisibleAchievements() {
-        return ResponseEntity.ok(achievementService.getVisibleAchievements());
+    public ResponseEntity<List<AchievementResponse>> getVisibleAchievements() {
+        return ResponseEntity.ok(toAchievementResponses(achievementService.getVisibleAchievements()));
     }
 
     @GetMapping("/category/{category}")
@@ -57,10 +58,10 @@ public class AchievementController {
         description = "Retrieve achievements filtered by category (e.g., BEGINNER, EXPERT, SOCIAL)"
     )
     @ApiResponse(responseCode = "200", description = "Category achievements retrieved successfully")
-    public ResponseEntity<List<Achievement>> getByCategory(
+    public ResponseEntity<List<AchievementResponse>> getByCategory(
             @Parameter(description = "Achievement category", example = "EXPERT")
             @PathVariable String category) {
-        return ResponseEntity.ok(achievementService.getAchievementsByCategory(category));
+        return ResponseEntity.ok(toAchievementResponses(achievementService.getAchievementsByCategory(category)));
     }
 
     @GetMapping("/player/{playerName}")
@@ -69,9 +70,9 @@ public class AchievementController {
         description = "Retrieve all achievements that a player has earned"
     )
     @ApiResponse(responseCode = "200", description = "Player achievements retrieved successfully")
-    public ResponseEntity<List<PlayerAchievement>> getPlayerAchievements(
+    public ResponseEntity<List<PlayerAchievementResponse>> getPlayerAchievements(
             @Parameter(description = "Player username") @PathVariable String playerName) {
-        return ResponseEntity.ok(achievementService.getPlayerAchievements(playerName));
+        return ResponseEntity.ok(toPlayerAchievementResponses(achievementService.getPlayerAchievements(playerName)));
     }
 
     @GetMapping("/player/{playerName}/progress")
@@ -120,8 +121,8 @@ public class AchievementController {
         description = "Retrieve achievements that were recently unlocked by any player"
     )
     @ApiResponse(responseCode = "200", description = "Recent achievements retrieved successfully")
-    public ResponseEntity<List<PlayerAchievement>> getRecentUnlocks() {
-        return ResponseEntity.ok(achievementService.getRecentUnlocks());
+    public ResponseEntity<List<PlayerAchievementResponse>> getRecentUnlocks() {
+        return ResponseEntity.ok(toPlayerAchievementResponses(achievementService.getRecentUnlocks()));
     }
 
     @PostMapping("/check/{playerName}")
@@ -137,12 +138,20 @@ public class AchievementController {
         @ApiResponse(
             responseCode = "200",
             description = "Achievements checked successfully",
-            content = @Content(schema = @Schema(implementation = Achievement.class))
+            content = @Content(schema = @Schema(implementation = AchievementResponse.class))
         )
     })
-    public ResponseEntity<List<Achievement>> checkAchievements(
+    public ResponseEntity<List<AchievementResponse>> checkAchievements(
             @Parameter(description = "Player username") @PathVariable String playerName) {
-        List<Achievement> newlyUnlocked = achievementService.checkAndUnlockAchievements(playerName);
-        return ResponseEntity.ok(newlyUnlocked);
+        return ResponseEntity.ok(toAchievementResponses(achievementService.checkAndUnlockAchievements(playerName)));
+    }
+
+    private static List<AchievementResponse> toAchievementResponses(List<Achievement> achievements) {
+        return achievements.stream().map(AchievementResponse::from).toList();
+    }
+
+    private static List<PlayerAchievementResponse> toPlayerAchievementResponses(
+            List<com.truholdem.model.PlayerAchievement> playerAchievements) {
+        return playerAchievements.stream().map(PlayerAchievementResponse::from).toList();
     }
 }

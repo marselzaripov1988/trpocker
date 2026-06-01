@@ -2,7 +2,7 @@ package com.truholdem.controller;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.ErrorResponse;
-import com.truholdem.model.PlayerStatistics;
+import com.truholdem.dto.PlayerStatisticsResponse;
 import com.truholdem.service.PlayerStatisticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -30,7 +30,7 @@ public class StatisticsController {
         this.statsService = statsService;
     }
 
-    
+
 
     @GetMapping("/player/{playerName}")
     @Operation(
@@ -41,7 +41,7 @@ public class StatisticsController {
         @ApiResponse(
             responseCode = "200",
             description = "Statistics retrieved successfully",
-            content = @Content(schema = @Schema(implementation = PlayerStatistics.class))
+            content = @Content(schema = @Schema(implementation = PlayerStatisticsResponse.class))
         ),
         @ApiResponse(
             responseCode = "404",
@@ -49,9 +49,10 @@ public class StatisticsController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
-    public ResponseEntity<PlayerStatistics> getPlayerStats(
+    public ResponseEntity<PlayerStatisticsResponse> getPlayerStats(
             @Parameter(description = "Player username") @PathVariable String playerName) {
         return statsService.getStatsByName(playerName)
+            .map(PlayerStatisticsResponse::from)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -65,7 +66,7 @@ public class StatisticsController {
         @ApiResponse(
             responseCode = "200",
             description = "Statistics retrieved successfully",
-            content = @Content(schema = @Schema(implementation = PlayerStatistics.class))
+            content = @Content(schema = @Schema(implementation = PlayerStatisticsResponse.class))
         ),
         @ApiResponse(
             responseCode = "404",
@@ -73,9 +74,10 @@ public class StatisticsController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
-    public ResponseEntity<PlayerStatistics> getPlayerStatsByUserId(
+    public ResponseEntity<PlayerStatisticsResponse> getPlayerStatsByUserId(
             @Parameter(description = "User UUID") @PathVariable UUID userId) {
         return statsService.getStatsByUserId(userId)
+            .map(PlayerStatisticsResponse::from)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -104,14 +106,15 @@ public class StatisticsController {
         description = "Search for players whose username contains the query string"
     )
     @ApiResponse(responseCode = "200", description = "Search results returned")
-    public ResponseEntity<List<PlayerStatistics>> searchPlayers(
+    public ResponseEntity<List<PlayerStatisticsResponse>> searchPlayers(
             @Parameter(description = "Search query string", example = "john")
             @RequestParam String query) {
-        List<PlayerStatistics> results = statsService.searchPlayers(query);
+        List<PlayerStatisticsResponse> results = statsService.searchPlayers(query)
+            .stream().map(PlayerStatisticsResponse::from).toList();
         return ResponseEntity.ok(results);
     }
 
-    
+
 
     @GetMapping("/leaderboard")
     @Operation(
@@ -130,9 +133,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by total chips won"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getTopByWinnings() {
-        List<PlayerStatistics> top = statsService.getTopByWinnings();
-        return ResponseEntity.ok(top);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getTopByWinnings() {
+        return ResponseEntity.ok(toResponses(statsService.getTopByWinnings()));
     }
 
     @GetMapping("/leaderboard/hands-won")
@@ -141,9 +143,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by total number of hands won"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getTopByHandsWon() {
-        List<PlayerStatistics> top = statsService.getTopByHandsWon();
-        return ResponseEntity.ok(top);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getTopByHandsWon() {
+        return ResponseEntity.ok(toResponses(statsService.getTopByHandsWon()));
     }
 
     @GetMapping("/leaderboard/win-rate")
@@ -152,9 +153,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by win percentage (minimum hands required)"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getTopByWinRate() {
-        List<PlayerStatistics> top = statsService.getTopByWinRate();
-        return ResponseEntity.ok(top);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getTopByWinRate() {
+        return ResponseEntity.ok(toResponses(statsService.getTopByWinRate()));
     }
 
     @GetMapping("/leaderboard/biggest-pot")
@@ -163,9 +163,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by their largest single pot win"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getTopByBiggestPot() {
-        List<PlayerStatistics> top = statsService.getTopByBiggestPot();
-        return ResponseEntity.ok(top);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getTopByBiggestPot() {
+        return ResponseEntity.ok(toResponses(statsService.getTopByBiggestPot()));
     }
 
     @GetMapping("/leaderboard/win-streak")
@@ -174,9 +173,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by their longest consecutive win streak"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getTopByWinStreak() {
-        List<PlayerStatistics> top = statsService.getTopByWinStreak();
-        return ResponseEntity.ok(top);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getTopByWinStreak() {
+        return ResponseEntity.ok(toResponses(statsService.getTopByWinStreak()));
     }
 
     @GetMapping("/leaderboard/most-active")
@@ -185,9 +183,8 @@ public class StatisticsController {
         description = "Returns top 10 players ranked by total number of hands played"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getMostActive() {
-        List<PlayerStatistics> active = statsService.getMostActive();
-        return ResponseEntity.ok(active);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getMostActive() {
+        return ResponseEntity.ok(toResponses(statsService.getMostActive()));
     }
 
     @GetMapping("/leaderboard/recently-active")
@@ -196,8 +193,12 @@ public class StatisticsController {
         description = "Returns players who have played most recently"
     )
     @ApiResponse(responseCode = "200", description = "Leaderboard retrieved successfully")
-    public ResponseEntity<List<PlayerStatistics>> getRecentlyActive() {
-        List<PlayerStatistics> recent = statsService.getRecentlyActive();
-        return ResponseEntity.ok(recent);
+    public ResponseEntity<List<PlayerStatisticsResponse>> getRecentlyActive() {
+        return ResponseEntity.ok(toResponses(statsService.getRecentlyActive()));
+    }
+
+    private static List<PlayerStatisticsResponse> toResponses(
+            List<com.truholdem.model.PlayerStatistics> stats) {
+        return stats.stream().map(PlayerStatisticsResponse::from).toList();
     }
 }
