@@ -227,6 +227,12 @@ public class AppProperties {
         @Min(1)
         private int commandDedupMaxPerGame = 256;
 
+        /**
+         * Phase 4: persist published domain events to the append-only game_event_log (audit + replay).
+         * Only fills on the aggregate engine path; default on, flip off to disable the audit writer.
+         */
+        private boolean eventLogEnabled = true;
+
 
         public int getDefaultChips() {
             return defaultChips;
@@ -394,6 +400,14 @@ public class AppProperties {
 
         public void setCommandDedupMaxPerGame(int commandDedupMaxPerGame) {
             this.commandDedupMaxPerGame = commandDedupMaxPerGame;
+        }
+
+        public boolean isEventLogEnabled() {
+            return eventLogEnabled;
+        }
+
+        public void setEventLogEnabled(boolean eventLogEnabled) {
+            this.eventLogEnabled = eventLogEnabled;
         }
     }
 

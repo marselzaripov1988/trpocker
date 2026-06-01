@@ -2,7 +2,9 @@ package com.truholdem.controller;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.ErrorResponse;
+import com.truholdem.dto.GameEventLogResponse;
 import com.truholdem.dto.HandHistoryResponse;
+import com.truholdem.service.GameEventLogService;
 import com.truholdem.service.HandHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,9 +30,12 @@ import java.util.UUID;
 public class HandHistoryController {
 
     private final HandHistoryService handHistoryService;
+    private final GameEventLogService gameEventLogService;
 
-    public HandHistoryController(HandHistoryService handHistoryService) {
+    public HandHistoryController(HandHistoryService handHistoryService,
+            GameEventLogService gameEventLogService) {
         this.handHistoryService = handHistoryService;
+        this.gameEventLogService = gameEventLogService;
     }
 
     @GetMapping("/{historyId}")
@@ -166,6 +171,32 @@ public class HandHistoryController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(replayData);
+    }
+
+    @GetMapping("/game/{gameId}/events")
+    @Operation(
+        summary = "Get the domain-event log for a game",
+        description = "Returns the append-only domain-event stream for a game, ordered by sequence "
+                + "(audit / event-sourced replay). Populated on the aggregate engine path."
+    )
+    @ApiResponse(responseCode = "200", description = "Event log retrieved successfully")
+    public ResponseEntity<List<GameEventLogResponse>> getGameEvents(
+            @Parameter(description = "UUID of the game") @PathVariable UUID gameId) {
+        return ResponseEntity.ok(gameEventLogService.eventsForGame(gameId));
+    }
+
+    @GetMapping("/game/{gameId}/hand/{handNumber}/events")
+    @Operation(
+        summary = "Replay a hand from its domain events",
+        description = "Returns the ordered domain-event stream for a single hand "
+                + "(GameStarted -> PlayerActed... -> PotAwarded -> HandCompleted), reconstructing the "
+                + "betting narrative from the event log. Hole cards are not present (never emitted as events)."
+    )
+    @ApiResponse(responseCode = "200", description = "Hand event stream retrieved successfully")
+    public ResponseEntity<List<GameEventLogResponse>> getHandEvents(
+            @Parameter(description = "UUID of the game") @PathVariable UUID gameId,
+            @Parameter(description = "Hand number within the game") @PathVariable int handNumber) {
+        return ResponseEntity.ok(gameEventLogService.eventsForHand(gameId, handNumber));
     }
 
     @GetMapping("/game/{gameId}/count")
