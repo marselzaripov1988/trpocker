@@ -466,10 +466,10 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–2 are done (single node); Phase 3 is partially in place
-> (domain events + listeners exist). Phase 2 added per-table single-writer serialization with
-> `commandId` idempotency behind `app.game.single-writer-enabled` (default off). Next gap is
-> Phase 4 (event log / snapshots).
+> **Status (current):** Phases 0–3 are done (single node). Phase 2 added per-table single-writer
+> serialization with `commandId` idempotency behind `app.game.single-writer-enabled` (default off);
+> Phase 3 wired domain events to statistics on the aggregate path and gave reads dedicated
+> projections (sanitized live view + `HandHistoryResponse`). Next gap is Phase 4 (event log / snapshots).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -511,7 +511,7 @@ Each risky step is guarded by a feature flag for fast rollback.
   shared persist pool; harmless today because Redis hot-state is authoritative, but worth ordering
   per table when the event log lands.
 
-### Phase 3 — Domain events & read projections (CQRS) 🚧 partial
+### Phase 3 — Domain events & read projections (CQRS) ✅ done
 - ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`.
 - ✅ **Statistics flow through events** on the aggregate path: `PokerGameService` publishes the
   aggregate's events via `DomainEventPublisher`, and `StatisticsEventListener` derives stats from
@@ -522,9 +522,12 @@ Each risky step is guarded by a feature flag for fast rollback.
   The **deck is never serialized** (`@JsonIgnore`); **opponents' hole cards** are masked until
   showdown (own seats revealed, folded hands stay hidden). WS broadcasts mask all hands and the
   Angular store restores the local player's own hand across masked updates.
-- 🚧 Dedicated spectator/history read-models (separate from the live `Game` shape) still pending.
-- **Exit:** reads use sanitized projections (✅); statistics flow through events (✅ on the aggregate
-  path). Remaining: spectator/history read-models.
+- ✅ Dedicated history read-model: `HandHistoryController` returns a `HandHistoryResponse` DTO instead of
+  the raw `HandHistory` JPA entity (decoupling the API from persistence), serializing to an identical
+  JSON shape pinned by `HandHistoryJsonContractTest`. The live/spectator view is the viewer-aware
+  `HoleCardSanitizer` projection (a spectator with no seat sees all hands masked).
+- **Exit:** ✅ reads use dedicated projections (sanitized live view + `HandHistoryResponse`); ✅ statistics
+  flow through events (aggregate path).
 
 ### Phase 4 — Event log / snapshots & audit
 - Append-only event log per hand in Postgres (state = snapshot + event tail).

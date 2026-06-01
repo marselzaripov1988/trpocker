@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 3 (hand-history read-model)
+- `HandHistoryController` now returns a dedicated `HandHistoryResponse` read DTO instead of the raw
+  `HandHistory` JPA entity, decoupling the API from persistence. The wire JSON is byte-for-byte
+  unchanged (no frontend change), pinned by a new `HandHistoryJsonContractTest`.
+
 ### 🏗️ Architecture — Engine migration Phase 3 (event-driven statistics)
 - Domain events raised by the `PokerGame` aggregate are now **published to Spring** via
   `DomainEventPublisher` on the aggregate engine path (previously they were collected and dropped).
