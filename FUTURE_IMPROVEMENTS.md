@@ -40,9 +40,14 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   `truholdem:cluster:tables` active set and re-acquires + resumes any table whose owner died, instead of
   recovering only on the next action. Resumes **both** the in-progress turn timer and the between-hands
   transition (`HAND_COMPLETED`/`RESULT_DELAY` → next hand, via `GameHandLifecycleService.resumePendingTransition`).
-  Remaining Phase 5 work: recover the narrow transient `NEXT_HAND` crash window (state persisted but
-  `startNewHandInternal` interrupted mid-flight); partition / split-brain hardening (fencing tokens,
-  behaviour on Redis loss mid-game) + multi-hop retry orchestration.
+- **Split-brain safety (fail-closed)** — ✅ landed: `app.cluster.fail-closed` makes a node that cannot reach
+  Redis refuse ownership (`acquire`/`isOwner` → false) instead of fail-open assuming it owns its tables, so a
+  partitioned node stops driving timers / claiming tables. Default off (fail-open) preserves single-node
+  availability. Remaining Phase 5 work: **fencing tokens** (monotonic per-lease token carried on each write;
+  the store rejects a stale owner's write after a GC-pause / lease handoff — guards the window where a paused
+  owner acts after its lease expired and another node took over), recovery of the narrow transient
+  `NEXT_HAND` crash window (state persisted but `startNewHandInternal` interrupted mid-flight), and multi-hop
+  retry orchestration.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

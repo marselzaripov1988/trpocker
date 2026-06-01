@@ -149,4 +149,39 @@ class TableOwnershipServiceTest {
 
         assertThat(service.acquire(id)).isTrue();
     }
+
+    @Test
+    @DisplayName("fail-closed + Redis missing: refuses ownership (no split-brain)")
+    void failClosedRefusesWhenRedisMissing() {
+        appProperties.getCluster().setOwnershipEnabled(true);
+        appProperties.getCluster().setFailClosed(true);
+        when(redisProvider.getIfAvailable()).thenReturn(null);
+        TableOwnershipService service = service();
+
+        assertThat(service.acquire(id)).isFalse();
+        assertThat(service.isOwner(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("fail-closed + Redis error: refuses ownership")
+    void failClosedRefusesOnRedisError() {
+        appProperties.getCluster().setOwnershipEnabled(true);
+        appProperties.getCluster().setFailClosed(true);
+        when(redis.execute(any(RedisScript.class), anyList(), any(), any()))
+                .thenThrow(new RuntimeException("redis down"));
+        TableOwnershipService service = service();
+
+        assertThat(service.acquire(id)).isFalse();
+    }
+
+    @Test
+    @DisplayName("fail-closed has no effect in single-node mode (ownership disabled → owns everything)")
+    void failClosedIgnoredWhenOwnershipDisabled() {
+        appProperties.getCluster().setOwnershipEnabled(false);
+        appProperties.getCluster().setFailClosed(true);
+        TableOwnershipService service = service();
+
+        assertThat(service.acquire(id)).isTrue();
+        assertThat(service.isOwner(id)).isTrue();
+    }
 }

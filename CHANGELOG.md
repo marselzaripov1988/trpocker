@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 5 (split-brain safety: fail-closed)
+- Optional fail-closed ownership mode (`app.cluster.fail-closed`, default off). The Redis lease normally
+  fails open — a node that can't reach Redis assumes it owns its tables, which keeps a single node playable
+  but lets a partitioned node double-own a table in a real cluster. With fail-closed on,
+  `TableOwnershipService.acquire`/`isOwner` return false when Redis is unreachable, so a partitioned node
+  stops driving timers, claiming tables, and (with routing on) processing actions until Redis recovers.
+- `acquire`/`isOwner` now distinguish single-node mode (ownership disabled → always owns) from cluster mode
+  with Redis unreachable (fail-open vs fail-closed), instead of collapsing both to "owns everything".
+- `TableOwnershipServiceTest` adds fail-closed coverage (Redis-missing and Redis-error refuse ownership;
+  single-node mode is unaffected). Default fail-open behaviour is unchanged.
+
 ### 🏗️ Architecture — Engine migration Phase 5 (failover takeover)
 - Automatic takeover of tables orphaned by a dead owner so a game no longer hangs waiting on a player the
   dead node was meant to time out (previously it recovered only lazily, on the next action for that table).

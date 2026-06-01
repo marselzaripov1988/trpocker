@@ -80,9 +80,12 @@ public class TableOwnershipService {
         if (id == null) {
             return false;
         }
-        StringRedisTemplate redis = activeRedis();
+        if (!appProperties.getCluster().isOwnershipEnabled()) {
+            return true; // single-node: this node owns everything
+        }
+        StringRedisTemplate redis = redisTemplateProvider.getIfAvailable();
         if (redis == null) {
-            return true; // single-node / disabled / Redis down → this node owns everything
+            return degradedOwnership(id, "Redis unavailable"); // cluster mode but no Redis bean
         }
         try {
             Long result = redis.execute(ACQUIRE_SCRIPT, List.of(key(id)), instanceId,
@@ -93,8 +96,8 @@ public class TableOwnershipService {
             }
             return acquired;
         } catch (Exception e) {
-            log.warn("Ownership acquire failed for {} — treating as owned (degraded)", id, e);
-            return true;
+            log.warn("Ownership acquire failed for {}", id, e);
+            return degradedOwnership(id, "Redis error");
         }
     }
 
@@ -103,16 +106,32 @@ public class TableOwnershipService {
         if (id == null) {
             return false;
         }
-        StringRedisTemplate redis = activeRedis();
+        if (!appProperties.getCluster().isOwnershipEnabled()) {
+            return true; // single-node
+        }
+        StringRedisTemplate redis = redisTemplateProvider.getIfAvailable();
         if (redis == null) {
-            return true;
+            return degradedOwnership(id, "Redis unavailable");
         }
         try {
             return instanceId.equals(redis.opsForValue().get(key(id)));
         } catch (Exception e) {
-            log.warn("Ownership check failed for {} — treating as owned (degraded)", id, e);
-            return true;
+            log.warn("Ownership check failed for {}", id, e);
+            return degradedOwnership(id, "Redis error");
         }
+    }
+
+    /**
+     * Ownership decision when clustering is on but Redis cannot be consulted. Fail-open (default) assumes
+     * ownership so a surviving node stays playable; fail-closed refuses ownership so a partitioned node
+     * stops driving timers / claiming tables, preventing two nodes from owning the same table.
+     */
+    private boolean degradedOwnership(UUID id, String reason) {
+        if (appProperties.getCluster().isFailClosed()) {
+            log.warn("Refusing ownership of {} ({}) — fail-closed", id, reason);
+            return false;
+        }
+        return true;
     }
 
     /** The instanceId currently owning {@code id}, or {@code null} if free / disabled / Redis down. */

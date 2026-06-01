@@ -93,6 +93,16 @@ public class AppProperties {
          */
         private boolean takeoverEnabled = false;
 
+        /**
+         * Behaviour when ownership is enabled but Redis is unreachable. Default (false, fail-open) keeps a
+         * surviving node playable by assuming it owns its tables — correct for single-node / brief blips,
+         * but in a true cluster a partitioned node could then double-own a table (split-brain). When true
+         * (fail-closed), a node that cannot consult Redis refuses ownership (acquire/isOwner → false), so it
+         * stops driving timers / claiming tables until Redis is reachable again — trading availability for
+         * safety against two nodes mutating the same table.
+         */
+        private boolean failClosed = false;
+
         public boolean isOwnershipEnabled() {
             return ownershipEnabled;
         }
@@ -139,6 +149,14 @@ public class AppProperties {
 
         public void setTakeoverEnabled(boolean takeoverEnabled) {
             this.takeoverEnabled = takeoverEnabled;
+        }
+
+        public boolean isFailClosed() {
+            return failClosed;
+        }
+
+        public void setFailClosed(boolean failClosed) {
+            this.failClosed = failClosed;
         }
     }
 

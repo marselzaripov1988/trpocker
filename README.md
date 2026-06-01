@@ -475,8 +475,9 @@ Each risky step is guarded by a feature flag for fast rollback.
 > table it doesn't own forwards it over HTTP to the owning node, `app.cluster.routing-enabled`), and
 > **failover takeover** (a surviving node re-acquires a dead owner's table and resumes its stalled timer,
 > `app.cluster.takeover-enabled`, resuming both the in-progress turn timer and the between-hands
-> transition) — all verified on a two-node Testcontainers harness. Remaining: partition/split-brain
-> hardening (see FUTURE_IMPROVEMENTS).
+> transition), plus an optional **fail-closed** mode (`app.cluster.fail-closed`) that refuses ownership
+> when Redis is unreachable to avoid split-brain — all verified on a two-node Testcontainers harness.
+> Remaining: fencing tokens (see FUTURE_IMPROVEMENTS).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -590,7 +591,14 @@ Each risky step is guarded by a feature flag for fast rollback.
   once, and (c) **kill-node failover** — after node-A is shut down and its lease expires, node-B takes over
   the orphaned table and resumes its timer. (It already surfaced + fixed a real cluster-mode bug: a duplicate
   `WebSocketEventListener` bean that crashed startup whenever `app.websocket.cluster.enabled=true`.)
-- 🚧 Remaining: partition / split-brain hardening (fencing tokens, behaviour on Redis loss mid-game) and
+- ✅ **Split-brain safety — fail-closed mode** (`app.cluster.fail-closed`, default off): the ownership
+  lease normally *fails open* — if a node can't reach Redis it assumes it owns its tables, which keeps a
+  single node playable but lets a partitioned node double-own a table in a real cluster. With fail-closed
+  on, a node that cannot consult Redis **refuses** ownership (`acquire`/`isOwner` → false), so it stops
+  driving timers, claiming tables, and (with routing on) processing actions until Redis is reachable again
+  — trading availability for safety against two nodes mutating the same table. No effect in single-node
+  mode (ownership disabled still owns everything).
+- 🚧 Remaining: fencing tokens (reject writes from a stale owner after a GC-pause / lease handoff) and
   recovery of the narrow transient `NEXT_HAND` crash window.
 - **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; ✅ cross-node
   action routing applied exactly once on the owner; ✅ kill-node takeover of an orphaned table's turn timer,
