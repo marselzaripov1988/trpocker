@@ -109,26 +109,6 @@ class RedisGameEventBroadcasterTest {
         }
 
         @Test
-        @DisplayName("Should publish phase change to Redis")
-        void shouldPublishPhaseChange() {
-
-            Game game = createTestGame();
-            game.setPhase(GamePhase.FLOP);
-
-
-            broadcaster.broadcastPhaseChange(game);
-
-
-            ArgumentCaptor<GameEvent> eventCaptor = ArgumentCaptor.forClass(GameEvent.class);
-            verify(redisTemplate).convertAndSend(
-                eq(WebSocketClusterConfig.GAME_EVENTS_CHANNEL),
-                eventCaptor.capture()
-            );
-
-            assertThat(eventCaptor.getValue().getType()).isEqualTo(GameUpdateType.PHASE_CHANGE);
-        }
-
-        @Test
         @DisplayName("Should publish showdown result to Redis")
         void shouldPublishShowdown() {
 
@@ -154,25 +134,6 @@ class RedisGameEventBroadcasterTest {
                 eq(WebSocketClusterConfig.GAME_EVENTS_CHANNEL),
                 any(GameEvent.class)
             );
-        }
-
-        @Test
-        @DisplayName("Should publish game ended event to Redis")
-        void shouldPublishGameEnded() {
-
-            Game game = createTestGame();
-
-
-            broadcaster.broadcastGameEnded(game, "Winner");
-
-
-            ArgumentCaptor<GameEvent> eventCaptor = ArgumentCaptor.forClass(GameEvent.class);
-            verify(redisTemplate).convertAndSend(
-                eq(WebSocketClusterConfig.GAME_EVENTS_CHANNEL),
-                eventCaptor.capture()
-            );
-
-            assertThat(eventCaptor.getValue().getType()).isEqualTo(GameUpdateType.GAME_ENDED);
         }
 
         @Test

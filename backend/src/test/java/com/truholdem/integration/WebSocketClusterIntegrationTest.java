@@ -166,7 +166,7 @@ class WebSocketClusterIntegrationTest {
 
         GameEvent event1 = createTestEvent(gameId, GameUpdateType.GAME_STATE, 1);
         GameEvent event2 = createTestEvent(gameId, GameUpdateType.PLAYER_ACTION, 2);
-        GameEvent event3 = createTestEvent(gameId, GameUpdateType.PHASE_CHANGE, 3);
+        GameEvent event3 = createTestEvent(gameId, GameUpdateType.SHOWDOWN, 3);
 
         eventStore.storeEvent(event1);
         eventStore.storeEvent(event2);

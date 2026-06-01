@@ -136,25 +136,6 @@ public class RedisGameEventBroadcaster {
     }
 
 
-    public void broadcastPhaseChange(Game game) {
-        if (game == null || game.getId() == null) return;
-
-        WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
-            GameUpdateType.PHASE_CHANGE,
-            game,
-            null,
-            "Phase changed to " + game.getPhase()
-        );
-
-        publishEvent(GameEvent.builder()
-            .gameId(game.getId())
-            .type(GameUpdateType.PHASE_CHANGE)
-            .destination("/topic/game/" + game.getId())
-            .payload(message)
-            .build());
-    }
-
-
     public void broadcastShowdown(Game game, ShowdownResult result) {
         if (game == null || game.getId() == null) return;
 
@@ -168,25 +149,6 @@ public class RedisGameEventBroadcaster {
         publishEvent(GameEvent.builder()
             .gameId(game.getId())
             .type(GameUpdateType.SHOWDOWN)
-            .destination("/topic/game/" + game.getId())
-            .payload(message)
-            .build());
-    }
-
-
-    public void broadcastGameEnded(Game game, String winnerName) {
-        if (game == null || game.getId() == null) return;
-
-        WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
-            GameUpdateType.GAME_ENDED,
-            game,
-            Map.of("winner", winnerName),
-            "Game ended. Winner: " + winnerName
-        );
-
-        publishEvent(GameEvent.builder()
-            .gameId(game.getId())
-            .type(GameUpdateType.GAME_ENDED)
             .destination("/topic/game/" + game.getId())
             .payload(message)
             .build());

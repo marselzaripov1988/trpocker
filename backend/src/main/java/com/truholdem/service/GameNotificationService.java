@@ -79,20 +79,6 @@ public class GameNotificationService {
         logger.debug("Broadcast player action: {} {} {}", player.getName(), action, amount);
     }
 
-    public void broadcastPhaseChange(Game game) {
-        if (game == null || game.getId() == null) return;
-
-        WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
-            GameUpdateType.PHASE_CHANGE,
-            forBroadcast(game),
-            null,
-            "Phase changed to " + game.getPhase()
-        );
-
-        publish(game, message);
-        logger.info("Broadcast phase change for game {}: {}", game.getId(), game.getPhase());
-    }
-
     public void broadcastShowdown(Game game, ShowdownResult result) {
         if (game == null || game.getId() == null) return;
 
@@ -105,20 +91,6 @@ public class GameNotificationService {
 
         publish(game, message);
         logger.info("Broadcast showdown result: {}", result.getMessage());
-    }
-
-    public void broadcastGameEnded(Game game, String winnerName) {
-        if (game == null || game.getId() == null) return;
-
-        WebSocketGameUpdateMessage message = new WebSocketGameUpdateMessage(
-            GameUpdateType.GAME_ENDED,
-            forBroadcast(game),
-            Map.of("winner", winnerName),
-            "Game ended. Winner: " + winnerName
-        );
-
-        publish(game, message);
-        logger.info("Broadcast game ended: Winner {}", winnerName);
     }
 
     public void sendToUser(String username, String destination, Object payload) {

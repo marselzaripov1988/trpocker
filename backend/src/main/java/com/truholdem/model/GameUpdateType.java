@@ -7,10 +7,5 @@ package com.truholdem.model;
 public enum GameUpdateType {
     GAME_STATE,
     PLAYER_ACTION,
-    PHASE_CHANGE,
-    SHOWDOWN,
-    GAME_ENDED,
-    NEW_HAND,
-    PLAYER_JOINED,
-    PLAYER_LEFT
+    SHOWDOWN
 }

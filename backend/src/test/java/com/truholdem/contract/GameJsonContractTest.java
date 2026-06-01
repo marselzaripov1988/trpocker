@@ -180,7 +180,7 @@ class GameJsonContractTest {
                     .toList();
 
             assertTrue(names.containsAll(List.of(
-                    "GAME_STATE", "PLAYER_ACTION", "PHASE_CHANGE", "SHOWDOWN")),
+                    "GAME_STATE", "PLAYER_ACTION", "SHOWDOWN")),
                     "core update types must remain stable for the client");
         }
     }
