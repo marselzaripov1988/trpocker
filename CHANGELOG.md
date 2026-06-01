@@ -15,8 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (eliminating the per-JVM double-fire). Gated by `app.cluster.ownership-enabled` (default off);
   degrades to single-node behavior when disabled or Redis is unavailable.
 - The lease is verified against real Redis (`TableOwnershipRedisIT`, Testcontainers): exclusive
-  acquire, release handoff, and TTL-expiry failover. Cross-node command routing and live kill-node
-  failover takeover remain (need a multi-app-instance harness).
+  acquire, release handoff, and TTL-expiry failover.
+- Multi-instance harness `MultiNodeClusterIT`: boots two full app instances against one shared
+  Postgres + Redis (cluster mode on) and asserts cross-node ownership exclusivity — the base for
+  verifying cross-node routing / failover. Cross-node command routing and live kill-node takeover remain.
+
+### 🐛 Fixes
+- Remove a duplicate `WebSocketEventListener` (`com.truholdem.listener` vs `com.truholdem.application.listener`):
+  both were `@Component @ConditionalOnProperty(app.websocket.cluster.enabled)`, so enabling cluster mode
+  crashed startup with a conflicting-bean-definition error. Surfaced by `MultiNodeClusterIT`.
 
 ### 🏗️ Architecture — Engine migration Phase 6 (cleanup & enforcement)
 - Removed dead code: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/

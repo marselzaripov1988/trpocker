@@ -27,10 +27,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   either move them onto the Testcontainers Postgres base or give each Spring context an isolated H2 DB —
   the `create-drop` cross-context contamination (`Table "poker_games" not found`) is why they're excluded
   in `pom.xml` Surefire today. Remove the duplicate class.
-- **Multi-app-instance harness** for the rest of Phase 5: stand up ≥2 backend instances against shared
-  Redis/Postgres (Testcontainers or docker-compose) to verify cross-node command routing to the owner
-  and live kill-node failover takeover (the ownership *lease* itself is already covered by
-  `TableOwnershipRedisIT`).
+- **Multi-app-instance harness** — ✅ landed: `MultiNodeClusterIT` boots two full app instances against
+  one shared Postgres + Redis (cluster mode on) and asserts cross-node ownership exclusivity. Build the
+  remaining Phase 5 work on it: cross-node command routing to the owner (or table-affinity LB routing)
+  and live kill-node failover takeover. (The ownership lease itself is also covered by `TableOwnershipRedisIT`.)
+  Note: the harness clears `spring.autoconfigure.exclude` and enables cluster flags via command-line args.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

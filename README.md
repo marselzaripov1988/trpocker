@@ -559,9 +559,13 @@ Each risky step is guarded by a feature flag for fast rollback.
 - ✅ The lease semantics are verified against **real Redis** (`TableOwnershipRedisIT`, Testcontainers):
   two `TableOwnershipService` nodes contend for one table — exclusive acquire, release handoff, and
   TTL-expiry failover all pass.
-- 🚧 Remaining (need a multi-**app-instance** harness): cross-node command/action routing to the owner,
-  and automatic failover **takeover** (proactively resuming a dead node's timers rather than lazily on
-  the next action for that table).
+- ✅ A **multi-instance harness** exists (`MultiNodeClusterIT`): boots two full app instances against one
+  shared Postgres + Redis (cluster mode on) and asserts cross-node ownership exclusivity — the base for
+  verifying the rest. (It already surfaced + fixed a real cluster-mode bug: a duplicate
+  `WebSocketEventListener` bean that crashed startup whenever `app.websocket.cluster.enabled=true`.)
+- 🚧 Remaining (build on the harness): cross-node command/action routing to the owner (or table-affinity
+  routing at the LB), and automatic failover **takeover** (proactively resuming a dead node's timers
+  rather than lazily on the next action for that table).
 - **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; full
   horizontal-scaling/kill-node verification of a live game pending the multi-instance harness.
 
