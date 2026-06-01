@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 5 (fencing tokens)
+- Optional fencing tokens (`app.cluster.fencing-enabled`, default off, requires ownership + hot-state) to
+  stop a stale former owner from clobbering state after a lease handoff (e.g. a long GC pause during which
+  its lease expired and another node took over).
+- Each lease acquisition carries a monotonic token in Redis (`truholdem:cluster:fence:{id}`), bumped only
+  when ownership changes hands and kept across renewals. `TableOwnershipService` issues the token via an
+  enhanced Lua acquire script and tracks the token this node holds per table.
+- The authoritative Redis hot-state write (`RedisGameStateStore.save`) becomes an atomic Lua compare-and-set
+  that rejects a write whose token is behind the table's current token, throwing `StaleOwnershipException`.
+  The held-token map naturally scopes fencing to owned tables — cache-population writes (after a DB read of
+  a table this node doesn't own) carry no token and take the plain path, so they are never rejected.
+- Postgres remains independently guarded by the `Game` `@Version` optimistic lock; Redis is authoritative.
+- Tests: `RedisGameStateStoreTest` (plain vs fenced write, accept vs reject); `TableOwnershipServiceTest`
+  (token issuance / failure); `TableOwnershipRedisIT` adds real-Redis monotonicity (renewal keeps the
+  token; a takeover after lease expiry strictly increments it). Default (fencing off) behaviour unchanged.
+
 ### 🏗️ Architecture — Engine migration Phase 5 (split-brain safety: fail-closed)
 - Optional fail-closed ownership mode (`app.cluster.fail-closed`, default off). The Redis lease normally
   fails open — a node that can't reach Redis assumes it owns its tables, which keeps a single node playable

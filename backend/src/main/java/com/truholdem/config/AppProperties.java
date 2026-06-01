@@ -103,6 +103,15 @@ public class AppProperties {
          */
         private boolean failClosed = false;
 
+        /**
+         * When true (requires ownershipEnabled + hot-state), each lease acquisition carries a monotonic
+         * fencing token; the authoritative Redis hot-state write atomically rejects a write whose token is
+         * behind the table's current token. This stops a paused/stale former owner (e.g. after a GC pause
+         * during which its lease expired and another node took over) from clobbering the new owner's state.
+         * Default off → no fencing.
+         */
+        private boolean fencingEnabled = false;
+
         public boolean isOwnershipEnabled() {
             return ownershipEnabled;
         }
@@ -157,6 +166,14 @@ public class AppProperties {
 
         public void setFailClosed(boolean failClosed) {
             this.failClosed = failClosed;
+        }
+
+        public boolean isFencingEnabled() {
+            return fencingEnabled;
+        }
+
+        public void setFencingEnabled(boolean fencingEnabled) {
+            this.fencingEnabled = fencingEnabled;
         }
     }
 

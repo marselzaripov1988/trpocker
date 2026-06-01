@@ -43,11 +43,14 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
 - **Split-brain safety (fail-closed)** — ✅ landed: `app.cluster.fail-closed` makes a node that cannot reach
   Redis refuse ownership (`acquire`/`isOwner` → false) instead of fail-open assuming it owns its tables, so a
   partitioned node stops driving timers / claiming tables. Default off (fail-open) preserves single-node
-  availability. Remaining Phase 5 work: **fencing tokens** (monotonic per-lease token carried on each write;
-  the store rejects a stale owner's write after a GC-pause / lease handoff — guards the window where a paused
-  owner acts after its lease expired and another node took over), recovery of the narrow transient
-  `NEXT_HAND` crash window (state persisted but `startNewHandInternal` interrupted mid-flight), and multi-hop
-  retry orchestration.
+  availability.
+- **Fencing tokens** — ✅ landed: `app.cluster.fencing-enabled` — each lease acquisition carries a monotonic
+  token (`truholdem:cluster:fence:{id}`, bumped on ownership change); the Redis hot-state write
+  (`RedisGameStateStore.save`) is an atomic compare-and-set that rejects a write whose token is behind the
+  current one (`StaleOwnershipException`), fencing out a paused/stale former owner. Postgres is independently
+  guarded by `@Version`. Remaining Phase 5 edge-case hardening: recovery of the narrow transient `NEXT_HAND`
+  crash window (state persisted but `startNewHandInternal` interrupted mid-flight); multi-hop retry
+  orchestration; and a deeper audit of fencing on the Postgres write path (today it relies on `@Version`).
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

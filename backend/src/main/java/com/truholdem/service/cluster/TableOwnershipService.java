@@ -44,6 +44,8 @@ public class TableOwnershipService {
     private static final String NODE_KEY_PREFIX = "truholdem:cluster:node:";
     /** Set of active game tables that need an owner driving their timers (for failover takeover). */
     private static final String ACTIVE_TABLES_KEY = "truholdem:cluster:tables";
+    /** Per-table monotonic fencing token: bumped whenever ownership changes hands. */
+    private static final String FENCE_KEY_PREFIX = "truholdem:cluster:fence:";
 
     /** Atomically acquire if the key is free or already ours, refreshing the TTL; returns 1 on success. */
     private static final DefaultRedisScript<Long> ACQUIRE_SCRIPT = new DefaultRedisScript<>(
@@ -60,10 +62,35 @@ public class TableOwnershipService {
             "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0",
             Long.class);
 
+    /**
+     * Fencing variant of acquire. KEYS[1]=lease, KEYS[2]=fence token; ARGV[1]=instanceId,
+     * ARGV[2]=lease TTL ms, ARGV[3]=fence TTL ms. Returns the monotonic fencing token this node now holds
+     * (≥1) on success, or -1 if another node owns the lease. The token is bumped (INCR) only when ownership
+     * is newly taken (lease free); a renewal by the same owner keeps the current token.
+     */
+    private static final DefaultRedisScript<Long> ACQUIRE_FENCED_SCRIPT = new DefaultRedisScript<>(
+            "local cur = redis.call('GET', KEYS[1]) "
+            + "if cur == ARGV[1] then "
+            + "  redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2]) "
+            + "  local tok = redis.call('GET', KEYS[2]) "
+            + "  if tok == false then tok = redis.call('INCR', KEYS[2]) end "
+            + "  redis.call('PEXPIRE', KEYS[2], ARGV[3]) "
+            + "  return tonumber(tok) "
+            + "elseif cur == false then "
+            + "  local tok = redis.call('INCR', KEYS[2]) "
+            + "  redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2]) "
+            + "  redis.call('PEXPIRE', KEYS[2], ARGV[3]) "
+            + "  return tok "
+            + "end "
+            + "return -1",
+            Long.class);
+
     private final AppProperties appProperties;
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
     private final String instanceId;
     private final Set<UUID> ownedLocally = ConcurrentHashMap.newKeySet();
+    /** Fencing token this node currently holds per owned table (only populated when fencing is enabled). */
+    private final java.util.Map<UUID, Long> heldTokens = new ConcurrentHashMap<>();
 
     public TableOwnershipService(
             AppProperties appProperties,
@@ -88,6 +115,17 @@ public class TableOwnershipService {
             return degradedOwnership(id, "Redis unavailable"); // cluster mode but no Redis bean
         }
         try {
+            if (appProperties.getCluster().isFencingEnabled()) {
+                Long token = redis.execute(ACQUIRE_FENCED_SCRIPT, List.of(key(id), fenceKey(id)),
+                        instanceId, Long.toString(leaseTtlMillis()), Long.toString(fenceTtlMillis()));
+                if (token != null && token >= 1L) {
+                    ownedLocally.add(id);
+                    heldTokens.put(id, token);
+                    return true;
+                }
+                heldTokens.remove(id);
+                return false;
+            }
             Long result = redis.execute(ACQUIRE_SCRIPT, List.of(key(id)), instanceId,
                     Long.toString(leaseTtlMillis()));
             boolean acquired = result != null && result == 1L;
@@ -176,6 +214,7 @@ public class TableOwnershipService {
             return;
         }
         ownedLocally.remove(id);
+        heldTokens.remove(id);
         StringRedisTemplate redis = activeRedis();
         if (redis == null) {
             return;
@@ -183,9 +222,20 @@ public class TableOwnershipService {
         try {
             redis.execute(RELEASE_SCRIPT, List.of(key(id)), instanceId);
             redis.opsForSet().remove(ACTIVE_TABLES_KEY, id.toString()); // table is finished → drop from active set
+            redis.delete(fenceKey(id)); // table is finished → no more writes to fence
         } catch (Exception e) {
             log.warn("Ownership release failed for {}", id, e);
         }
+    }
+
+    /** The fencing token this node currently holds for {@code id}, or {@code null} if it holds none. */
+    public Long fenceToken(UUID id) {
+        return id == null ? null : heldTokens.get(id);
+    }
+
+    /** Full Redis key holding the monotonic fencing token for {@code id} (shared with the hot-state store). */
+    public String fenceRedisKey(UUID id) {
+        return fenceKey(id);
     }
 
     /**
@@ -260,12 +310,24 @@ public class TableOwnershipService {
             return;
         }
         registerSelf(redis);
+        boolean fencing = appProperties.getCluster().isFencingEnabled();
         for (UUID id : Set.copyOf(ownedLocally)) {
             try {
-                Long result = redis.execute(ACQUIRE_SCRIPT, List.of(key(id)), instanceId,
-                        Long.toString(leaseTtlMillis()));
-                if (result == null || result != 1L) {
-                    ownedLocally.remove(id);
+                if (fencing) {
+                    Long token = redis.execute(ACQUIRE_FENCED_SCRIPT, List.of(key(id), fenceKey(id)),
+                            instanceId, Long.toString(leaseTtlMillis()), Long.toString(fenceTtlMillis()));
+                    if (token != null && token >= 1L) {
+                        heldTokens.put(id, token);
+                    } else {
+                        ownedLocally.remove(id);
+                        heldTokens.remove(id);
+                    }
+                } else {
+                    Long result = redis.execute(ACQUIRE_SCRIPT, List.of(key(id)), instanceId,
+                            Long.toString(leaseTtlMillis()));
+                    if (result == null || result != 1L) {
+                        ownedLocally.remove(id);
+                    }
                 }
             } catch (Exception e) {
                 log.warn("Ownership renewal failed for {}", id, e);
@@ -303,7 +365,16 @@ public class TableOwnershipService {
         return appProperties.getCluster().getLeaseTtlMillis();
     }
 
+    /** Fence token lives well beyond the lease so its monotonicity survives owner handover / GC pauses. */
+    private long fenceTtlMillis() {
+        return leaseTtlMillis() * 20;
+    }
+
     private static String key(UUID id) {
         return KEY_PREFIX + id;
+    }
+
+    private static String fenceKey(UUID id) {
+        return FENCE_KEY_PREFIX + id;
     }
 }

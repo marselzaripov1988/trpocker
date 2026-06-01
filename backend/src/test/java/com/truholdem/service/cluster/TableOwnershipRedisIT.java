@@ -63,6 +63,15 @@ class TableOwnershipRedisIT {
         return new TableOwnershipService(props, fixedProvider(redisTemplate), instanceId);
     }
 
+    /** A fencing-enabled node-scoped ownership service. */
+    private TableOwnershipService fencingNode(String instanceId, long leaseTtlMillis) {
+        AppProperties props = new AppProperties();
+        props.getCluster().setOwnershipEnabled(true);
+        props.getCluster().setFencingEnabled(true);
+        props.getCluster().setLeaseTtlMillis(leaseTtlMillis);
+        return new TableOwnershipService(props, fixedProvider(redisTemplate), instanceId);
+    }
+
     private static ObjectProvider<StringRedisTemplate> fixedProvider(StringRedisTemplate template) {
         return new ObjectProvider<>() {
             @Override
@@ -130,5 +139,43 @@ class TableOwnershipRedisIT {
 
         assertThat(survivor.acquire(table)).isTrue();
         assertThat(survivor.isOwner(table)).isTrue();
+    }
+
+    @Test
+    @DisplayName("fencing: a renewal by the same owner keeps the token; another node is rejected")
+    void fencingRenewalKeepsToken() {
+        TableOwnershipService nodeA = fencingNode("node-A", 30_000);
+        TableOwnershipService nodeB = fencingNode("node-B", 30_000);
+        UUID table = UUID.randomUUID();
+
+        assertThat(nodeA.acquire(table)).isTrue();
+        Long t1 = nodeA.fenceToken(table);
+        assertThat(t1).isNotNull();
+
+        assertThat(nodeA.acquire(table)).isTrue(); // renew
+        assertThat(nodeA.fenceToken(table)).isEqualTo(t1);
+
+        assertThat(nodeB.acquire(table)).isFalse();
+        nodeA.release(table);
+    }
+
+    @Test
+    @DisplayName("fencing: token strictly increments when a new node takes over after lease expiry")
+    void fencingTokenIncrementsOnFailover() throws InterruptedException {
+        TableOwnershipService dying = fencingNode("node-A", 1_000); // 1s lease
+        TableOwnershipService survivor = fencingNode("node-B", 30_000);
+        UUID table = UUID.randomUUID();
+
+        assertThat(dying.acquire(table)).isTrue();
+        Long t1 = dying.fenceToken(table);
+        assertThat(t1).isNotNull();
+
+        // Owner "dies": the lease (1s) expires but the fence token key persists (long TTL).
+        Thread.sleep(1_300);
+
+        assertThat(survivor.acquire(table)).isTrue();
+        Long t2 = survivor.fenceToken(table);
+        // The new owner's token is strictly higher, so the stale former owner's writes are fenced out.
+        assertThat(t2).isGreaterThan(t1);
     }
 }

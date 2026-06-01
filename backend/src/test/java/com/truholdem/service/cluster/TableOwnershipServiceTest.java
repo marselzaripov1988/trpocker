@@ -184,4 +184,30 @@ class TableOwnershipServiceTest {
         assertThat(service.acquire(id)).isTrue();
         assertThat(service.isOwner(id)).isTrue();
     }
+
+    @Test
+    @DisplayName("fencing enabled: acquire returns a token and exposes it via fenceToken")
+    void fencingIssuesToken() {
+        appProperties.getCluster().setOwnershipEnabled(true);
+        appProperties.getCluster().setFencingEnabled(true);
+        // fenced script takes 3 ARGV (instanceId, lease ttl, fence ttl) → 5-arg execute
+        when(redis.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(7L);
+        TableOwnershipService service = service();
+
+        assertThat(service.acquire(id)).isTrue();
+        assertThat(service.fenceToken(id)).isEqualTo(7L);
+        assertThat(service.ownedTables()).contains(id);
+    }
+
+    @Test
+    @DisplayName("fencing enabled: acquire fails when another node owns (token -1), no token held")
+    void fencingAcquireFailsWhenOwnedByOther() {
+        appProperties.getCluster().setOwnershipEnabled(true);
+        appProperties.getCluster().setFencingEnabled(true);
+        when(redis.execute(any(RedisScript.class), anyList(), any(), any(), any())).thenReturn(-1L);
+        TableOwnershipService service = service();
+
+        assertThat(service.acquire(id)).isFalse();
+        assertThat(service.fenceToken(id)).isNull();
+    }
 }

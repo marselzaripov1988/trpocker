@@ -466,7 +466,8 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–4 and 6 are done; Phase 5 is partial. Phase 2 added per-table
+> **Status (current):** Phases 0–6 are done (Phase 5 functionally complete; only edge-case hardening
+> remains). Phase 2 added per-table
 > single-writer serialization with `commandId` idempotency; Phase 3 wired domain events to statistics and
 > gave reads dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit +
 > replay-from-events); Phase 6 removed dead code and added ArchUnit enforcement; Phase 5 landed the
@@ -475,9 +476,10 @@ Each risky step is guarded by a feature flag for fast rollback.
 > table it doesn't own forwards it over HTTP to the owning node, `app.cluster.routing-enabled`), and
 > **failover takeover** (a surviving node re-acquires a dead owner's table and resumes its stalled timer,
 > `app.cluster.takeover-enabled`, resuming both the in-progress turn timer and the between-hands
-> transition), plus an optional **fail-closed** mode (`app.cluster.fail-closed`) that refuses ownership
-> when Redis is unreachable to avoid split-brain — all verified on a two-node Testcontainers harness.
-> Remaining: fencing tokens (see FUTURE_IMPROVEMENTS).
+> transition), an optional **fail-closed** mode (`app.cluster.fail-closed`) that refuses ownership when
+> Redis is unreachable, and **fencing tokens** (`app.cluster.fencing-enabled`) that fence a stale former
+> owner's hot-state write out at the store — all verified on a two-node Testcontainers harness. Phase 5 is
+> functionally complete (see FUTURE_IMPROVEMENTS for the remaining edge-case hardening).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -552,7 +554,7 @@ Each risky step is guarded by a feature flag for fast rollback.
   is deferred to clustering, Phase 5).
 - **Exit:** ✅ any hand can be replayed from events; ✅ reconnect doesn't break the session.
 
-### Phase 5 — Clustering & scale 🚧 partial (foundation)
+### Phase 5 — Clustering & scale ✅ done (edge-case hardening pending)
 - ✅ Per-table ownership: `TableOwnershipService` holds a Redis lease (`truholdem:owner:{uuid}` →
   `instanceId`, atomic Lua acquire-if-free-or-mine + a heartbeat that renews held leases). The turn-timeout,
   hand-lifecycle and tournament blind-level schedulers now **acquire ownership before scheduling and
@@ -598,8 +600,16 @@ Each risky step is guarded by a feature flag for fast rollback.
   driving timers, claiming tables, and (with routing on) processing actions until Redis is reachable again
   — trading availability for safety against two nodes mutating the same table. No effect in single-node
   mode (ownership disabled still owns everything).
-- 🚧 Remaining: fencing tokens (reject writes from a stale owner after a GC-pause / lease handoff) and
-  recovery of the narrow transient `NEXT_HAND` crash window.
+- ✅ **Fencing tokens** (`app.cluster.fencing-enabled`, default off, requires ownership + hot-state): each
+  lease acquisition carries a monotonic token (Redis `truholdem:cluster:fence:{id}`, bumped only when
+  ownership changes hands, kept on renewal). The authoritative Redis hot-state write is an atomic Lua
+  compare-and-set that **rejects** any write whose token is behind the table's current token
+  (`StaleOwnershipException`). So a former owner paused by a long GC — during which its lease expired and
+  another node took over — cannot wake up and clobber the new owner's state; its stale write is fenced
+  out at the store. (Postgres is independently guarded by the `@Version` optimistic lock; Redis is the
+  authoritative copy.)
+- 🚧 Remaining: recovery of the narrow transient `NEXT_HAND` crash window (state persisted but the
+  synchronous next-hand deal interrupted mid-flight).
 - **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; ✅ cross-node
   action routing applied exactly once on the owner; ✅ kill-node takeover of an orphaned table's turn timer,
   all verified on the two-node harness.
