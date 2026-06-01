@@ -33,6 +33,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.BotMode;
 import com.truholdem.config.GameEngine;
 import com.truholdem.domain.aggregate.PokerGame;
+import com.truholdem.domain.event.DomainEventPublisher;
 import com.truholdem.domain.event.HandCompleted;
 import com.truholdem.domain.value.Chips;
 import com.truholdem.mapper.PokerGameMapper;
@@ -63,6 +64,7 @@ public class PokerGameService {
     private final GameHandLifecycleService handLifecycleService;
     private final PokerGameMapper pokerGameMapper;
     private final TableCommandDispatcher commandDispatcher;
+    private final DomainEventPublisher domainEventPublisher;
     private final PokerGameService self;
 
     public PokerGameService(
@@ -81,6 +83,7 @@ public class PokerGameService {
             GameHandLifecycleService handLifecycleService,
             PokerGameMapper pokerGameMapper,
             TableCommandDispatcher commandDispatcher,
+            DomainEventPublisher domainEventPublisher,
             @Lazy PokerGameService self) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
@@ -97,7 +100,14 @@ public class PokerGameService {
         this.handLifecycleService = handLifecycleService;
         this.pokerGameMapper = pokerGameMapper;
         this.commandDispatcher = commandDispatcher;
+        this.domainEventPublisher = domainEventPublisher;
         this.self = self;
+    }
+
+    /** Publish and drain the events the aggregate raised during the current command (Phase 3, CQRS). */
+    private void publishDomainEvents(PokerGame aggregate) {
+        domainEventPublisher.publishAll(aggregate.getDomainEvents());
+        aggregate.clearDomainEvents();
     }
 
     public Game createNewGame(List<PlayerInfo> playersInfo) {
@@ -1272,6 +1282,8 @@ public class PokerGameService {
             playerStatisticsService.startSession(info.getName());
         }
 
+        publishDomainEvents(aggregate);
+
         Game savedGame = gameStateService.persistFullSync(game);
         handHistoryService.startRecording(savedGame);
         notificationService.broadcastGameUpdate(savedGame);
@@ -1316,11 +1328,11 @@ public class PokerGameService {
         player.setHasActed(true);
 
         handHistoryService.recordAction(gameId, player, action, actualAmount, game.getPhase());
-        playerStatisticsService.recordAction(player.getName(), action.name());
 
-        if (player.isAllIn()) {
-            playerStatisticsService.recordAllIn(player.getName());
-        }
+        // Statistics flow through domain events (StatisticsEventListener) on the aggregate path.
+        // Publish after finalizeAggregateHand has consumed HandCompleted, before the buffer flush in
+        // persistAfterAction so PlayerActed is buffered first.
+        publishDomainEvents(aggregate);
 
         notificationService.broadcastPlayerAction(game, player, action.name(), actualAmount);
 
@@ -1347,6 +1359,8 @@ public class PokerGameService {
         pokerGameMapper.applyToGame(aggregate, game);
         game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
 
+        publishDomainEvents(aggregate);
+
         logger.info("Started new hand {} in game {} (aggregate engine)", game.getHandNumber(), gameId);
         Game saved = gameStateService.persistFull(game);
         notificationService.broadcastGameUpdate(saved);
@@ -1372,7 +1386,8 @@ public class PokerGameService {
         for (HandCompleted.PotResult potResult : completed.getPotResults()) {
             int amount = potResult.amount().amount();
             totalWon += amount;
-            playerStatisticsService.recordWin(potResult.winnerName(), amount);
+            // Win / showdown statistics are recorded by StatisticsEventListener from the
+            // HandCompleted domain event (published by the caller), not imperatively here.
 
             Player winner = findPlayerInGame(game, potResult.winnerId());
             winners.add(new WinnerInfo(
@@ -1381,10 +1396,6 @@ public class PokerGameService {
                     amount,
                     potResult.handDescription(),
                     new ArrayList<>(winner.getHand())));
-
-            if (completed.wentToShowdown()) {
-                playerStatisticsService.recordShowdown(potResult.winnerName(), true);
-            }
         }
 
         WinnerInfo mainWinner = winners.stream()
