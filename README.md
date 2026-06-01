@@ -466,11 +466,13 @@ For a real high-load product the target is a genuine domain core with event sour
 introduced **incrementally** so the live REST/WebSocket path keeps working after every phase.
 Each risky step is guarded by a feature flag for fast rollback.
 
-> **Status (current):** Phases 0–4 and 6 are done (single node). Phase 2 added per-table single-writer
-> serialization with `commandId` idempotency; Phase 3 wired domain events to statistics and gave reads
-> dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit + replay-from-
-> events); Phase 6 removed dead code and added ArchUnit enforcement (controllers return DTOs, not
-> `model.*`). The only remaining phase is Phase 5 (clustering / per-table owner & failover).
+> **Status (current):** Phases 0–4 and 6 are done; Phase 5 is partial. Phase 2 added per-table
+> single-writer serialization with `commandId` idempotency; Phase 3 wired domain events to statistics and
+> gave reads dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit +
+> replay-from-events); Phase 6 removed dead code and added ArchUnit enforcement; Phase 5 landed the
+> clustering foundation — Redis-lease per-table ownership so timers fire on one node only
+> (`app.cluster.ownership-enabled`). Remaining: cross-node command routing + verified kill-node failover,
+> which need the multi-node Testcontainers harness (see FUTURE_IMPROVEMENTS).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -545,10 +547,20 @@ Each risky step is guarded by a feature flag for fast rollback.
   is deferred to clustering, Phase 5).
 - **Exit:** ✅ any hand can be replayed from events; ✅ reconnect doesn't break the session.
 
-### Phase 5 — Clustering & scale
-- Per-table owner node (consistent hashing / Redis lock / leader election); only the owner
-  schedules timers/blind increases. Hot state in memory (+Redis for failover), cold state async to Postgres.
-- **Exit:** horizontal scaling; a node failure doesn't lose tables or timers.
+### Phase 5 — Clustering & scale 🚧 partial (foundation)
+- ✅ Per-table ownership: `TableOwnershipService` holds a Redis lease (`truholdem:owner:{uuid}` →
+  `instanceId`, atomic Lua acquire-if-free-or-mine + a heartbeat that renews held leases). The turn-timeout,
+  hand-lifecycle and tournament blind-level schedulers now **acquire ownership before scheduling and
+  re-check at fire**, so on a cluster each timer fires on exactly one node (no double-fire). Gated by
+  `app.cluster.ownership-enabled` (default off → single-node behavior); degrades to single-node if Redis
+  is unavailable.
+- ✅ Hot state already shared (Redis `RedisGameStateStore` + Postgres `game_event_log`), so a node failure
+  loses no state, and a dead owner's lease expires so another node re-acquires on the next action.
+- 🚧 Remaining (need the multi-node / Testcontainers harness in FUTURE_IMPROVEMENTS): cross-node
+  command/action routing to the owner, and automatic failover **takeover** (proactively resuming a dead
+  node's timers rather than lazily on the next action).
+- **Exit:** ✅ no timer double-fire across nodes; horizontal scaling + verified kill-node failover pending
+  the multi-node harness.
 
 ### Phase 6 — Cleanup & enforcement ✅ done
 - ✅ Dead code removed: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/

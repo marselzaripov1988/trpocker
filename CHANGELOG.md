@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 5 foundation (per-table ownership)
+- New `TableOwnershipService`: a Redis-lease (`truholdem:owner:{uuid}` → node `instanceId`, atomic Lua
+  acquire-if-free-or-mine + heartbeat renewal) giving each table/tournament at most one owner node.
+- The turn-timeout, hand-lifecycle and tournament blind-level schedulers now acquire ownership before
+  scheduling and re-check on fire, so on a multi-node cluster each timer fires on exactly one node
+  (eliminating the per-JVM double-fire). Gated by `app.cluster.ownership-enabled` (default off);
+  degrades to single-node behavior when disabled or Redis is unavailable.
+- Cross-node command routing and automatic failover takeover remain (need a multi-node harness).
+
 ### 🏗️ Architecture — Engine migration Phase 6 (cleanup & enforcement)
 - Removed dead code: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/
   `PHASE_CHANGE`/`GAME_ENDED`) and the never-called `broadcastPhaseChange`/`broadcastGameEnded` methods.
