@@ -83,6 +83,8 @@ public class GameTurnTimeoutService {
                 Instant.now().plusSeconds(timeoutSeconds));
 
         scheduledTimeouts.put(gameId, future);
+        // Record the table as active so a surviving node can take it over if this node dies mid-turn.
+        ownership.trackActiveTable(gameId);
         log.debug("Scheduled {}s turn timeout for player {} in game {}",
                 timeoutSeconds, playerId, gameId);
     }

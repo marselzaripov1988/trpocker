@@ -11,9 +11,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -27,6 +31,7 @@ import com.truholdem.model.Player;
 import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.service.PokerGameService;
+import com.truholdem.service.cluster.ClusterFailoverService;
 import com.truholdem.service.cluster.TableOwnershipService;
 
 /**
@@ -35,6 +40,7 @@ import com.truholdem.service.cluster.TableOwnershipService;
  * Verifies the Phase 5 behaviour end-to-end across nodes.
  */
 @Testcontainers
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("Multi-node cluster harness (two app instances, shared Redis/Postgres)")
 class MultiNodeClusterIT {
 
@@ -58,8 +64,10 @@ class MultiNodeClusterIT {
     static void startNodes() {
         int portA = freePort();
         int portB = freePort();
-        // node-A creates the schema; node-B reuses it (no second create-drop that would wipe node-A).
-        nodeA = bootNode("node-A", portA, "create-drop");
+        // node-A creates the schema; node-B reuses it. Use "create" (not "create-drop") so the schema
+        // survives node-A shutdown — the failover test closes node-A and node-B must still load the game.
+        // The Testcontainers Postgres is fresh per run, so there is no stale schema to clean up.
+        nodeA = bootNode("node-A", portA, "create");
         nodeB = bootNode("node-B", portB, "none");
     }
 
@@ -91,6 +99,7 @@ class MultiNodeClusterIT {
         args.add("--app.cluster.routing-enabled=true");
         args.add("--app.cluster.node-base-url=http://localhost:" + port + "/api"); // incl. context-path
         args.add("--app.cluster.shared-secret=" + SECRET);
+        args.add("--app.cluster.takeover-enabled=true");
         args.add("--app.websocket.cluster.enabled=true");
         args.add("--app.websocket.cluster.instance-id=" + instanceId);
         args.add("--app.jwt.secret=dGVzdC1zZWNyZXQta2V5LWZvci1pbnRlZ3JhdGlvbi10ZXN0cy0xMjM0NTY3ODkw");
@@ -108,6 +117,7 @@ class MultiNodeClusterIT {
     }
 
     @Test
+    @Order(1)
     @DisplayName("per-table ownership is exclusive across nodes")
     void ownershipExclusiveAcrossNodes() {
         TableOwnershipService ownerOnA = nodeA.getBean(TableOwnershipService.class);
@@ -125,6 +135,7 @@ class MultiNodeClusterIT {
     }
 
     @Test
+    @Order(2)
     @DisplayName("an action on the non-owner node is forwarded over HTTP to the owner")
     void actionForwardedToOwner() {
         PokerGameService svcA = nodeA.getBean(PokerGameService.class);
@@ -152,5 +163,34 @@ class MultiNodeClusterIT {
         assertThat(updated).isNotNull();
         assertThat(ownA.isOwner(gameId)).isTrue();
         assertThat(ownB.isOwner(gameId)).isFalse();
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("a surviving node takes over a table orphaned by a dead owner and resumes its turn timer")
+    void failoverTakeoverAfterOwnerDies() {
+        PokerGameService svcA = nodeA.getBean(PokerGameService.class);
+        TableOwnershipService ownA = nodeA.getBean(TableOwnershipService.class);
+        TableOwnershipService ownB = nodeB.getBean(TableOwnershipService.class);
+        ClusterFailoverService failoverB = nodeB.getBean(ClusterFailoverService.class);
+        StringRedisTemplate redis = nodeB.getBean(StringRedisTemplate.class);
+
+        // node-A creates a game → it owns the table, tracks it active, and arms the turn timer.
+        Game game = svcA.createNewGame(List.of(
+                new PlayerInfo("P1", 1000, false),
+                new PlayerInfo("P2", 1000, false)));
+        UUID gameId = game.getId();
+        assertThat(ownA.isOwner(gameId)).isTrue();
+
+        // Simulate node-A crashing: stop its context (no graceful lease release) and then expire its
+        // lease immediately (instead of waiting out the TTL) so the table looks orphaned-but-active.
+        nodeA.close();
+        redis.delete("truholdem:owner:" + gameId);
+        assertThat(ownB.currentOwner(gameId)).isNull();
+
+        // node-B's failover takeover claims the orphaned table and resumes its timer.
+        failoverB.takeOverIfOrphaned(gameId);
+
+        assertThat(ownB.isOwner(gameId)).isTrue();
     }
 }

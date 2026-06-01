@@ -42,6 +42,8 @@ public class TableOwnershipService {
     private static final String KEY_PREFIX = "truholdem:owner:";
     /** Per-node registry entry: instanceId → peer-reachable base URL (TTL-refreshed by the heartbeat). */
     private static final String NODE_KEY_PREFIX = "truholdem:cluster:node:";
+    /** Set of active game tables that need an owner driving their timers (for failover takeover). */
+    private static final String ACTIVE_TABLES_KEY = "truholdem:cluster:tables";
 
     /** Atomically acquire if the key is free or already ours, refreshing the TTL; returns 1 on success. */
     private static final DefaultRedisScript<Long> ACQUIRE_SCRIPT = new DefaultRedisScript<>(
@@ -161,8 +163,64 @@ public class TableOwnershipService {
         }
         try {
             redis.execute(RELEASE_SCRIPT, List.of(key(id)), instanceId);
+            redis.opsForSet().remove(ACTIVE_TABLES_KEY, id.toString()); // table is finished → drop from active set
         } catch (Exception e) {
             log.warn("Ownership release failed for {}", id, e);
+        }
+    }
+
+    /**
+     * Record {@code id} as an active game table that needs an owner driving its timers, so a surviving
+     * node can take it over if the current owner dies. No-op when clustering is off / Redis is down.
+     */
+    public void trackActiveTable(UUID id) {
+        StringRedisTemplate redis = activeRedis();
+        if (redis == null || id == null) {
+            return;
+        }
+        try {
+            redis.opsForSet().add(ACTIVE_TABLES_KEY, id.toString());
+        } catch (Exception e) {
+            log.warn("Active-table tracking failed for {}", id, e);
+        }
+    }
+
+    /** Drop {@code id} from the active-table set (finished or no longer present). */
+    public void untrackActiveTable(UUID id) {
+        StringRedisTemplate redis = activeRedis();
+        if (redis == null || id == null) {
+            return;
+        }
+        try {
+            redis.opsForSet().remove(ACTIVE_TABLES_KEY, id.toString());
+        } catch (Exception e) {
+            log.warn("Active-table untracking failed for {}", id, e);
+        }
+    }
+
+    /** All active game tables in the cluster (each may be owned, orphaned, or finished-but-unpruned). */
+    public Set<UUID> activeTables() {
+        StringRedisTemplate redis = activeRedis();
+        if (redis == null) {
+            return Set.of();
+        }
+        try {
+            Set<String> members = redis.opsForSet().members(ACTIVE_TABLES_KEY);
+            if (members == null || members.isEmpty()) {
+                return Set.of();
+            }
+            Set<UUID> tables = new java.util.HashSet<>(members.size());
+            for (String member : members) {
+                try {
+                    tables.add(UUID.fromString(member));
+                } catch (IllegalArgumentException ignored) {
+                    redis.opsForSet().remove(ACTIVE_TABLES_KEY, member); // prune a malformed entry
+                }
+            }
+            return tables;
+        } catch (Exception e) {
+            log.warn("Active-table listing failed", e);
+            return Set.of();
         }
     }
 

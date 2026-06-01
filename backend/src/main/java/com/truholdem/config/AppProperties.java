@@ -86,6 +86,13 @@ public class AppProperties {
         /** Shared secret authenticating node-to-node forwarded calls (required when routing on). */
         private String sharedSecret = "";
 
+        /**
+         * When true (requires ownershipEnabled), each node periodically scans for active tables whose
+         * owner died (lease expired) and takes them over — re-acquiring ownership and resuming the
+         * stalled turn timer. Default off → orphaned tables resume only lazily on the next action.
+         */
+        private boolean takeoverEnabled = false;
+
         public boolean isOwnershipEnabled() {
             return ownershipEnabled;
         }
@@ -124,6 +131,14 @@ public class AppProperties {
 
         public void setSharedSecret(String sharedSecret) {
             this.sharedSecret = sharedSecret;
+        }
+
+        public boolean isTakeoverEnabled() {
+            return takeoverEnabled;
+        }
+
+        public void setTakeoverEnabled(boolean takeoverEnabled) {
+            this.takeoverEnabled = takeoverEnabled;
         }
     }
 

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 5 (failover takeover)
+- Automatic takeover of tables orphaned by a dead owner so a game no longer hangs waiting on a player the
+  dead node was meant to time out (previously it recovered only lazily, on the next action for that table).
+- Each node records active game tables in a Redis set (`truholdem:cluster:tables`, added by
+  `TableOwnershipService.trackActiveTable` when a turn timer is armed, removed on game end);
+  `ClusterFailoverService` scans the set ~twice per lease TTL and, for any table whose lease has expired
+  (no current owner), re-acquires it and resumes the stalled turn timer. Finished/missing games are pruned.
+- Gated by `app.cluster.takeover-enabled` (default off, requires `ownership-enabled`); inert otherwise.
+- `MultiNodeClusterIT` adds a kill-node test: node-A is shut down and its lease expired, then node-B takes
+  over the orphaned table and resumes its timer. `ClusterFailoverServiceTest` covers the claim/resume,
+  still-owned-skip, lost-race, and finished-game-prune paths. (v1 resumes the turn timer only; proactive
+  next-hand takeover for a table orphaned between hands remains a follow-up.)
+- Doc correction: WebSocket-origin actions were already routed cross-node (the WS handler calls the same
+  `playerAct`); the earlier "WS-origin forwarding remaining" note was overly cautious.
+
 ### 🏗️ Architecture — Engine migration Phase 5 (cross-node command routing)
 - Cross-node action routing so same-table multiplayer is correct across a cluster: `PokerGameService.playerAct`
   routes at the service layer — if this node can't acquire the table's lease it resolves the owner from a

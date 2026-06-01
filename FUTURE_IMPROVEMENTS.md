@@ -28,15 +28,19 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   the `create-drop` cross-context contamination (`Table "poker_games" not found`) is why they're excluded
   in `pom.xml` Surefire today. Remove the duplicate class.
 - **Multi-app-instance harness** — ✅ landed: `MultiNodeClusterIT` boots two full **web** app instances
-  against one shared Postgres + Redis (cluster mode + routing on) and asserts (a) cross-node ownership
-  exclusivity and (b) an action on the non-owner node is forwarded over real HTTP to the owner and applied
-  once. (The ownership lease is also covered by `TableOwnershipRedisIT`.)
-  Note: the harness clears `spring.autoconfigure.exclude` and enables cluster flags via command-line args.
-- **Cross-node command routing** — ✅ landed (REST): `app.cluster.routing-enabled` forwards an action to
-  the owning node over HTTP (`ClusterActionForwarder` → `/internal/cluster/...`). Remaining Phase 5 work:
-  forwarding **WebSocket-origin** actions (REST is done; WS relies on ws-cluster broadcast + sticky for now);
-  live kill-node **failover takeover** (proactively resuming a dead node's timers, not lazily on next action);
-  and partition/split-brain hardening + multi-hop retry orchestration.
+  against one shared Postgres + Redis (cluster mode + routing + takeover on) and asserts (a) cross-node
+  ownership exclusivity, (b) an action on the non-owner node is forwarded over real HTTP to the owner and
+  applied once, and (c) kill-node takeover. (The ownership lease is also covered by `TableOwnershipRedisIT`.)
+  Note: the harness clears `spring.autoconfigure.exclude`, enables cluster flags via command-line args, and
+  boots node-A with `ddl-auto=create` (not `create-drop`) so the schema survives the kill-node test.
+- **Cross-node command routing** — ✅ landed (REST + WS): `app.cluster.routing-enabled` forwards an action
+  to the owning node over HTTP (`ClusterActionForwarder` → `/internal/cluster/...`). Both REST and WebSocket
+  actions route, since both call `PokerGameService.playerAct`.
+- **Failover takeover** — ✅ landed: `app.cluster.takeover-enabled` — `ClusterFailoverService` scans the
+  `truholdem:cluster:tables` active set and re-acquires + resumes any table whose owner died, instead of
+  recovering only on the next action. Remaining Phase 5 work: proactive **next-hand** takeover for a table
+  orphaned *between hands* (the turn timer is resumed; the NEXT_HAND transition is not yet); partition /
+  split-brain hardening (fencing tokens, behaviour on Redis loss mid-game) + multi-hop retry orchestration.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---
