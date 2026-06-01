@@ -512,14 +512,19 @@ Each risky step is guarded by a feature flag for fast rollback.
   per table when the event log lands.
 
 ### Phase 3 — Domain events & read projections (CQRS) 🚧 partial
-- ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`;
-  side effects (statistics, websocket) moved to `application/listener/*EventListener`.
+- ✅ Aggregate emits `PlayerActed`, `PotAwarded`, `HandCompleted`, `PhaseChanged`, `GameStarted`.
+- ✅ **Statistics flow through events** on the aggregate path: `PokerGameService` publishes the
+  aggregate's events via `DomainEventPublisher`, and `StatisticsEventListener` derives stats from
+  `PlayerActed`/`HandCompleted` (replacing the previous imperative `playerStatisticsService` calls,
+  which were duplicated and the listener was an unreachable stub). The legacy path keeps its
+  imperative stats, so this is gated by `app.game.engine=AGGREGATE`.
 - ✅ Sanitized read projection: REST/WS responses go through a viewer-aware `HoleCardSanitizer`.
   The **deck is never serialized** (`@JsonIgnore`); **opponents' hole cards** are masked until
   showdown (own seats revealed, folded hands stay hidden). WS broadcasts mask all hands and the
   Angular store restores the local player's own hand across masked updates.
 - 🚧 Dedicated spectator/history read-models (separate from the live `Game` shape) still pending.
-- **Exit:** reads use sanitized projections; statistics flow through events.
+- **Exit:** reads use sanitized projections (✅); statistics flow through events (✅ on the aggregate
+  path). Remaining: spectator/history read-models.
 
 ### Phase 4 — Event log / snapshots & audit
 - Append-only event log per hand in Postgres (state = snapshot + event tail).

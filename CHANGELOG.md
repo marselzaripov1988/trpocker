@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 3 (event-driven statistics)
+- Domain events raised by the `PokerGame` aggregate are now **published to Spring** via
+  `DomainEventPublisher` on the aggregate engine path (previously they were collected and dropped).
+- `StatisticsEventListener` is implemented (and made synchronous) to derive player statistics from
+  `PlayerActed`/`HandCompleted` events; the duplicate imperative `playerStatisticsService` calls were
+  removed from the aggregate path. Wins are counted from `HandCompleted` only (no double counting).
+- Gated by `app.game.engine=AGGREGATE`; the default legacy path keeps its imperative statistics.
+
 ### 🏗️ Architecture — Engine migration Phase 2 (single-writer per table)
 - **`TableCommandDispatcher`**: every mutation for a table (`gameId`) is now serialized on a
   per-game command chain running over a shared bounded thread pool (no thread-per-table — scales
