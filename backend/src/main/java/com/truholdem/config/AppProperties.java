@@ -74,6 +74,18 @@ public class AppProperties {
         @Min(1000)
         private long leaseTtlMillis = 30_000;
 
+        /**
+         * When true (requires ownershipEnabled), an action received for a table owned by another node
+         * is forwarded over HTTP to that owner. Default off → no cross-node forwarding.
+         */
+        private boolean routingEnabled = false;
+
+        /** This node's peer-reachable base URL for forwarded calls, e.g. http://host:8080. */
+        private String nodeBaseUrl = "";
+
+        /** Shared secret authenticating node-to-node forwarded calls (required when routing on). */
+        private String sharedSecret = "";
+
         public boolean isOwnershipEnabled() {
             return ownershipEnabled;
         }
@@ -88,6 +100,30 @@ public class AppProperties {
 
         public void setLeaseTtlMillis(long leaseTtlMillis) {
             this.leaseTtlMillis = leaseTtlMillis;
+        }
+
+        public boolean isRoutingEnabled() {
+            return routingEnabled;
+        }
+
+        public void setRoutingEnabled(boolean routingEnabled) {
+            this.routingEnabled = routingEnabled;
+        }
+
+        public String getNodeBaseUrl() {
+            return nodeBaseUrl;
+        }
+
+        public void setNodeBaseUrl(String nodeBaseUrl) {
+            this.nodeBaseUrl = nodeBaseUrl;
+        }
+
+        public String getSharedSecret() {
+            return sharedSecret;
+        }
+
+        public void setSharedSecret(String sharedSecret) {
+            this.sharedSecret = sharedSecret;
         }
     }
 

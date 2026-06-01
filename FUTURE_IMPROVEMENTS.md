@@ -27,11 +27,16 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   either move them onto the Testcontainers Postgres base or give each Spring context an isolated H2 DB —
   the `create-drop` cross-context contamination (`Table "poker_games" not found`) is why they're excluded
   in `pom.xml` Surefire today. Remove the duplicate class.
-- **Multi-app-instance harness** — ✅ landed: `MultiNodeClusterIT` boots two full app instances against
-  one shared Postgres + Redis (cluster mode on) and asserts cross-node ownership exclusivity. Build the
-  remaining Phase 5 work on it: cross-node command routing to the owner (or table-affinity LB routing)
-  and live kill-node failover takeover. (The ownership lease itself is also covered by `TableOwnershipRedisIT`.)
+- **Multi-app-instance harness** — ✅ landed: `MultiNodeClusterIT` boots two full **web** app instances
+  against one shared Postgres + Redis (cluster mode + routing on) and asserts (a) cross-node ownership
+  exclusivity and (b) an action on the non-owner node is forwarded over real HTTP to the owner and applied
+  once. (The ownership lease is also covered by `TableOwnershipRedisIT`.)
   Note: the harness clears `spring.autoconfigure.exclude` and enables cluster flags via command-line args.
+- **Cross-node command routing** — ✅ landed (REST): `app.cluster.routing-enabled` forwards an action to
+  the owning node over HTTP (`ClusterActionForwarder` → `/internal/cluster/...`). Remaining Phase 5 work:
+  forwarding **WebSocket-origin** actions (REST is done; WS relies on ws-cluster broadcast + sticky for now);
+  live kill-node **failover takeover** (proactively resuming a dead node's timers, not lazily on next action);
+  and partition/split-brain hardening + multi-hop retry orchestration.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

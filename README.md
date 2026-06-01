@@ -471,8 +471,10 @@ Each risky step is guarded by a feature flag for fast rollback.
 > gave reads dedicated projections; Phase 4 added the append-only Postgres `game_event_log` (audit +
 > replay-from-events); Phase 6 removed dead code and added ArchUnit enforcement; Phase 5 landed the
 > clustering foundation — Redis-lease per-table ownership so timers fire on one node only
-> (`app.cluster.ownership-enabled`). Remaining: cross-node command routing + verified kill-node failover,
-> which need the multi-node Testcontainers harness (see FUTURE_IMPROVEMENTS).
+> (`app.cluster.ownership-enabled`) plus **cross-node command routing**: a node that receives an action
+> for a table it doesn't own forwards it over HTTP to the owning node (`app.cluster.routing-enabled`),
+> so same-table multiplayer is correct across the cluster. Remaining: verified kill-node failover
+> takeover + WS-origin action forwarding (see FUTURE_IMPROVEMENTS).
 > Card leakage is closed: the deck is never serialized, and REST/WS responses run through
 > a viewer-aware `HoleCardSanitizer` that masks opponents' hole cards until showdown
 > (own seats always revealed; folded hands stay hidden). WS broadcasts mask all hands and
@@ -559,15 +561,26 @@ Each risky step is guarded by a feature flag for fast rollback.
 - ✅ The lease semantics are verified against **real Redis** (`TableOwnershipRedisIT`, Testcontainers):
   two `TableOwnershipService` nodes contend for one table — exclusive acquire, release handoff, and
   TTL-expiry failover all pass.
-- ✅ A **multi-instance harness** exists (`MultiNodeClusterIT`): boots two full app instances against one
-  shared Postgres + Redis (cluster mode on) and asserts cross-node ownership exclusivity — the base for
-  verifying the rest. (It already surfaced + fixed a real cluster-mode bug: a duplicate
+- ✅ **Cross-node command routing** (`app.cluster.routing-enabled`, default off, requires ownership):
+  `PokerGameService.playerAct` routes at the service layer — if this node can't acquire the table's lease,
+  it resolves the owner from a Redis node registry (`truholdem:cluster:node:{instanceId}` → base URL) and
+  `ClusterActionForwarder` POSTs the action to the owner's secured `/internal/cluster/game/{id}/action`
+  endpoint (constant-time shared-secret header). The owner applies it on its own single-writer queue and
+  persists to the authoritative shared hot-state; the originating node reloads and returns it. The action
+  carries its `commandId` (exactly-once preserved), a non-routing `playerActLocal` path prevents forward
+  loops, and one re-claim covers an owner that died mid-flight. So **every action for a table is serialized
+  on exactly one node** → correct concurrent same-table multiplayer across the cluster.
+- ✅ A **multi-instance harness** exists (`MultiNodeClusterIT`): boots two full **web** app instances against
+  one shared Postgres + Redis (cluster mode + routing on) and asserts (a) cross-node ownership exclusivity
+  and (b) an action sent to the non-owner node is forwarded over real HTTP to the owner and applied once,
+  the owner retaining the lease. (It already surfaced + fixed a real cluster-mode bug: a duplicate
   `WebSocketEventListener` bean that crashed startup whenever `app.websocket.cluster.enabled=true`.)
-- 🚧 Remaining (build on the harness): cross-node command/action routing to the owner (or table-affinity
-  routing at the LB), and automatic failover **takeover** (proactively resuming a dead node's timers
-  rather than lazily on the next action for that table).
-- **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; full
-  horizontal-scaling/kill-node verification of a live game pending the multi-instance harness.
+- 🚧 Remaining (build on the harness): automatic failover **takeover** (proactively resuming a dead node's
+  timers rather than lazily on the next action), forwarding **WebSocket-origin** actions (REST is done; WS
+  relies on ws-cluster broadcast + sticky for now), and partition/split-brain hardening.
+- **Exit:** ✅ no timer double-fire across nodes; ✅ lease failover proven against real Redis; ✅ cross-node
+  action routing applied exactly once on the owner, verified on the two-node harness; kill-node takeover
+  of in-flight timers pending.
 
 ### Phase 6 — Cleanup & enforcement ✅ done
 - ✅ Dead code removed: unused `GameUpdateType` values (`NEW_HAND`/`PLAYER_JOINED`/`PLAYER_LEFT`/

@@ -100,7 +100,14 @@ class PokerGameServiceTest {
     @Mock
     private DomainEventPublisher domainEventPublisher;
 
+    @Mock
+    private com.truholdem.service.cluster.TableOwnershipService ownership;
+
+    @Mock
+    private com.truholdem.service.cluster.ClusterActionForwarder clusterActionForwarder;
+
     private AppProperties.Game gameConfig;
+    private AppProperties.Cluster clusterConfig;
 
     private PokerGameService pokerGameService;
 
@@ -132,6 +139,10 @@ class PokerGameServiceTest {
         lenient().when(gameConfig.getDefaultSmallBlind()).thenReturn(10);
         lenient().when(gameConfig.getDefaultBigBlind()).thenReturn(20);
 
+        clusterConfig = mock(AppProperties.Cluster.class);
+        lenient().when(appProperties.getCluster()).thenReturn(clusterConfig);
+        lenient().when(clusterConfig.isRoutingEnabled()).thenReturn(false);
+
         pokerGameService = new PokerGameService(
                 gameStateService,
                 handEvaluator,
@@ -149,6 +160,8 @@ class PokerGameServiceTest {
                 new PokerGameMapper(),
                 commandDispatcher,
                 domainEventPublisher,
+                ownership,
+                clusterActionForwarder,
                 null); // single-writer disabled in these tests → self (proxy) is never used
     }
 

@@ -38,6 +38,9 @@ import com.truholdem.domain.event.HandCompleted;
 import com.truholdem.domain.value.Chips;
 import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.model.PlayerInfo;
+import com.truholdem.service.cluster.ClusterActionForwarder;
+import com.truholdem.service.cluster.ClusterForwardException;
+import com.truholdem.service.cluster.TableOwnershipService;
 import com.truholdem.service.game.GameStateService;
 import com.truholdem.service.game.TableCommandDispatcher;
 import com.truholdem.service.tournament.TournamentChipSyncService;
@@ -65,6 +68,8 @@ public class PokerGameService {
     private final PokerGameMapper pokerGameMapper;
     private final TableCommandDispatcher commandDispatcher;
     private final DomainEventPublisher domainEventPublisher;
+    private final TableOwnershipService ownership;
+    private final ClusterActionForwarder clusterActionForwarder;
     private final PokerGameService self;
 
     public PokerGameService(
@@ -84,6 +89,8 @@ public class PokerGameService {
             PokerGameMapper pokerGameMapper,
             TableCommandDispatcher commandDispatcher,
             DomainEventPublisher domainEventPublisher,
+            TableOwnershipService ownership,
+            ClusterActionForwarder clusterActionForwarder,
             @Lazy PokerGameService self) {
         this.gameStateService = gameStateService;
         this.handEvaluator = handEvaluator;
@@ -101,6 +108,8 @@ public class PokerGameService {
         this.pokerGameMapper = pokerGameMapper;
         this.commandDispatcher = commandDispatcher;
         this.domainEventPublisher = domainEventPublisher;
+        this.ownership = ownership;
+        this.clusterActionForwarder = clusterActionForwarder;
         this.self = self;
     }
 
@@ -192,12 +201,39 @@ public class PokerGameService {
     }
 
     /**
-     * Player action entry point with an explicit idempotency key. When single-writer is enabled the
-     * action is serialized on the table's command queue and a duplicate {@code commandId} replays
-     * the recorded outcome instead of acting twice.
+     * Player action entry point with an explicit idempotency key. With cross-node routing enabled,
+     * an action for a table owned by another node is forwarded over HTTP to that owner; otherwise it
+     * runs on this node (single-writer queue when enabled). A duplicate {@code commandId} is applied once.
      */
     @CacheEvict(value = "games", key = "#gameId")
     public Game playerAct(UUID gameId, UUID commandId, UUID playerId, PlayerAction action, int amount) {
+        if (!appProperties.getCluster().isRoutingEnabled()) {
+            return playerActLocal(gameId, commandId, playerId, action, amount);
+        }
+        if (ownership.acquire(gameId)) {
+            return playerActLocal(gameId, commandId, playerId, action, amount); // this node owns the table
+        }
+        String owner = ownership.currentOwner(gameId);
+        try {
+            clusterActionForwarder.forward(owner, gameId, commandId, playerId, action, amount);
+        } catch (ClusterForwardException e) {
+            // Owner may have died — try to claim the table once and process locally.
+            if (ownership.acquire(gameId)) {
+                logger.warn("Owner {} of game {} unreachable; claimed locally", owner, gameId);
+                return playerActLocal(gameId, commandId, playerId, action, amount);
+            }
+            throw new IllegalStateException("Table owner unreachable for game " + gameId, e);
+        }
+        // Owner processed + persisted to shared hot-state; return the authoritative reload.
+        return findGameById(gameId);
+    }
+
+    /**
+     * Process an action on THIS node, with no cross-node routing (single-writer queue when enabled).
+     * Called for locally-owned tables and by the internal endpoint for forwarded actions.
+     */
+    @CacheEvict(value = "games", key = "#gameId")
+    public Game playerActLocal(UUID gameId, UUID commandId, UUID playerId, PlayerAction action, int amount) {
         if (!appProperties.getGame().isSingleWriterEnabled()) {
             return playerActInternal(gameId, playerId, action, amount);
         }

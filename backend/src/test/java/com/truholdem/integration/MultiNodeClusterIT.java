@@ -2,6 +2,8 @@ package com.truholdem.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -10,7 +12,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.testcontainers.containers.GenericContainer;
@@ -21,21 +22,23 @@ import org.testcontainers.utility.DockerImageName;
 
 import com.truholdem.TestConstants;
 import com.truholdem.TruholdemApplication;
+import com.truholdem.model.Game;
+import com.truholdem.model.Player;
+import com.truholdem.model.PlayerAction;
+import com.truholdem.model.PlayerInfo;
+import com.truholdem.service.PokerGameService;
 import com.truholdem.service.cluster.TableOwnershipService;
 
 /**
- * Multi-instance cluster harness: boots TWO real application instances ("nodes") against ONE shared
- * Postgres + Redis, with single-writer / ownership / WebSocket-cluster enabled. This is the foundation
- * for verifying the remaining Phase 5 work (cross-node command routing, failover takeover).
- *
- * <p>Baseline established here: per-table ownership is exclusive across nodes (only one node owns a
- * given table at a time over the shared Redis lease). NOTE — same-table player <em>actions</em> are
- * NOT yet coordinated across nodes (per-node single-writer + sticky sessions only); that gap is what
- * cross-node routing / table-affinity will close, and this harness is where it will be verified.
+ * Multi-instance cluster harness: boots TWO real web app instances ("nodes") against ONE shared
+ * Postgres + Redis, with single-writer / ownership / WebSocket-cluster / cross-node-routing enabled.
+ * Verifies the Phase 5 behaviour end-to-end across nodes.
  */
 @Testcontainers
 @DisplayName("Multi-node cluster harness (two app instances, shared Redis/Postgres)")
 class MultiNodeClusterIT {
+
+    private static final String SECRET = "cluster-test-secret";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -53,9 +56,11 @@ class MultiNodeClusterIT {
 
     @BeforeAll
     static void startNodes() {
+        int portA = freePort();
+        int portB = freePort();
         // node-A creates the schema; node-B reuses it (no second create-drop that would wipe node-A).
-        nodeA = bootNode("node-A", "create-drop");
-        nodeB = bootNode("node-B", "none");
+        nodeA = bootNode("node-A", portA, "create-drop");
+        nodeB = bootNode("node-B", portB, "none");
     }
 
     @AfterAll
@@ -68,11 +73,9 @@ class MultiNodeClusterIT {
         }
     }
 
-    private static ConfigurableApplicationContext bootNode(String instanceId, String ddlAuto) {
-        // Pass as command-line args (highest precedence) so they override application.properties —
-        // .properties() would register them as low-precedence defaults instead.
+    private static ConfigurableApplicationContext bootNode(String instanceId, int port, String ddlAuto) {
         List<String> args = new ArrayList<>();
-        args.add("--server.port=0");
+        args.add("--server.port=" + port);
         args.add("--spring.datasource.url=" + POSTGRES.getJdbcUrl());
         args.add("--spring.datasource.username=" + POSTGRES.getUsername());
         args.add("--spring.datasource.password=" + POSTGRES.getPassword());
@@ -82,35 +85,72 @@ class MultiNodeClusterIT {
         args.add("--spring.liquibase.enabled=false");
         args.add("--spring.data.redis.host=" + REDIS.getHost());
         args.add("--spring.data.redis.port=" + REDIS.getMappedPort(6379));
-        // Cluster mode needs a RedisConnectionFactory — make sure no profile excludes Redis auto-config.
-        args.add("--spring.autoconfigure.exclude=");
+        args.add("--spring.autoconfigure.exclude="); // cluster mode needs Redis auto-config
         args.add("--app.game.single-writer-enabled=true");
         args.add("--app.cluster.ownership-enabled=true");
+        args.add("--app.cluster.routing-enabled=true");
+        args.add("--app.cluster.node-base-url=http://localhost:" + port + "/api"); // incl. context-path
+        args.add("--app.cluster.shared-secret=" + SECRET);
         args.add("--app.websocket.cluster.enabled=true");
         args.add("--app.websocket.cluster.instance-id=" + instanceId);
         args.add("--app.jwt.secret=dGVzdC1zZWNyZXQta2V5LWZvci1pbnRlZ3JhdGlvbi10ZXN0cy0xMjM0NTY3ODkw");
         args.add("--app.jwt.expiration=86400000");
 
-        return new SpringApplicationBuilder(TruholdemApplication.class)
-                .web(WebApplicationType.NONE)
-                .run(args.toArray(new String[0]));
+        return new SpringApplicationBuilder(TruholdemApplication.class).run(args.toArray(new String[0]));
+    }
+
+    private static int freePort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new IllegalStateException("No free port", e);
+        }
     }
 
     @Test
-    @DisplayName("two nodes boot on shared infra; per-table ownership is exclusive across nodes")
+    @DisplayName("per-table ownership is exclusive across nodes")
     void ownershipExclusiveAcrossNodes() {
         TableOwnershipService ownerOnA = nodeA.getBean(TableOwnershipService.class);
         TableOwnershipService ownerOnB = nodeB.getBean(TableOwnershipService.class);
         UUID table = UUID.randomUUID();
 
-        assertThat(ownerOnA.acquire(table)).isTrue();   // node-A claims the table
-        assertThat(ownerOnB.acquire(table)).isFalse();  // node-B is rejected over shared Redis
+        assertThat(ownerOnA.acquire(table)).isTrue();
+        assertThat(ownerOnB.acquire(table)).isFalse();
         assertThat(ownerOnA.isOwner(table)).isTrue();
         assertThat(ownerOnB.isOwner(table)).isFalse();
 
-        // After node-A releases, node-B can take over (the failover handoff path).
         ownerOnA.release(table);
         assertThat(ownerOnB.acquire(table)).isTrue();
-        assertThat(ownerOnB.isOwner(table)).isTrue();
+        ownerOnB.release(table);
+    }
+
+    @Test
+    @DisplayName("an action on the non-owner node is forwarded over HTTP to the owner")
+    void actionForwardedToOwner() {
+        PokerGameService svcA = nodeA.getBean(PokerGameService.class);
+        PokerGameService svcB = nodeB.getBean(PokerGameService.class);
+        TableOwnershipService ownA = nodeA.getBean(TableOwnershipService.class);
+        TableOwnershipService ownB = nodeB.getBean(TableOwnershipService.class);
+
+        // Creating the game on node-A schedules its turn timer → node-A acquires ownership.
+        Game game = svcA.createNewGame(List.of(
+                new PlayerInfo("P1", 1000, false),
+                new PlayerInfo("P2", 1000, false)));
+        UUID gameId = game.getId();
+
+        assertThat(ownA.isOwner(gameId)).isTrue();
+        assertThat(ownB.isOwner(gameId)).isFalse();
+
+        Player actor = game.getCurrentPlayer();
+        PlayerAction action = actor.getBetAmount() >= game.getCurrentBet()
+                ? PlayerAction.CHECK : PlayerAction.CALL;
+
+        // node-B does NOT own the table → it must forward the action to node-A over HTTP.
+        Game updated = svcB.playerAct(gameId, UUID.randomUUID(), actor.getId(), action, 0);
+
+        // The forward succeeded (node-B did NOT fall back to claiming ownership) and node-A still owns.
+        assertThat(updated).isNotNull();
+        assertThat(ownA.isOwner(gameId)).isTrue();
+        assertThat(ownB.isOwner(gameId)).isFalse();
     }
 }

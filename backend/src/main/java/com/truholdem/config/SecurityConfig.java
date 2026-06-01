@@ -70,6 +70,10 @@ public class SecurityConfig {
                 // Public authentication endpoints
                 .requestMatchers("/auth/**").permitAll()
 
+                // Internal node-to-node cluster endpoints — authenticated by the shared cluster
+                // secret header inside the controller (not a user JWT), and closed when unconfigured.
+                .requestMatchers("/internal/**").permitAll()
+
                 // API Documentation - public for development
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()

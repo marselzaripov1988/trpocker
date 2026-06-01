@@ -5,11 +5,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,6 +40,8 @@ public class TableOwnershipService {
     private static final Logger log = LoggerFactory.getLogger(TableOwnershipService.class);
 
     private static final String KEY_PREFIX = "truholdem:owner:";
+    /** Per-node registry entry: instanceId → peer-reachable base URL (TTL-refreshed by the heartbeat). */
+    private static final String NODE_KEY_PREFIX = "truholdem:cluster:node:";
 
     /** Atomically acquire if the key is free or already ours, refreshing the TTL; returns 1 on success. */
     private static final DefaultRedisScript<Long> ACQUIRE_SCRIPT = new DefaultRedisScript<>(
@@ -108,6 +113,42 @@ public class TableOwnershipService {
         }
     }
 
+    /** The instanceId currently owning {@code id}, or {@code null} if free / disabled / Redis down. */
+    public String currentOwner(UUID id) {
+        if (id == null) {
+            return null;
+        }
+        StringRedisTemplate redis = activeRedis();
+        if (redis == null) {
+            return null;
+        }
+        try {
+            return redis.opsForValue().get(key(id));
+        } catch (Exception e) {
+            log.warn("Ownership lookup failed for {}", id, e);
+            return null;
+        }
+    }
+
+    /** Peer-reachable base URL registered by {@code instanceId}, or {@code null} if unknown. */
+    public String baseUrlFor(String instanceId) {
+        StringRedisTemplate redis = activeRedis();
+        if (redis == null || instanceId == null) {
+            return null;
+        }
+        try {
+            return redis.opsForValue().get(NODE_KEY_PREFIX + instanceId);
+        } catch (Exception e) {
+            log.warn("Node base-url lookup failed for {}", instanceId, e);
+            return null;
+        }
+    }
+
+    /** This node's instanceId (peers route to it via the registry). */
+    public String instanceId() {
+        return instanceId;
+    }
+
     /** Release ownership of {@code id} (e.g. when the table/tournament is finished). */
     public void release(UUID id) {
         if (id == null) {
@@ -125,16 +166,23 @@ public class TableOwnershipService {
         }
     }
 
-    /** Keeps this node's leases alive; drops entries whose ownership was lost. */
+    /** Register this node in the cluster registry as soon as it is ready (for peer routing). */
+    @EventListener(ApplicationReadyEvent.class)
+    public void registerOnStartup() {
+        StringRedisTemplate redis = activeRedis();
+        if (redis != null) {
+            registerSelf(redis);
+        }
+    }
+
+    /** Keeps this node's registry entry + leases alive; drops entries whose ownership was lost. */
     @Scheduled(fixedDelayString = "#{${app.cluster.lease-ttl-millis:30000} / 3}")
     public void renewOwnedLeases() {
-        if (ownedLocally.isEmpty()) {
-            return;
-        }
         StringRedisTemplate redis = activeRedis();
         if (redis == null) {
             return;
         }
+        registerSelf(redis);
         for (UUID id : Set.copyOf(ownedLocally)) {
             try {
                 Long result = redis.execute(ACQUIRE_SCRIPT, List.of(key(id)), instanceId,
@@ -151,6 +199,19 @@ public class TableOwnershipService {
     /** Test/observability aid: tables this node believes it owns. */
     public Set<UUID> ownedTables() {
         return Collections.unmodifiableSet(ownedLocally);
+    }
+
+    /** Refresh this node's registry entry (instanceId → base URL) so peers can route to it. */
+    private void registerSelf(StringRedisTemplate redis) {
+        String baseUrl = appProperties.getCluster().getNodeBaseUrl();
+        if (baseUrl == null || baseUrl.isBlank()) {
+            return; // routing not configured for this node
+        }
+        try {
+            redis.opsForValue().set(NODE_KEY_PREFIX + instanceId, baseUrl, leaseTtlMillis(), TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.warn("Cluster node self-registration failed", e);
+        }
     }
 
     /** The active Redis template when ownership is enabled and Redis is present; otherwise null. */

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ Architecture — Engine migration Phase 5 (cross-node command routing)
+- Cross-node action routing so same-table multiplayer is correct across a cluster: `PokerGameService.playerAct`
+  routes at the service layer — if this node can't acquire the table's lease it resolves the owner from a
+  Redis node registry (`truholdem:cluster:node:{instanceId}` → peer base URL, written on startup and refreshed
+  in the ownership heartbeat) and forwards the action to the owner over HTTP.
+- New `ClusterActionForwarder` POSTs to the owner's `/internal/cluster/game/{id}/action` endpoint
+  (`ClusterInternalController`), authenticated by a constant-time shared-secret header (`X-Cluster-Secret`).
+  The owner applies the action on its own single-writer queue and persists to the authoritative shared
+  hot-state; the originating node reloads and returns it. The `commandId` is carried through (exactly-once
+  preserved), a non-routing `playerActLocal` path prevents forward loops, and one re-claim covers an owner
+  that died mid-flight.
+- Gated by `app.cluster.routing-enabled` (default off, requires `ownership-enabled`); routing-off behaviour
+  is byte-for-byte unchanged. New config: `app.cluster.node-base-url` (this node's peer-reachable URL,
+  must include the servlet context-path) and `app.cluster.shared-secret`.
+- `MultiNodeClusterIT` upgraded to boot two web instances and verify an action sent to the non-owner
+  node is forwarded over real HTTP to the owner and applied exactly once (owner retains the lease).
+  `ClusterActionForwarderTest` covers the secret header, unknown-owner and owner-error paths.
+
 ### 🏗️ Architecture — Engine migration Phase 5 foundation (per-table ownership)
 - New `TableOwnershipService`: a Redis-lease (`truholdem:owner:{uuid}` → node `instanceId`, atomic Lua
   acquire-if-free-or-mine + heartbeat renewal) giving each table/tournament at most one owner node.
