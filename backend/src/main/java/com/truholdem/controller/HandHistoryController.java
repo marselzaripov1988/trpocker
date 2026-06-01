@@ -2,7 +2,7 @@ package com.truholdem.controller;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.ErrorResponse;
-import com.truholdem.model.HandHistory;
+import com.truholdem.dto.HandHistoryResponse;
 import com.truholdem.service.HandHistoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -42,7 +42,7 @@ public class HandHistoryController {
         @ApiResponse(
             responseCode = "200",
             description = "Hand history retrieved successfully",
-            content = @Content(schema = @Schema(implementation = HandHistory.class))
+            content = @Content(schema = @Schema(implementation = HandHistoryResponse.class))
         ),
         @ApiResponse(
             responseCode = "404",
@@ -50,9 +50,10 @@ public class HandHistoryController {
             content = @Content(schema = @Schema(implementation = ErrorResponse.class))
         )
     })
-    public ResponseEntity<HandHistory> getHandHistory(
+    public ResponseEntity<HandHistoryResponse> getHandHistory(
             @Parameter(description = "UUID of the hand history") @PathVariable UUID historyId) {
         return handHistoryService.getHandHistory(historyId)
+            .map(HandHistoryResponse::from)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -63,9 +64,10 @@ public class HandHistoryController {
         description = "Retrieve all hand histories for a specific game"
     )
     @ApiResponse(responseCode = "200", description = "Hand histories retrieved successfully")
-    public ResponseEntity<List<HandHistory>> getGameHistory(
+    public ResponseEntity<List<HandHistoryResponse>> getGameHistory(
             @Parameter(description = "UUID of the game") @PathVariable UUID gameId) {
-        List<HandHistory> history = handHistoryService.getGameHistory(gameId);
+        List<HandHistoryResponse> history = handHistoryService.getGameHistory(gameId)
+            .stream().map(HandHistoryResponse::from).toList();
         return ResponseEntity.ok(history);
     }
 
@@ -75,13 +77,14 @@ public class HandHistoryController {
         description = "Retrieve paginated hand histories for a specific game"
     )
     @ApiResponse(responseCode = "200", description = "Paginated hand histories retrieved successfully")
-    public ResponseEntity<Page<HandHistory>> getGameHistoryPaged(
+    public ResponseEntity<Page<HandHistoryResponse>> getGameHistoryPaged(
             @Parameter(description = "UUID of the game") @PathVariable UUID gameId,
             @Parameter(description = "Page number (0-based)", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size", example = "20")
             @RequestParam(defaultValue = "20") int size) {
-        Page<HandHistory> history = handHistoryService.getGameHistory(gameId, page, size);
+        Page<HandHistoryResponse> history = handHistoryService.getGameHistory(gameId, page, size)
+            .map(HandHistoryResponse::from);
         return ResponseEntity.ok(history);
     }
 
@@ -91,9 +94,10 @@ public class HandHistoryController {
         description = "Retrieve all hand histories where the specified player was involved"
     )
     @ApiResponse(responseCode = "200", description = "Hand histories retrieved successfully")
-    public ResponseEntity<List<HandHistory>> getPlayerHistory(
+    public ResponseEntity<List<HandHistoryResponse>> getPlayerHistory(
             @Parameter(description = "UUID of the player") @PathVariable UUID playerId) {
-        List<HandHistory> history = handHistoryService.getPlayerHistory(playerId);
+        List<HandHistoryResponse> history = handHistoryService.getPlayerHistory(playerId)
+            .stream().map(HandHistoryResponse::from).toList();
         return ResponseEntity.ok(history);
     }
 
@@ -103,9 +107,10 @@ public class HandHistoryController {
         description = "Retrieve all hand histories where the specified player won the pot"
     )
     @ApiResponse(responseCode = "200", description = "Winning hand histories retrieved successfully")
-    public ResponseEntity<List<HandHistory>> getPlayerWins(
+    public ResponseEntity<List<HandHistoryResponse>> getPlayerWins(
             @Parameter(description = "Player username") @PathVariable String playerName) {
-        List<HandHistory> history = handHistoryService.getPlayerWins(playerName);
+        List<HandHistoryResponse> history = handHistoryService.getPlayerWins(playerName)
+            .stream().map(HandHistoryResponse::from).toList();
         return ResponseEntity.ok(history);
     }
 
@@ -115,8 +120,9 @@ public class HandHistoryController {
         description = "Retrieve the most recently played hands across all games"
     )
     @ApiResponse(responseCode = "200", description = "Recent hand histories retrieved successfully")
-    public ResponseEntity<List<HandHistory>> getRecentHands() {
-        List<HandHistory> history = handHistoryService.getRecentHands();
+    public ResponseEntity<List<HandHistoryResponse>> getRecentHands() {
+        List<HandHistoryResponse> history = handHistoryService.getRecentHands()
+            .stream().map(HandHistoryResponse::from).toList();
         return ResponseEntity.ok(history);
     }
 
@@ -126,8 +132,9 @@ public class HandHistoryController {
         description = "Retrieve hand histories ranked by pot size"
     )
     @ApiResponse(responseCode = "200", description = "Biggest pot hand histories retrieved successfully")
-    public ResponseEntity<List<HandHistory>> getBiggestPots() {
-        List<HandHistory> history = handHistoryService.getBiggestPots();
+    public ResponseEntity<List<HandHistoryResponse>> getBiggestPots() {
+        List<HandHistoryResponse> history = handHistoryService.getBiggestPots()
+            .stream().map(HandHistoryResponse::from).toList();
         return ResponseEntity.ok(history);
     }
 
