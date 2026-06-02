@@ -40,6 +40,10 @@ public class AppProperties {
     @NotNull
     private final Cluster cluster = new Cluster();
 
+    @Valid
+    @NotNull
+    private final Payments payments = new Payments();
+
 
     public Jwt getJwt() {
         return jwt;
@@ -63,6 +67,50 @@ public class AppProperties {
 
     public Cluster getCluster() {
         return cluster;
+    }
+
+    public Payments getPayments() {
+        return payments;
+    }
+
+    /**
+     * Crypto wallet: on-chain deposits + KYC-gated withdrawals. Default OFF — when disabled the REST/webhook
+     * endpoints reject, so the subsystem is inert until explicitly enabled and a provider is configured.
+     */
+    public static class Payments {
+
+        /** Master switch for the wallet subsystem (deposits + withdrawals). */
+        private boolean enabled = false;
+
+        /** Whether a withdrawal requires the user's KYC to be VERIFIED. */
+        private boolean kycRequiredForWithdrawal = true;
+
+        /** Shared secret authenticating provider webhooks (deposit-confirmed, kyc-callback). */
+        private String webhookSecret = "";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public boolean isKycRequiredForWithdrawal() {
+            return kycRequiredForWithdrawal;
+        }
+
+        public void setKycRequiredForWithdrawal(boolean kycRequiredForWithdrawal) {
+            this.kycRequiredForWithdrawal = kycRequiredForWithdrawal;
+        }
+
+        public String getWebhookSecret() {
+            return webhookSecret;
+        }
+
+        public void setWebhookSecret(String webhookSecret) {
+            this.webhookSecret = webhookSecret;
+        }
     }
 
     /** Engine-migration Phase 5: per-table ownership for multi-node clustering. */

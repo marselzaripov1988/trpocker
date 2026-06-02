@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Crypto wallet — on-chain deposits + KYC-gated withdrawals (flag-gated skeleton)
+- New `wallet` subsystem (default **off**, `app.payments.enabled`): a real-money crypto balance separate from
+  in-game chips. Entities `WalletAccount` (authoritative balance per user+asset, optimistic-locked),
+  `WalletLedgerEntry` (append-only audit; unique on-chain `external_tx_id`), `WithdrawalRequest`
+  (state machine), `KycRecord` (per-user KYC status). New Liquibase changeset `01-wallet.xml` (generated
+  from the entities) keeps Postgres in sync so `ddl-auto=validate` passes.
+- **Deposits** are credited **idempotently by tx id** — a duplicate provider webhook (or redelivery) for the
+  same transaction is a no-op (the same exactly-once discipline as the game's `commandId`).
+- **Withdrawals** are gated on KYC (`VERIFIED`) when `app.payments.kyc-required-for-withdrawal`: the KYC
+  check, balance debit, ledger entry and request are written in one transaction, then broadcast via the
+  provider; insufficient balance and missing KYC are rejected (409 `KYC_REQUIRED` / 422 `INSUFFICIENT_FUNDS`).
+- Provider-abstracted: `CryptoPaymentProvider` (allocate address / broadcast) with a `MockCryptoPaymentProvider`
+  for dev/tests; a real gateway/self-custody signer overrides it. Inbound provider callbacks
+  (`/internal/wallet/deposit`, `/internal/wallet/kyc-callback`) are guarded by a constant-time shared-secret
+  header, mirroring the cluster internal endpoint.
+- API: `/v1/wallet/{balances,deposit-address,kyc,kyc/submit,withdrawals}`. Tests: `WalletServiceIT`
+  (idempotent deposit, KYC-blocked withdrawal, post-KYC success, insufficient funds) + `WalletServiceDisabledTest`.
+- Verified end-to-end: the cluster boots on a fresh Postgres with the wallet changeset applied and validated.
+
 ### 🏗️ Liquibase changelog squashed to a clean baseline
 - The incremental changelogs `01`–`14` had accumulated two overlapping schema lineages and could never run
   clean on a fresh Postgres (duplicate tables `04`/`05`, duplicate columns `06`/`08`, and — the blocker —

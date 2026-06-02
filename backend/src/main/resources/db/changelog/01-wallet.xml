@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Crypto wallet subsystem (on-chain deposits + KYC-gated withdrawals). Schema generated from the JPA
+      entities, same technique as the baseline. Postgres-only (tests use H2 + Hibernate create-drop).
+    -->
+    <changeSet id="wallet-001-schema" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="wallet_accounts"/></not>
+        </preConditions>
+        <sqlFile path="db/changelog/baseline/wallet-postgres.sql"
+                 relativeToChangelogFile="false"
+                 splitStatements="true"
+                 stripComments="true"/>
+    </changeSet>
+
+</databaseChangeLog>

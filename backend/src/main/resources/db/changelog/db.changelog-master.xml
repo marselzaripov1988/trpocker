@@ -10,5 +10,6 @@
          db/changelog/archive/ and no longer included. New schema changes go in new numbered files added
          after the baseline. -->
     <include file="db/changelog/00-baseline.xml"/>
+    <include file="db/changelog/01-wallet.xml"/>
 
 </databaseChangeLog>

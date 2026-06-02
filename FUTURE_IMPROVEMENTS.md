@@ -59,6 +59,19 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   Follow-up: the `load-test`/`scale` stack still uses Hibernate `ddl=update` (fine for a throwaway perf
   stack); the `dev` profile likewise. The archived changelogs can eventually be deleted once no environment
   needs them for reference.
+- **Crypto wallet (Phase: payments)** — flag-gated skeleton landed (`app.payments.enabled`, default off):
+  on-chain deposit credited idempotently by tx id, KYC-gated withdrawals, mock provider + secret-guarded
+  webhooks. Remaining to make it production-real:
+  - Wire a real `CryptoPaymentProvider` (gateway e.g. NOWPayments/CoinsPaid, or self-custody signer) as a
+    `@Primary` bean; configure the webhook secret and verify the gateway's own signature scheme.
+  - Wire a real KYC provider (Sumsub/Onfido) → its webhook maps to `recordKycDecision`.
+  - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**
+    webhook that moves `WithdrawalRequest` BROADCAST → CONFIRMED (and FAILED → balance reversal entry).
+  - For self-custody: persist a deposit address→user mapping (the skeleton allocates an address on demand
+    but doesn't store it); add on-chain/AML screening (Chainalysis/Elliptic) on the deposit path.
+  - Consider per-asset integer minor units instead of `BigDecimal(38,18)` if exact on-chain parity matters;
+    add withdrawal fee handling and rate/limit + AML thresholds. Compliance (gambling + crypto licensing,
+    geo-blocking) is an operational prerequisite, not code.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---
