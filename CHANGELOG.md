@@ -7,21 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### 🐛 Liquibase changelog idempotency (partial migration repair)
-- Made the long-standing duplicate changesets idempotent so a clean Postgres migration no longer fails
-  on the first duplicates:
-  - `05-history-and-stats.xml` re-created the five tables `04-advanced-features.xml` already creates
-    (`hand_histories`, `hand_history_players/actions/board`, `player_statistics`) → each `05` changeset now
-    has a `preConditions ... MARK_RAN` `not tableExists` guard (skipped, since `04` owns them).
-  - `06-002` re-added `poker_games.created_at`/`updated_at` (already in `01`) → guarded with `not
-    columnExists`.
-  - `08-player-user-link.xml` re-added `players.user_id` (already added by `02`) → guarded with `not
-    columnExists`.
-- Known remaining (Liquibase still disabled on the cluster, which uses Hibernate `ddl=update` for now):
-  `07-tournaments.xml` contains legacy `renameColumn`/`dropColumn` steps that assume a **pre-`04`**
-  `tournaments` schema (e.g. `DROP COLUMN active_game_id`, never created by `04`) — the changelog mixes two
-  schema lineages and needs a **baseline squash** before Liquibase can run clean end-to-end. Tracked as a
-  follow-up.
+### 🏗️ Liquibase changelog squashed to a clean baseline
+- The incremental changelogs `01`–`14` had accumulated two overlapping schema lineages and could never run
+  clean on a fresh Postgres (duplicate tables `04`/`05`, duplicate columns `06`/`08`, and — the blocker —
+  `07-tournaments.xml` renaming/dropping a **pre-`04`** `tournaments` shape, e.g. `DROP COLUMN
+  active_game_id` that `04` never creates).
+- Replaced them with a single **baseline** (`db/changelog/00-baseline.xml` + `baseline/schema-postgres.sql`)
+  generated from the current JPA entities (Hibernate `ddl-auto=create` → `pg_dump`), so a fresh migration
+  matches the entities exactly and `ddl-auto=validate` passes. The old `01`–`14` files are archived under
+  `db/changelog/archive/` (no longer included by the master changelog). Postgres-only (tests use H2 +
+  Hibernate, with Liquibase disabled).
+- Added a `UNIQUE (player_name)` constraint on `player_statistics` in the baseline — completing the
+  get-or-create robustness fix (one stats row per player name).
+- **Liquibase is re-enabled on the runnable cluster** (`docker-compose.cluster.yml`, `ddl-auto=validate`);
+  verified end-to-end: both nodes boot on a fresh Postgres, the baseline applies once (`databasechangelog`
+  has a single row), and validation passes.
 
 ### 🐛 Robustness under load (surfaced by the scaling benchmark)
 - **Game creation no longer 500s under concurrency.** `PlayerStatisticsService.getOrCreateStats` was a
@@ -58,9 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `db/changelog/10-tournament-scale-phase1.xml` used the wrong XSI namespace
   (`http://www.w3.org/2003/XMLSchema-instance` instead of `…/2001/…`), so Liquibase could not resolve the
   schema and failed to parse the changelog (`Cannot find the declaration of element 'databaseChangeLog'`).
-  Corrected to `2001`. (Note: the dev cluster compose uses Hibernate-managed schema — `ddl-auto=update`,
-  Liquibase disabled — because the changelogs additionally have a duplicate `hand_histories` create across
-  `04`/`05` that is tracked as a separate fix.)
+  Corrected to `2001`. (This file is now archived by the changelog squash above; the runnable cluster runs
+  Liquibase on the squashed baseline.)
 
 ### 🏗️ Architecture — Engine migration Phase 5 (fencing tokens)
 - Optional fencing tokens (`app.cluster.fencing-enabled`, default off, requires ownership + hot-state) to

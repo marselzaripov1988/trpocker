@@ -5,19 +5,10 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
-    <include file="db/changelog/01-initial-schema.xml"/>
-    <include file="db/changelog/02-add-users-and-authentication.xml"/>
-    <include file="db/changelog/03-game-enhancements.xml"/>
-    <include file="db/changelog/04-advanced-features.xml"/>
-    <include file="db/changelog/05-history-and-stats.xml"/>
-    <include file="db/changelog/06-optimistic-locking.xml"/>
-    <include file="db/changelog/07-tournaments.xml"/>
-    <include file="db/changelog/08-player-user-link.xml"/>
-    <include file="db/changelog/09-oauth-support.xml"/>
-    <include file="db/changelog/10-tournament-scale-phase1.xml"/>
-    <include file="db/changelog/11-pyramid-tournament.xml"/>
-    <include file="db/changelog/12-hand-lifecycle-state.xml"/>
-    <include file="db/changelog/13-game-event-log.xml"/>
-    <include file="db/changelog/14-rename-hand-history-board-value.xml"/>
+    <!-- Squashed baseline generated from the JPA entities. The previous 01-14 incremental changelogs mixed
+         two schema lineages and could not run clean on a fresh Postgres; they are archived under
+         db/changelog/archive/ and no longer included. New schema changes go in new numbered files added
+         after the baseline. -->
+    <include file="db/changelog/00-baseline.xml"/>
 
 </databaseChangeLog>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Squashed schema baseline. The previous incremental changelogs (01-14) mixed two schema lineages and
+      could not run clean on a fresh Postgres (duplicate tables/columns, drops of never-created columns).
+      They are archived under db/changelog/archive/ and replaced by this single baseline generated from the
+      current JPA entities (Hibernate ddl-auto=create → pg_dump), so a fresh migration matches the entities
+      exactly and `ddl-auto=validate` passes. Postgres-only (tests use H2 + Hibernate).
+    -->
+    <changeSet id="baseline-001-schema" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="poker_games"/></not>
+        </preConditions>
+        <sqlFile path="db/changelog/baseline/schema-postgres.sql"
+                 relativeToChangelogFile="false"
+                 splitStatements="true"
+                 stripComments="true"/>
+    </changeSet>
+
+</databaseChangeLog>
