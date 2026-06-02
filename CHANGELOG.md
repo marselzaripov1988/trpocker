@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Liquibase changelog idempotency (partial migration repair)
+- Made the long-standing duplicate changesets idempotent so a clean Postgres migration no longer fails
+  on the first duplicates:
+  - `05-history-and-stats.xml` re-created the five tables `04-advanced-features.xml` already creates
+    (`hand_histories`, `hand_history_players/actions/board`, `player_statistics`) → each `05` changeset now
+    has a `preConditions ... MARK_RAN` `not tableExists` guard (skipped, since `04` owns them).
+  - `06-002` re-added `poker_games.created_at`/`updated_at` (already in `01`) → guarded with `not
+    columnExists`.
+  - `08-player-user-link.xml` re-added `players.user_id` (already added by `02`) → guarded with `not
+    columnExists`.
+- Known remaining (Liquibase still disabled on the cluster, which uses Hibernate `ddl=update` for now):
+  `07-tournaments.xml` contains legacy `renameColumn`/`dropColumn` steps that assume a **pre-`04`**
+  `tournaments` schema (e.g. `DROP COLUMN active_game_id`, never created by `04`) — the changelog mixes two
+  schema lineages and needs a **baseline squash** before Liquibase can run clean end-to-end. Tracked as a
+  follow-up.
+
 ### 🐛 Robustness under load (surfaced by the scaling benchmark)
 - **Game creation no longer 500s under concurrency.** `PlayerStatisticsService.getOrCreateStats` was a
   non-atomic find-or-create on `player_name` (no unique constraint), so concurrent game starts that share a

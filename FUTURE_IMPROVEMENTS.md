@@ -51,6 +51,17 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   guarded by `@Version`. Remaining Phase 5 edge-case hardening: recovery of the narrow transient `NEXT_HAND`
   crash window (state persisted but `startNewHandInternal` interrupted mid-flight); multi-hop retry
   orchestration; and a deeper audit of fencing on the Postgres write path (today it relies on `@Version`).
+- **Liquibase changelog baseline squash** — the migration history mixes two schema lineages and cannot run
+  clean on a fresh Postgres. Idempotency guards are in place for the duplicate *tables* (`04` vs `05`) and
+  duplicate *columns* (`06-002` `poker_games.created_at/updated_at`; `08` `players.user_id`), but
+  `07-tournaments.xml` still `renameColumn`/`dropColumn`s a **pre-`04`** `tournaments` shape (e.g.
+  `DROP COLUMN active_game_id`, never created by `04`), so a clean run fails there. Until this is squashed
+  to a single baseline matching the JPA entities (or every legacy op is guarded), the runnable cluster and
+  load-test stacks use Hibernate `ddl-auto=update`/`create` instead of Liquibase. Verify a fresh-Postgres
+  Liquibase run with `ddl-auto=validate` once squashed.
+- Add a DB unique constraint on `player_statistics.player_name` (with a dedupe step) once the changelog is
+  squashed — currently `getOrCreateStats` uses a tolerant `findFirstByPlayerName` to avoid the
+  duplicate-row `NonUniqueResultException`, but duplicates can still accumulate under first-touch races.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

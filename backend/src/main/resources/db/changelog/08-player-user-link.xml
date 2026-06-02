@@ -5,8 +5,13 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
 
-    <!-- Add user_id column to players table to link players to authenticated users -->
+    <!-- Add user_id column to players table to link players to authenticated users.
+         NOTE: 02-add-users-and-authentication.xml (changeSet 12-add-user-reference-to-players) already adds
+         players.user_id with an FK, so this changeset is skipped when the column is already present. -->
     <changeSet id="add-user-id-to-players" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="players" columnName="user_id"/></not>
+        </preConditions>
         <addColumn tableName="players">
             <column name="user_id" type="uuid">
                 <constraints nullable="true"/>

@@ -15,6 +15,10 @@
     </changeSet>
 
     <changeSet id="06-002" author="truholdem">
+        <!-- created_at/updated_at already exist from 01-initial-schema.xml; skip when present. -->
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="poker_games" columnName="created_at"/></not>
+        </preConditions>
         <comment>Add audit columns to poker_games</comment>
         <addColumn tableName="poker_games">
             <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">

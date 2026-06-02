@@ -58,9 +58,12 @@ services:
       REDIS_HOST: redis
       JWT_SECRET: your-super-secret-jwt-key-that-should-be-very-long-and-secure-in-production
       OTEL_ENABLED: "false"
-      # The dev cluster uses Hibernate-managed schema (the Liquibase changelogs have a pre-existing
-      # duplicate-changeset issue, tracked separately). node 1 creates/updates the shared schema; node 2
-      # waits for it (depends_on healthy) and then just updates idempotently.
+      # Schema is Hibernate-managed for now (node 1 creates/updates first; node 2 waits via depends_on).
+      # The Liquibase changelog cannot yet run clean on a fresh Postgres: the 04/05 duplicate-table and
+      # 06/08 duplicate-column issues are fixed (idempotency preconditions), but 07-tournaments.xml still
+      # contains legacy rename/drop steps that assume a pre-04 `tournaments` schema (e.g. DROP COLUMN
+      # active_game_id, which 04 never creates) — mixing two schema lineages. Re-enabling Liquibase needs a
+      # baseline squash of the changelog (tracked as a follow-up); until then the cluster uses ddl=update.
       SPRING_LIQUIBASE_ENABLED: "false"
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       # --- Phase 5 clustering ---

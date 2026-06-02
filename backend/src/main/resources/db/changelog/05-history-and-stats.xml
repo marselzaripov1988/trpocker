@@ -7,7 +7,17 @@
 
     
     
+    <!--
+      NOTE: every table in this file is also created by 04-advanced-features.xml (which runs first and is
+      the canonical owner). This file is a historical duplicate; each changeset is now guarded by a
+      precondition that marks it as ran (skips it) when the table already exists, so a clean migration on
+      Postgres no longer fails with "relation already exists". Kept (not deleted) to preserve changelog
+      history for any environment that may have applied it.
+    -->
     <changeSet id="05-hand-history-table" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="hand_histories"/></not>
+        </preConditions>
         <createTable tableName="hand_histories">
             <column name="id" type="UUID">
                 <constraints primaryKey="true" nullable="false"/>
@@ -39,6 +49,9 @@
     </changeSet>
 
     <changeSet id="05-hand-history-players" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="hand_history_players"/></not>
+        </preConditions>
         <createTable tableName="hand_history_players">
             <column name="hand_history_id" type="UUID">
                 <constraints nullable="false"/>
@@ -63,6 +76,9 @@
     </changeSet>
 
     <changeSet id="05-hand-history-actions" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="hand_history_actions"/></not>
+        </preConditions>
         <createTable tableName="hand_history_actions">
             <column name="hand_history_id" type="UUID">
                 <constraints nullable="false"/>
@@ -88,6 +104,9 @@
     </changeSet>
 
     <changeSet id="05-hand-history-board" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="hand_history_board"/></not>
+        </preConditions>
         <createTable tableName="hand_history_board">
             <column name="hand_history_id" type="UUID">
                 <constraints nullable="false"/>
@@ -111,6 +130,9 @@
     
     
     <changeSet id="05-player-statistics-table" author="truholdem">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="player_statistics"/></not>
+        </preConditions>
         <createTable tableName="player_statistics">
             <column name="id" type="UUID">
                 <constraints primaryKey="true" nullable="false"/>
