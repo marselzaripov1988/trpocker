@@ -18,8 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Withdrawals** are gated on KYC (`VERIFIED`) when `app.payments.kyc-required-for-withdrawal`: the KYC
   check, balance debit, ledger entry and request are written in one transaction, then broadcast via the
   provider; insufficient balance and missing KYC are rejected (409 `KYC_REQUIRED` / 422 `INSUFFICIENT_FUNDS`).
-- Provider-abstracted: `CryptoPaymentProvider` (allocate address / broadcast) with a `MockCryptoPaymentProvider`
-  for dev/tests; a real gateway/self-custody signer overrides it. Inbound provider callbacks
+- Provider-abstracted: `CryptoPaymentProvider` (allocate address / broadcast). `MockCryptoPaymentProvider`
+  is the default (`app.payments.provider=mock`); a real HTTP-gateway adapter `GatewayCryptoPaymentProvider`
+  (NOWPayments/CoinsPaid-style REST, conditional on `app.payments.provider=gateway`) is included as an
+  integration skeleton with a **network mode** (`app.payments.network` + `gateway-base-url`) so the full flow
+  can run on a value-less **testnet/sandbox** before mainnet — only the provider config changes, the wallet
+  logic is identical. Inbound provider callbacks
   (`/internal/wallet/deposit`, `/internal/wallet/kyc-callback`) are guarded by a constant-time shared-secret
   header, mirroring the cluster internal endpoint.
 - **Withdrawal lifecycle completion**: a provider callback (`/internal/wallet/withdrawal-status`) finalizes a

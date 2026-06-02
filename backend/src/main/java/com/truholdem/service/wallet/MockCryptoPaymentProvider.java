@@ -5,15 +5,18 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.truholdem.model.CryptoAsset;
 
 /**
  * Default {@link CryptoPaymentProvider} for dev/tests: deterministic fake addresses and tx ids, no network
- * calls. A real provider bean (gateway/self-custody signer) overrides it by being declared {@code @Primary}.
+ * calls. Active when {@code app.payments.provider=mock} (the default / unset). Set the property to
+ * {@code gateway} to activate {@link GatewayCryptoPaymentProvider} instead.
  */
 @Component
+@ConditionalOnProperty(name = "app.payments.provider", havingValue = "mock", matchIfMissing = true)
 public class MockCryptoPaymentProvider implements CryptoPaymentProvider {
 
     private static final Logger log = LoggerFactory.getLogger(MockCryptoPaymentProvider.class);

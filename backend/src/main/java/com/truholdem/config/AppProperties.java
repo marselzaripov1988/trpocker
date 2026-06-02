@@ -88,6 +88,19 @@ public class AppProperties {
         /** Shared secret authenticating provider webhooks (deposit-confirmed, kyc-callback). */
         private String webhookSecret = "";
 
+        /** Active payment provider: {@code mock} (default, no network) or {@code gateway} (real HTTP gateway). */
+        private String provider = "mock";
+
+        /** Network the gateway operates on: {@code testnet} (default) or {@code mainnet}. Informational + sent
+         *  to the gateway; the actual endpoint is chosen by {@code gatewayBaseUrl} (sandbox vs prod). */
+        private String network = "testnet";
+
+        /** Gateway REST base URL (e.g. a sandbox/testnet endpoint). Empty until configured. */
+        private String gatewayBaseUrl = "";
+
+        /** Gateway API key (sent as the x-api-key header). */
+        private String gatewayApiKey = "";
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -110,6 +123,38 @@ public class AppProperties {
 
         public void setWebhookSecret(String webhookSecret) {
             this.webhookSecret = webhookSecret;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getNetwork() {
+            return network;
+        }
+
+        public void setNetwork(String network) {
+            this.network = network;
+        }
+
+        public String getGatewayBaseUrl() {
+            return gatewayBaseUrl;
+        }
+
+        public void setGatewayBaseUrl(String gatewayBaseUrl) {
+            this.gatewayBaseUrl = gatewayBaseUrl;
+        }
+
+        public String getGatewayApiKey() {
+            return gatewayApiKey;
+        }
+
+        public void setGatewayApiKey(String gatewayApiKey) {
+            this.gatewayApiKey = gatewayApiKey;
         }
     }
 
