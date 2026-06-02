@@ -101,6 +101,10 @@ public class AppProperties {
         /** Gateway API key (sent as the x-api-key header). */
         private String gatewayApiKey = "";
 
+        /** Master key for the {@code eth-self-custody} provider's deterministic address derivation.
+         *  DEMO ONLY — production must hold this in an HSM and derive watch-only from a BIP-32 xpub. */
+        private String selfCustodyMasterKey = "";
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -155,6 +159,14 @@ public class AppProperties {
 
         public void setGatewayApiKey(String gatewayApiKey) {
             this.gatewayApiKey = gatewayApiKey;
+        }
+
+        public String getSelfCustodyMasterKey() {
+            return selfCustodyMasterKey;
+        }
+
+        public void setSelfCustodyMasterKey(String selfCustodyMasterKey) {
+            this.selfCustodyMasterKey = selfCustodyMasterKey;
         }
     }
 

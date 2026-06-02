@@ -23,7 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (NOWPayments/CoinsPaid-style REST, conditional on `app.payments.provider=gateway`) is included as an
   integration skeleton with a **network mode** (`app.payments.network` + `gateway-base-url`) so the full flow
   can run on a value-less **testnet/sandbox** before mainnet — only the provider config changes, the wallet
-  logic is identical. Inbound provider callbacks
+  logic is identical. A **self-custody** option (`app.payments.provider=eth-self-custody`,
+  `SelfCustodyEthPaymentProvider`) shows deposit addresses can be generated with **no external provider** at
+  all: pure-Java `Keccak256` + `EthKeys` (secp256k1 → EIP-55 address), verified against canonical vectors,
+  derive a deterministic per-user ETH address from a configured master key (demo-grade; production = HSM +
+  watch-only BIP-32 xpub; withdrawal signing/broadcast intentionally not wired — needs a signer + node).
+  Inbound provider callbacks
   (`/internal/wallet/deposit`, `/internal/wallet/kyc-callback`) are guarded by a constant-time shared-secret
   header, mirroring the cluster internal endpoint.
 - **Withdrawal lifecycle completion**: a provider callback (`/internal/wallet/withdrawal-status`) finalizes a
