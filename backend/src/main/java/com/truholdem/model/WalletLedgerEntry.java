@@ -86,6 +86,13 @@ public class WalletLedgerEntry {
                 amount.negate(), balanceAfter, null, withdrawalId);
     }
 
+    /** Credit-back of a failed withdrawal (refunds the earlier debit). */
+    public static WalletLedgerEntry withdrawalReversal(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, UUID withdrawalId) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.WITHDRAWAL_REVERSAL,
+                amount, balanceAfter, null, withdrawalId);
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();

@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.truholdem.config.AppProperties;
 import com.truholdem.dto.wallet.DepositConfirmationRequest;
 import com.truholdem.dto.wallet.KycCallbackRequest;
+import com.truholdem.dto.wallet.WithdrawalStatusCallbackRequest;
+import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.WalletService;
 
 import jakarta.validation.Valid;
@@ -57,6 +59,23 @@ public class WalletWebhookController {
         }
         walletService.recordKycDecision(request.userId(), request.status(),
                 request.provider(), request.providerRef());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/withdrawal-status")
+    public ResponseEntity<Void> withdrawalStatus(
+            @RequestHeader(value = SECRET_HEADER, required = false) String secret,
+            @Valid @RequestBody WithdrawalStatusCallbackRequest request) {
+        if (!authorized(secret)) {
+            return ResponseEntity.status(403).build();
+        }
+        switch (request.status()) {
+            case CONFIRMED -> walletService.confirmWithdrawal(request.withdrawalId());
+            case FAILED -> walletService.failWithdrawal(request.withdrawalId());
+            default -> {
+                return ResponseEntity.badRequest().build(); // only terminal outcomes are valid here
+            }
+        }
         return ResponseEntity.ok().build();
     }
 

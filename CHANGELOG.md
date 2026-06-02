@@ -22,8 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for dev/tests; a real gateway/self-custody signer overrides it. Inbound provider callbacks
   (`/internal/wallet/deposit`, `/internal/wallet/kyc-callback`) are guarded by a constant-time shared-secret
   header, mirroring the cluster internal endpoint.
+- **Withdrawal lifecycle completion**: a provider callback (`/internal/wallet/withdrawal-status`) finalizes a
+  broadcast withdrawal — `CONFIRMED` (idempotent) or `FAILED`, where failure marks it FAILED and credits the
+  debited amount back via a `WITHDRAWAL_REVERSAL` ledger entry (also idempotent; a confirmed payout cannot be
+  reversed). No schema change (the reversal type already exists).
 - API: `/v1/wallet/{balances,deposit-address,kyc,kyc/submit,withdrawals}`. Tests: `WalletServiceIT`
-  (idempotent deposit, KYC-blocked withdrawal, post-KYC success, insufficient funds) + `WalletServiceDisabledTest`.
+  (idempotent deposit, KYC-blocked withdrawal, post-KYC success, insufficient funds, confirm, fail+reversal)
+  + `WalletServiceDisabledTest`.
 - Verified end-to-end: the cluster boots on a fresh Postgres with the wallet changeset applied and validated.
 
 ### 🏗️ Liquibase changelog squashed to a clean baseline

@@ -2,6 +2,7 @@ package com.truholdem.service.wallet;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import com.truholdem.model.KycStatus;
 import com.truholdem.model.WalletAccount;
 import com.truholdem.model.WalletLedgerEntry;
 import com.truholdem.model.WithdrawalRequest;
+import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.repository.KycRecordRepository;
 import com.truholdem.repository.WalletAccountRepository;
 import com.truholdem.repository.WalletLedgerEntryRepository;
@@ -179,6 +181,51 @@ public class WalletService {
     @Transactional(readOnly = true)
     public List<WithdrawalRequest> withdrawals(UUID userId) {
         return withdrawalRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    /**
+     * Provider callback: the broadcast withdrawal reached on-chain confirmation. Idempotent — a redelivered
+     * callback is a no-op once CONFIRMED.
+     */
+    @Transactional
+    public void confirmWithdrawal(UUID withdrawalId) {
+        requireEnabled();
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() == WithdrawalStatus.CONFIRMED) {
+            return;
+        }
+        request.markConfirmed();
+        withdrawalRepository.save(request);
+        log.info("Withdrawal {} confirmed", withdrawalId);
+    }
+
+    /**
+     * Provider callback: the withdrawal failed to settle on-chain. Marks it FAILED and credits the debited
+     * amount back to the balance (a {@code WITHDRAWAL_REVERSAL} ledger entry). Idempotent — once FAILED a
+     * redelivered callback is a no-op; a CONFIRMED withdrawal cannot be reversed.
+     */
+    @Transactional
+    public void failWithdrawal(UUID withdrawalId) {
+        requireEnabled();
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() == WithdrawalStatus.FAILED) {
+            return;
+        }
+        if (request.getStatus() == WithdrawalStatus.CONFIRMED) {
+            throw new IllegalStateException("Cannot fail a confirmed withdrawal: " + withdrawalId);
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(request.getUserId(), request.getAsset())
+                .orElseGet(() -> accountRepository.save(new WalletAccount(request.getUserId(), request.getAsset())));
+        account.credit(request.getAmount());
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.withdrawalReversal(request.getUserId(), request.getAsset(),
+                request.getAmount(), account.getBalance(), request.getId()));
+        request.markFailed();
+        withdrawalRepository.save(request);
+        log.info("Withdrawal {} failed — reversed {} {} to user {}",
+                withdrawalId, request.getAmount(), request.getAsset(), request.getUserId());
     }
 
     private void requireEnabled() {

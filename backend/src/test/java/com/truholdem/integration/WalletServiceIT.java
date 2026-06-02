@@ -101,6 +101,40 @@ class WalletServiceIT {
     }
 
     @Test
+    @DisplayName("provider confirmation moves a withdrawal BROADCAST → CONFIRMED (balance unchanged)")
+    void withdrawalConfirmed() {
+        UUID user = UUID.randomUUID();
+        walletService.creditOnChainDeposit(user, ASSET, "tx-5", new BigDecimal("50"));
+        walletService.recordKycDecision(user, KycStatus.VERIFIED, "mock", "ref-c");
+        WithdrawalRequest w = walletService.requestWithdrawal(user, ASSET, "addr", new BigDecimal("30"));
+
+        walletService.confirmWithdrawal(w.getId());
+
+        assertThat(withdrawalRepository.findById(w.getId()).orElseThrow().getStatus())
+                .isEqualTo(WithdrawalStatus.CONFIRMED);
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("20");
+    }
+
+    @Test
+    @DisplayName("provider failure marks FAILED and credits the amount back (reversal)")
+    void withdrawalFailedReversesBalance() {
+        UUID user = UUID.randomUUID();
+        walletService.creditOnChainDeposit(user, ASSET, "tx-6", new BigDecimal("50"));
+        walletService.recordKycDecision(user, KycStatus.VERIFIED, "mock", "ref-f");
+        WithdrawalRequest w = walletService.requestWithdrawal(user, ASSET, "addr", new BigDecimal("30"));
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("20");
+
+        walletService.failWithdrawal(w.getId());
+
+        assertThat(withdrawalRepository.findById(w.getId()).orElseThrow().getStatus())
+                .isEqualTo(WithdrawalStatus.FAILED);
+        assertThat(walletService.balance(user, ASSET)).as("debit reversed").isEqualByComparingTo("50");
+        // idempotent: a redelivered failure callback does not double-credit
+        walletService.failWithdrawal(w.getId());
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("50");
+    }
+
+    @Test
     @DisplayName("withdrawal beyond balance is rejected (insufficient funds)")
     void insufficientFunds() {
         UUID user = UUID.randomUUID();
