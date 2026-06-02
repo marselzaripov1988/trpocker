@@ -41,7 +41,7 @@ public class AchievementService {
 
     
     public List<Achievement> checkAndUnlockAchievements(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return Collections.emptyList();
         }
@@ -106,7 +106,7 @@ public class AchievementService {
     
     @Transactional(readOnly = true)
     public List<PlayerAchievement> getPlayerAchievements(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return Collections.emptyList();
         }
@@ -117,7 +117,7 @@ public class AchievementService {
     
     @Transactional(readOnly = true)
     public List<AchievementProgress> getPlayerProgress(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return Collections.emptyList();
         }
@@ -176,7 +176,7 @@ public class AchievementService {
     
     @Transactional(readOnly = true)
     public int getPlayerTotalPoints(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return 0;
         }
@@ -194,7 +194,7 @@ public class AchievementService {
     
     @Transactional(readOnly = true)
     public AchievementSummary getPlayerSummary(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return new AchievementSummary(playerName, 0, 0, 0, Collections.emptyList());
         }

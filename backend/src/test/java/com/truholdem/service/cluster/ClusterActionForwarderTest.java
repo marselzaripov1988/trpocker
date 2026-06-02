@@ -6,6 +6,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.util.UUID;
@@ -74,7 +75,7 @@ class ClusterActionForwarderTest {
     }
 
     @Test
-    @DisplayName("throws when the owner responds with an error")
+    @DisplayName("treats a 5xx from the owner as unreachable (ClusterForwardException → caller may re-claim)")
     void throwsOnOwnerError() {
         when(ownership.baseUrlFor("node-A")).thenReturn("http://node-a:8080");
         server.expect(requestTo("http://node-a:8080/internal/cluster/game/" + gameId + "/action"))
@@ -82,5 +83,19 @@ class ClusterActionForwarderTest {
 
         assertThatThrownBy(() -> forwarder.forward("node-A", gameId, commandId, playerId, PlayerAction.CALL, 0))
                 .isInstanceOf(ClusterForwardException.class);
+    }
+
+    @Test
+    @DisplayName("treats a 4xx from the owner as a game-level rejection (IllegalState, not unreachable)")
+    void propagatesOwnerConflict() {
+        when(ownership.baseUrlFor("node-A")).thenReturn("http://node-a:8080");
+        server.expect(requestTo("http://node-a:8080/internal/cluster/game/" + gameId + "/action"))
+                .andRespond(withStatus(org.springframework.http.HttpStatus.CONFLICT));
+
+        // 409 = the owner processed and rejected the action — surfaced as IllegalState (→ 409 to the client),
+        // NOT ClusterForwardException, so the caller does not re-claim the table.
+        assertThatThrownBy(() -> forwarder.forward("node-A", gameId, commandId, playerId, PlayerAction.CALL, 0))
+                .isInstanceOf(IllegalStateException.class)
+                .isNotInstanceOf(ClusterForwardException.class);
     }
 }

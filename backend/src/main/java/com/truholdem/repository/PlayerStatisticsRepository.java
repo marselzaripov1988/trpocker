@@ -14,7 +14,7 @@ public interface PlayerStatisticsRepository extends JpaRepository<PlayerStatisti
 
     Optional<PlayerStatistics> findByUserId(UUID userId);
 
-    Optional<PlayerStatistics> findByPlayerName(String playerName);
+    Optional<PlayerStatistics> findFirstByPlayerName(String playerName);
 
     
     List<PlayerStatistics> findTop10ByOrderByHandsWonDesc();

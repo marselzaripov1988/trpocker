@@ -437,6 +437,21 @@ class PokerGameServiceTest {
                 assertEquals(10, game.getPlayers().size());
             }
 
+            @Test
+            @DisplayName("Should still create the game when statistics startSession throws (best-effort)")
+            void shouldCreateGameWhenStatsStartSessionFails() {
+                List<PlayerInfo> players = createPlayerInfoList(2);
+                setupRepositorySaveToReturnArgument();
+                org.mockito.Mockito.doThrow(new RuntimeException("stats unavailable"))
+                        .when(playerStatisticsService)
+                        .startSession(org.mockito.ArgumentMatchers.anyString());
+
+                Game game = pokerGameService.createNewGame(players);
+
+                assertNotNull(game);
+                assertEquals(2, game.getPlayers().size());
+            }
+
             @ParameterizedTest(name = "Should create game with {0} players")
             @ValueSource(ints = {2, 3, 4, 5, 6, 7, 8, 9, 10})
             @DisplayName("Should create game with valid player counts")

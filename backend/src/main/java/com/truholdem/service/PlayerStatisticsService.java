@@ -34,7 +34,7 @@ public class PlayerStatisticsService {
 
     
     public PlayerStatistics getOrCreateStats(String playerName) {
-        return statsRepository.findByPlayerName(playerName)
+        return statsRepository.findFirstByPlayerName(playerName)
             .orElseGet(() -> {
                 PlayerStatistics newStats = new PlayerStatistics(playerName);
                 logger.info("Created new statistics for player: {}", playerName);
@@ -57,7 +57,7 @@ public class PlayerStatisticsService {
     
     @Transactional(readOnly = true)
     public Optional<PlayerStatistics> getStatsByName(String playerName) {
-        return statsRepository.findByPlayerName(playerName);
+        return statsRepository.findFirstByPlayerName(playerName);
     }
 
     
@@ -145,7 +145,7 @@ public class PlayerStatisticsService {
     
     @Transactional(readOnly = true)
     public PlayerStatsSummary getStatsSummary(String playerName) {
-        Optional<PlayerStatistics> optStats = statsRepository.findByPlayerName(playerName);
+        Optional<PlayerStatistics> optStats = statsRepository.findFirstByPlayerName(playerName);
         if (optStats.isEmpty()) {
             return null;
         }

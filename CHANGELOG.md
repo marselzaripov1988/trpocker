@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Robustness under load (surfaced by the scaling benchmark)
+- **Game creation no longer 500s under concurrency.** `PlayerStatisticsService.getOrCreateStats` was a
+  non-atomic find-or-create on `player_name` (no unique constraint), so concurrent game starts that share a
+  player/bot name inserted duplicate rows and the next single-result `findByPlayerName` threw
+  `NonUniqueResultException` → 500. The by-name lookup is now `findFirstByPlayerName` (tolerant, LIMIT 1),
+  and `createNewGame` treats `startSession` as a best-effort side effect (a stats failure is logged, never
+  fails game creation). Verified: 80 concurrent `POST /v1/poker/game/start` went from 80/80 → 500 to
+  80/80 → 201.
+- **Cross-node forwarding no longer turns game-level conflicts into 500s.** `ClusterInternalController`
+  now translates the owner's exceptions (`IllegalState` → 409, `NoSuchElement` → 404, `IllegalArgument`
+  → 400) instead of letting them become a 500, and `ClusterActionForwarder` distinguishes a **4xx** from
+  the owner (a real game rejection — surfaced to the client, the caller does NOT re-claim the table) from a
+  **connect/timeout/5xx** (owner unreachable — caller may re-claim once). Previously a "not your turn" on
+  the owner became a 500 that the forwarder mistook for an unreachable owner.
+- Tests: `ClusterInternalControllerTest` (secret + 200/409/404/400 translation), a `ClusterActionForwarder`
+  4xx-vs-5xx case, and a `PokerGameService` test that game creation survives a throwing `startSession`.
+
 ### 🚀 Ops — Runnable two-node cluster (Phase 5)
 - `docker-compose.cluster.yml`: two backend nodes behind an nginx load balancer on a shared Postgres +
   Redis, with all Phase 5 flags on (ownership, cross-node routing, failover takeover, fencing, ws-cluster).

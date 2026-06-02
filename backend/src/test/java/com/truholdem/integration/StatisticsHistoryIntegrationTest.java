@@ -399,7 +399,7 @@ class StatisticsHistoryIntegrationTest {
                         game.getId(), currentPlayer.getId(), PlayerAction.FOLD, 0);
             }
 
-            stats = statsRepository.findByPlayerName("StatsTestPlayer").orElseThrow();
+            stats = statsRepository.findFirstByPlayerName("StatsTestPlayer").orElseThrow();
 
         }
     }

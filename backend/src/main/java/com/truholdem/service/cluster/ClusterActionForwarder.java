@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import com.truholdem.config.AppProperties;
@@ -60,7 +61,15 @@ public class ClusterActionForwarder {
                     .retrieve()
                     .toBodilessEntity();
             log.debug("Forwarded action for game {} to owner {} ({})", gameId, ownerInstanceId, baseUrl);
+        } catch (HttpClientErrorException e) {
+            // 4xx: the owner received the action and rejected it at the game level (e.g. not the player's
+            // turn). Surface it as a normal game error rather than treating the owner as unreachable — so
+            // the caller does NOT re-claim the table. PokerGameController maps IllegalState → 409.
+            throw new IllegalStateException("Owner rejected action for game " + gameId
+                    + " (" + e.getStatusCode() + ")", e);
         } catch (Exception e) {
+            // Connection refused / timeout / 5xx: the owner is unreachable or broken; the caller may
+            // re-claim the table once and process locally.
             throw new ClusterForwardException("Failed to forward action for game " + gameId
                     + " to owner " + ownerInstanceId + " (" + url + ")", e);
         }

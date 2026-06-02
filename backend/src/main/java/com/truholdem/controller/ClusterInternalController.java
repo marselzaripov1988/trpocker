@@ -46,13 +46,23 @@ public class ClusterInternalController {
         if (!secretValid(secret)) {
             return ResponseEntity.status(403).build();
         }
-        pokerGameService.playerActLocal(
-                gameId,
-                TableCommandDispatcher.parseCommandId(request.getCommandId()),
-                UUID.fromString(request.getPlayerId()),
-                request.getAction(),
-                request.getAmount());
-        return ResponseEntity.ok().build();
+        try {
+            pokerGameService.playerActLocal(
+                    gameId,
+                    TableCommandDispatcher.parseCommandId(request.getCommandId()),
+                    UUID.fromString(request.getPlayerId()),
+                    request.getAction(),
+                    request.getAmount());
+            return ResponseEntity.ok().build();
+        } catch (java.util.NoSuchElementException e) {
+            return ResponseEntity.status(404).build();
+        } catch (IllegalStateException e) {
+            // Game-level rejection (e.g. not the player's turn) — a normal 409, not a server fault, so the
+            // forwarding node does not mistake it for an unreachable owner and re-claim the table.
+            return ResponseEntity.status(409).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).build();
+        }
     }
 
     /** Constant-time secret comparison; rejects when routing is unconfigured (blank secret). */

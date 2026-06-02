@@ -82,7 +82,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should return existing stats for player")
         void shouldReturnExistingStats() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
 
             PlayerStatistics result = statsService.getOrCreateStats(TEST_PLAYER);
@@ -95,7 +95,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should create new stats for unknown player")
         void shouldCreateNewStats() {
-            when(statsRepository.findByPlayerName("NewPlayer"))
+            when(statsRepository.findFirstByPlayerName("NewPlayer"))
                     .thenReturn(Optional.empty());
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -126,7 +126,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record hand played")
         void shouldRecordHandPlayed() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -140,7 +140,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record FOLD action")
         void shouldRecordFoldAction() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -154,7 +154,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record CALL action and update VPIP")
         void shouldRecordCallAction() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -170,7 +170,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record RAISE action and update PFR")
         void shouldRecordRaiseAction() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -187,7 +187,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record BET action")
         void shouldRecordBetAction() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -201,7 +201,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record CHECK action")
         void shouldRecordCheckAction() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -224,7 +224,7 @@ class PlayerStatisticsServiceTest {
             testStats.setLongestWinStreak(3);
             testStats.setCurrentLoseStreak(0);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -246,7 +246,7 @@ class PlayerStatisticsServiceTest {
             testStats.setCurrentWinStreak(3);
             testStats.setLongestWinStreak(3);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -263,7 +263,7 @@ class PlayerStatisticsServiceTest {
             testStats.setCurrentWinStreak(5);
             testStats.setCurrentLoseStreak(0);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -281,7 +281,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record showdown won")
         void shouldRecordShowdownWon() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -298,7 +298,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should record showdown lost")
         void shouldRecordShowdownLost() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -317,7 +317,7 @@ class PlayerStatisticsServiceTest {
         void shouldRecordAllIn() {
             testStats.setTimesAllIn(10);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -334,7 +334,7 @@ class PlayerStatisticsServiceTest {
             testStats.setTimesAllIn(10);
             testStats.setAllInsWon(5);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -350,7 +350,7 @@ class PlayerStatisticsServiceTest {
         void shouldUpdateBiggestPotWon() {
             testStats.setBiggestPotWon(1000);
 
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
@@ -498,7 +498,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should generate player stats summary")
         void shouldGenerateStatsSummary() {
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(testStats));
 
             PlayerStatisticsService.PlayerStatsSummary result = statsService.getStatsSummary(TEST_PLAYER);
@@ -515,7 +515,7 @@ class PlayerStatisticsServiceTest {
         @Test
         @DisplayName("Should return null for unknown player summary")
         void shouldReturnNullForUnknownPlayer() {
-            when(statsRepository.findByPlayerName("Unknown"))
+            when(statsRepository.findFirstByPlayerName("Unknown"))
                     .thenReturn(Optional.empty());
 
             PlayerStatisticsService.PlayerStatsSummary result = statsService.getStatsSummary("Unknown");
@@ -534,7 +534,7 @@ class PlayerStatisticsServiceTest {
             when(gameConfig.isBufferStatisticsOnActions()).thenReturn(true);
             PlayerStatistics freshStats = new PlayerStatistics();
             freshStats.setPlayerName(TEST_PLAYER);
-            when(statsRepository.findByPlayerName(TEST_PLAYER))
+            when(statsRepository.findFirstByPlayerName(TEST_PLAYER))
                     .thenReturn(Optional.of(freshStats));
             when(statsRepository.save(any(PlayerStatistics.class)))
                     .thenAnswer(inv -> inv.getArgument(0));

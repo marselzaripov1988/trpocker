@@ -163,7 +163,12 @@ public class PokerGameService {
                 game.addPlayer(player);
                 logger.info("Created player {} with isBot={}", player.getName(), player.isBot());
 
-                playerStatisticsService.startSession(info.getName());
+                // Statistics are a non-critical side effect — never let them fail game creation.
+                try {
+                    playerStatisticsService.startSession(info.getName());
+                } catch (RuntimeException e) {
+                    logger.warn("startSession failed for player {} — continuing game creation", info.getName(), e);
+                }
             }
 
             dealHoleCards(game, deck);
