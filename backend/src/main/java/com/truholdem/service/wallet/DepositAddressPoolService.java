@@ -93,6 +93,15 @@ public class DepositAddressPoolService {
         return new PoolImportResponse(imported, skipped);
     }
 
+    /** The user a pooled address is assigned to, for resolving a watch-only deposit detected by address.
+     *  Empty if the address is unknown or still FREE (not yet handed to anyone). */
+    @Transactional(readOnly = true)
+    public Optional<UUID> assignedUser(CryptoAsset asset, String address) {
+        return repository.findByAssetAndAddress(asset, address)
+                .filter(e -> e.getStatus() == DepositAddressStatus.ASSIGNED)
+                .map(DepositAddressPoolEntry::getAssignedUserId);
+    }
+
     /** Free/assigned counts per asset (assets with no rows are omitted) for low-watermark monitoring. */
     @Transactional(readOnly = true)
     public PoolStatusResponse status() {

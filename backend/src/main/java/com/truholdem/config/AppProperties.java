@@ -108,6 +108,9 @@ public class AppProperties {
          *  DEMO ONLY — production must hold this in an HSM and derive watch-only from a BIP-32 xpub. */
         private String selfCustodyMasterKey = "";
 
+        /** Minimum on-chain confirmations before a detected deposit is credited (watch-only ingestion). */
+        private int minConfirmations = 1;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -170,6 +173,14 @@ public class AppProperties {
 
         public void setSelfCustodyMasterKey(String selfCustodyMasterKey) {
             this.selfCustodyMasterKey = selfCustodyMasterKey;
+        }
+
+        public int getMinConfirmations() {
+            return minConfirmations;
+        }
+
+        public void setMinConfirmations(int minConfirmations) {
+            this.minConfirmations = minConfirmations;
         }
     }
 

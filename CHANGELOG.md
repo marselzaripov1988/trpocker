@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Watch-only deposit detection (address → user → credit)
+- New ingestion path for the offline/watch-only pool: a node/indexer that scans the pooled addresses posts a
+  detected deposit **keyed by address** (it doesn't know the user) to a new secret-guarded webhook
+  `POST /internal/wallet/deposit-by-address` (`{asset, address, txId, amount, confirmations}`).
+  `DepositIngestionService` resolves the owning user from the pool (`DepositAddressPoolService.assignedUser`)
+  and credits **idempotently by tx id** via the existing `WalletService.creditOnChainDeposit`.
+- **Min-confirmations gate**: credit is withheld until `app.payments.min-confirmations` (default 1) is reached
+  (`PENDING_CONFIRMATIONS`); deposits to an unknown/unassigned address are ignored (`UNKNOWN_ADDRESS`), and a
+  redelivered tx is a no-op (`DUPLICATE`). The endpoint always returns 200 with the outcome so the watcher
+  need not retry. No schema change (config + existing tables).
+- This complements the existing `POST /internal/wallet/deposit` (which is keyed by `userId`, for custodial
+  gateways). Verified end-to-end: assigned-address credit, idempotency, confirmation gate, unassigned/unknown
+  ignored; full suite green (1023). The actual chain watcher (node/indexer/explorer feed) is an external,
+  documented follow-up.
+
 ### 💰 BTC Taproot (`bc1p…`) addresses for the offline pool
 - The offline pool now also supports **Taproot** (P2TR, key-path-only, `bc1p…`). New pure-Java `TaprootKeys`
   implements BIP-341: x-only internal key from `d·G`, `lift_x` to the even-Y point, tweak

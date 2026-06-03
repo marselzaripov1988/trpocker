@@ -27,5 +27,7 @@ public interface DepositAddressPoolRepository extends JpaRepository<DepositAddre
 
     boolean existsByAssetAndAddress(CryptoAsset asset, String address);
 
+    Optional<DepositAddressPoolEntry> findByAssetAndAddress(CryptoAsset asset, String address);
+
     long countByAssetAndStatus(CryptoAsset asset, DepositAddressStatus status);
 }

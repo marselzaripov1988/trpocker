@@ -11,10 +11,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.AppProperties;
+import com.truholdem.dto.wallet.DepositByAddressRequest;
 import com.truholdem.dto.wallet.DepositConfirmationRequest;
+import com.truholdem.dto.wallet.DepositIngestResponse;
 import com.truholdem.dto.wallet.KycCallbackRequest;
 import com.truholdem.dto.wallet.WithdrawalStatusCallbackRequest;
 import com.truholdem.model.WithdrawalStatus;
+import com.truholdem.service.wallet.DepositIngestionService;
 import com.truholdem.service.wallet.WalletService;
 
 import jakarta.validation.Valid;
@@ -32,10 +35,13 @@ public class WalletWebhookController {
     public static final String SECRET_HEADER = "X-Payments-Secret";
 
     private final WalletService walletService;
+    private final DepositIngestionService depositIngestionService;
     private final AppProperties appProperties;
 
-    public WalletWebhookController(WalletService walletService, AppProperties appProperties) {
+    public WalletWebhookController(WalletService walletService,
+            DepositIngestionService depositIngestionService, AppProperties appProperties) {
         this.walletService = walletService;
+        this.depositIngestionService = depositIngestionService;
         this.appProperties = appProperties;
     }
 
@@ -48,6 +54,22 @@ public class WalletWebhookController {
         }
         walletService.creditOnChainDeposit(request.userId(), request.asset(), request.txId(), request.amount());
         return ResponseEntity.ok().build();
+    }
+
+    /** Watch-only deposit detected by address (node/indexer): resolve the owning user from the pool and
+     *  credit idempotently once confirmations are met. Always 200 (with the outcome) so the watcher need not
+     *  retry on an unknown address or a not-yet-confirmed deposit. */
+    @PostMapping("/deposit-by-address")
+    public ResponseEntity<DepositIngestResponse> depositByAddress(
+            @RequestHeader(value = SECRET_HEADER, required = false) String secret,
+            @Valid @RequestBody DepositByAddressRequest request) {
+        if (!authorized(secret)) {
+            return ResponseEntity.status(403).build();
+        }
+        DepositIngestionService.Result result = depositIngestionService.ingest(
+                request.asset(), request.address(), request.txId(), request.amount(), request.confirmations());
+        return ResponseEntity.ok(
+                new DepositIngestResponse(result.name(), result == DepositIngestionService.Result.CREDITED));
     }
 
     @PostMapping("/kyc-callback")

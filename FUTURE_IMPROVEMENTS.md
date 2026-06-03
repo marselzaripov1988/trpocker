@@ -80,9 +80,13 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     `bc1q…` (`Bech32`/BIP-173), and Taproot `bc1p…` (`TaprootKeys`/BIP-341 + bech32m/BIP-350). Still to add:
     an LTC generator (its own version bytes / bech32 hrp); and `USDC_ERC20` (one enum value) + a
     CHECK-widening changeset on the existing wallet tables (mirrors `02-wallet-tournament-ledger-types`).
+  - **Deposit detection** — ✅ the server-side ingestion landed (`DepositIngestionService` +
+    `POST /internal/wallet/deposit-by-address`: resolves address→user from the pool, min-confirmations gate,
+    idempotent by tx id). Remaining is the **external chain watcher**: a watch-only node/indexer (or explorer
+    API like Blockbook/Esplora/TronGrid) that scans the pooled addresses and POSTs detected deposits to that
+    webhook — out of scope for the offline build (needs a node/RPC).
   - **Pool low-watermark automation**: alert/auto-page when free addresses for an asset drop below a
-    threshold (the `status` endpoint already exposes counts); a watch-only node/indexer to detect deposits to
-    pooled addresses (→ the `/internal/wallet/deposit` webhook).
+    threshold (the `status` endpoint already exposes counts).
   - Consider per-asset integer minor units instead of `BigDecimal(38,18)` if exact on-chain parity matters;
     add withdrawal fee handling and rate/limit + AML thresholds. Compliance (gambling + crypto licensing,
     geo-blocking) is an operational prerequisite, not code.
