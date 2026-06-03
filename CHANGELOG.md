@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 📖 Moderator guide (`docs/MODERATOR_GUIDE.md`)
+- A runbook for moderators/admins covering the whole crypto wallet: KYC review (view video → VERIFIED/REJECTED
+  → GDPR erase), manual withdrawal approval (PENDING_APPROVAL → approve/reject), the air-gapped offline-signer
+  procedure (export intent → sign offline → broadcast → record), deposit-address pool monitoring/refill, plus
+  security do/don't and a config-flag reference. Endpoints documented at `/api/v1/...`.
+
 ### 🔑 Air-gapped Ethereum withdrawal signer (pure Java, no node)
 - The offline side of the withdrawal handoff: a pure-Java **EIP-155 transaction signer** that needs no node —
   RLP encoding (`Rlp`), RFC-6979 deterministic ECDSA over secp256k1 with low-s/EIP-2 (`EcdsaSecp256k1`,
