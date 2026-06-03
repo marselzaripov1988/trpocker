@@ -28,9 +28,11 @@ export class AppComponent implements OnInit, OnDestroy {
   registeredPlayers: PlayerInfo[] = [];
   soundEnabled = true;
   isAdmin = false;
+  isAuthenticated = false;
 
   ngOnInit(): void {
     this.isAdmin = this.authService.isAdmin();
+    this.isAuthenticated = this.authService.isAuthenticated();
 
     this.playerService.players$.pipe(
       takeUntil(this.destroy$)

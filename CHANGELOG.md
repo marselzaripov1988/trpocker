@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend: new `GET /v1/admin/wallet/kyc/pending` (`KycVerificationService.listPending`, `KycPendingDto`) so
   the moderator page has a work-list. No schema change. Backend full suite green (1023). **The Angular code is
   not built in CI here (offline, no `node_modules`) — run `npm ci && npm run build` to compile it.**
+- Navigation: a 🪪 **Verify** link (authenticated users → `/kyc`) and a 🪪 **KYC review** link (admins →
+  `/admin/kyc`, in the existing admin block) added to the main nav.
 
 ### 🔒 KYC media: encryption at rest + GDPR retention/erasure
 - **Encryption at rest**: KYC verification videos are encrypted with **AES-256-GCM** (new pure-JDK `KycCrypto`,

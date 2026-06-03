@@ -18,9 +18,17 @@
       <a routerLink="/settings" routerLinkActive="active">
         ⚙️ Settings
       </a>
+      @if (isAuthenticated) {
+        <a routerLink="/kyc" routerLinkActive="active">
+          🪪 Verify
+        </a>
+      }
       @if (isAdmin) {
         <a routerLink="/admin/tournaments" routerLinkActive="active">
           🛡️ Admin
+        </a>
+        <a routerLink="/admin/kyc" routerLinkActive="active">
+          🪪 KYC review
         </a>
       }
     </div>
