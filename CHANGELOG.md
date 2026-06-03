@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💸 Withdrawal offline-signer (PSBT) handoff
+- Completes the offline-pool withdrawal path. After a moderator **approves** an offline-pool withdrawal it
+  stays `APPROVED` (the provider can't broadcast in-process). Two admin endpoints bridge to the air-gapped
+  signer: `GET /v1/admin/wallet/withdrawals/{id}/unsigned` exports the signer-ready **intent**
+  (`WithdrawalSigningRequestDto`: asset, network, toAddress, amount), and
+  `POST /v1/admin/wallet/withdrawals/{id}/broadcast` (`{txId}`) records the tx id the offline signer
+  produced → `BROADCAST` (then the existing `withdrawal-status` webhook confirms/fails it).
+- Both steps require an `APPROVED` request (`WalletService.withdrawalForSigning` / `recordBroadcast`, else
+  409). **Honest scope**: the online server has no node/RPC, so it exports the *intent* (not a literal PSBT
+  blob) — the air-gapped signer builds, signs and broadcasts the chain tx (PSBT for BTC, raw tx for
+  ETH/TRON) with the seed + its own node. No schema change (reuses `markBroadcast`).
+- Verified (`WithdrawalSigningHandoffIT`, provider=offline-pool): approve leaves it APPROVED → export intent →
+  record broadcast → BROADCAST; export/record on a non-APPROVED request rejected. Full suite green (1023).
+
 ### 💸 Manual withdrawal approval (moderator gate)
 - Flag-gated `app.payments.withdrawal-approval-required` (default **off** — immediate-broadcast behaviour is
   unchanged). When **on**, `requestWithdrawal` debits the balance and parks the request in

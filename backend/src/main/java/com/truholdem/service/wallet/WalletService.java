@@ -193,6 +193,43 @@ public class WalletService {
     }
 
     /**
+     * An APPROVED withdrawal awaiting an offline signature (the offline-signer / PSBT handoff). Returned so
+     * the offline signer can build + sign + broadcast the chain transaction; the resulting tx id is recorded
+     * back via {@link #recordBroadcast}. Only valid for an APPROVED request.
+     */
+    @Transactional(readOnly = true)
+    public WithdrawalRequest withdrawalForSigning(UUID withdrawalId) {
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() != WithdrawalStatus.APPROVED) {
+            throw new IllegalStateException(
+                    "Withdrawal " + withdrawalId + " is not awaiting signing (status " + request.getStatus() + ")");
+        }
+        return request;
+    }
+
+    /**
+     * Record the on-chain tx id after the offline signer broadcast an APPROVED withdrawal → BROADCAST. Only
+     * valid for an APPROVED request; afterwards the {@code withdrawal-status} webhook confirms/fails it.
+     */
+    @Transactional
+    public WithdrawalRequest recordBroadcast(UUID withdrawalId, String txId) {
+        requireEnabled();
+        if (txId == null || txId.isBlank()) {
+            throw new IllegalArgumentException("txId is required");
+        }
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() != WithdrawalStatus.APPROVED) {
+            throw new IllegalStateException(
+                    "Withdrawal " + withdrawalId + " is not APPROVED (status " + request.getStatus() + ")");
+        }
+        request.markBroadcast(txId);
+        log.info("Withdrawal {} broadcast off-chain by the signer (tx {})", withdrawalId, txId);
+        return withdrawalRepository.save(request);
+    }
+
+    /**
      * Moderator approves a pending withdrawal → broadcast via the provider (BROADCAST). For a provider that
      * cannot broadcast in-process (e.g. offline-pool), it stays APPROVED, awaiting the offline signer. Only a
      * PENDING_APPROVAL request can be approved (else {@link IllegalStateException}).

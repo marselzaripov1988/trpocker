@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.wallet.AdminWithdrawalDto;
+import com.truholdem.dto.wallet.BroadcastWithdrawalRequest;
 import com.truholdem.dto.wallet.KycDecisionRequest;
 import com.truholdem.dto.wallet.KycPendingDto;
 import com.truholdem.dto.wallet.KycStatusResponse;
@@ -27,6 +28,7 @@ import com.truholdem.dto.wallet.PoolImportRequest;
 import com.truholdem.dto.wallet.PoolImportResponse;
 import com.truholdem.dto.wallet.PoolStatusResponse;
 import com.truholdem.dto.wallet.RejectWithdrawalRequest;
+import com.truholdem.dto.wallet.WithdrawalSigningRequestDto;
 import com.truholdem.model.User;
 import com.truholdem.service.wallet.DepositAddressPoolService;
 import com.truholdem.service.wallet.KycVerificationService;
@@ -126,6 +128,19 @@ public class AdminWalletController {
         String reason = body != null ? body.reason() : null;
         return ResponseEntity.ok(AdminWithdrawalDto.from(
                 walletService.rejectWithdrawal(id, ((User) principal).getId(), reason)));
+    }
+
+    @GetMapping("/withdrawals/{id}/unsigned")
+    @Operation(summary = "Export an approved withdrawal for the offline signer (PSBT/raw-tx handoff)")
+    public ResponseEntity<WithdrawalSigningRequestDto> exportForSigning(@PathVariable UUID id) {
+        return ResponseEntity.ok(WithdrawalSigningRequestDto.from(walletService.withdrawalForSigning(id)));
+    }
+
+    @PostMapping("/withdrawals/{id}/broadcast")
+    @Operation(summary = "Record the tx id after the offline signer broadcast an approved withdrawal")
+    public ResponseEntity<AdminWithdrawalDto> recordBroadcast(@PathVariable UUID id,
+            @Valid @RequestBody BroadcastWithdrawalRequest body) {
+        return ResponseEntity.ok(AdminWithdrawalDto.from(walletService.recordBroadcast(id, body.txId())));
     }
 
     private static MediaType parseType(String contentType) {
