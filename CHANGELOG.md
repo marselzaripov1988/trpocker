@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔑 Air-gapped BTC (P2WPKH) + TRON signers (pure Java, no node)
+- Extend the offline signer to Bitcoin and TRON. `BtcSigner` computes the **BIP-143 P2WPKH sighash** and a
+  strict-DER ECDSA signature (RFC-6979 + low-s) — exactly the value a watch-only PSBT needs finalised into the
+  input witness. `TronSigner` produces the **65-byte recoverable signature** (`r‖s‖recId`) over
+  `SHA-256(raw_data)` (the TRON tx id).
+- Verified against independent implementations: the BIP-143 sighash reproduces **embit** byte-for-byte, and
+  both the BTC and TRON signatures reproduce **eth-account**'s ECDSA over the same digests. (embit picks a
+  different — but equally valid — RFC-6979 nonce; the network accepts any valid low-s signature.)
+- All signing code stays in **test sources** (never ships in the server jar). Honest scope: PSBT
+  parse/finalise + UTXO selection (BTC) and `raw_data` assembly from a recent block ref (TRON) are the online
+  coordinator's node-dependent job — the offline tool only signs. Full suite green (1031). BTC Taproot
+  (key-path tweak) signing and the broadcast step remain follow-ups.
+
 ### 📖 Moderator guide (`docs/MODERATOR_GUIDE.md`)
 - A runbook for moderators/admins covering the whole crypto wallet: KYC review (view video → VERIFIED/REJECTED
   → GDPR erase), manual withdrawal approval (PENDING_APPROVAL → approve/reject), the air-gapped offline-signer
