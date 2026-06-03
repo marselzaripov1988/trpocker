@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Offline-generated watch-only deposit-address pool. Addresses are created offline (private keys + seed
+      never on this server) and imported via the admin API, then handed out one-per-user-per-asset. DDL is
+      Hibernate-generated (same technique as the baseline / 01-wallet); Postgres-only — H2 tests regenerate
+      the schema from the entity. Idempotent via the tableExists precondition.
+    -->
+    <changeSet id="deposit-pool-001-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="deposit_address_pool"/></not>
+        </preConditions>
+        <sqlFile path="db/changelog/baseline/deposit-pool-postgres.sql"
+                 relativeToChangelogFile="false"
+                 splitStatements="true"
+                 stripComments="true"/>
+    </changeSet>
+
+</databaseChangeLog>

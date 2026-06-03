@@ -67,8 +67,21 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   - Wire a real KYC provider (Sumsub/Onfido) → its webhook maps to `recordKycDecision`.
   - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**
     webhook that moves `WithdrawalRequest` BROADCAST → CONFIRMED (and FAILED → balance reversal entry).
-  - For self-custody: persist a deposit address→user mapping (the skeleton allocates an address on demand
-    but doesn't store it); add on-chain/AML screening (Chainalysis/Elliptic) on the deposit path.
+  - For self-custody: ✅ the `offline-pool` provider now persists a deposit address→user mapping
+    (`DepositAddressPoolEntry`) and serves pre-generated watch-only addresses (keys generated offline). Still
+    add on-chain/AML screening (Chainalysis/Elliptic) on the deposit path.
+- **Offline deposit-address pool** — ✅ landed (`offline-pool` provider, admin import + status, offline
+  `OfflineDepositPoolGenerator`). Remaining to make it production-real:
+  - **Withdrawal / sweep** (the deliberately-unwired half): spend pooled funds via an **offline signer**
+    (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. Pair with a
+    small hot float + per-withdrawal limits + the moderator manual-approval gate.
+  - **USDT-TRC20 generator**: add a base58check derivation (reuse the existing secp256k1 + keccak primitives
+    + JDK SHA-256) so the offline generator emits TRON addresses; this is the highest-demand casino deposit
+    asset. Then add `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables
+    (mirrors `02-wallet-tournament-ledger-types`).
+  - **Pool low-watermark automation**: alert/auto-page when free addresses for an asset drop below a
+    threshold (the `status` endpoint already exposes counts); a watch-only node/indexer to detect deposits to
+    pooled addresses (→ the `/internal/wallet/deposit` webhook).
   - Consider per-asset integer minor units instead of `BigDecimal(38,18)` if exact on-chain parity matters;
     add withdrawal fee handling and rate/limit + AML thresholds. Compliance (gambling + crypto licensing,
     geo-blocking) is an operational prerequisite, not code.

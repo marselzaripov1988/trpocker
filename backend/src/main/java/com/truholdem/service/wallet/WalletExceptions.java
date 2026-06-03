@@ -1,9 +1,18 @@
 package com.truholdem.service.wallet;
 
+import com.truholdem.model.CryptoAsset;
+
 /** Wallet domain exceptions (mapped to HTTP status by the controller). */
 public final class WalletExceptions {
 
     private WalletExceptions() {
+    }
+
+    /** The offline-generated deposit-address pool has no free address left for the asset (needs a refill). */
+    public static class DepositAddressPoolExhaustedException extends RuntimeException {
+        public DepositAddressPoolExhaustedException(CryptoAsset asset) {
+            super("No free deposit addresses left in the pool for " + asset + "; import a new batch");
+        }
     }
 
     /** The wallet subsystem is disabled (feature flag off). */

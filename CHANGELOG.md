@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Offline-generated deposit-address pool (watch-only, no keys on server)
+- New deposit provider `offline-pool` (`app.payments.provider=offline-pool`): deposit addresses are generated
+  **offline** (private keys + seed never touch the server) and only their **public addresses** are imported;
+  the server hands them out one-per-user-per-asset as players request a deposit address. On a server breach
+  there are no spendable keys to steal — only watch-only addresses and balances.
+- `DepositAddressPoolEntry` + `DepositAddressPoolService`: allocation is **idempotent** per (user, asset) and
+  **concurrency-safe** (the next free address is row-locked `SELECT … FOR UPDATE` while claimed, so two
+  simultaneous registrations cannot grab the same one); an exhausted pool is rejected
+  (`DepositAddressPoolExhaustedException`), not silently double-assigned.
+- Admin API (`/v1/admin/wallet`, ADMIN role): `POST /deposit-pool/import` loads a batch of public addresses
+  (idempotent — duplicates skipped; ETH-family addresses validated by EIP-55 checksum) and
+  `GET /deposit-pool/status` reports free/assigned counts per asset for low-watermark monitoring.
+- Offline generator `OfflineDepositPoolGenerator` (lives in **test sources** so it is excluded from the
+  production jar — a key generator must never ship inside the online service): derives a batch of ETH-family
+  keypairs from a single seed (reusing the pure-Java `EthKeys`; backup = the one seed + index range) and
+  writes `private.json` (keep offline) + `addresses.json` (the POST-ready admin import body).
+- Liquibase changeset `04-deposit-address-pool` (Hibernate-generated DDL via `sqlFile`, Postgres-only; H2
+  tests regenerate from the entity). Verified: full suite green + a fresh-Postgres cluster boots with all
+  **five** changesets applied and `ddl-auto=validate` passing on both nodes. Withdrawal/sweep stays out of
+  scope (spend pooled funds via an offline signer); the provider's `broadcastWithdrawal` is intentionally
+  unwired. Initial assets: ETH + USDT-ERC20 (shared Ethereum address); USDT-TRC20 is a documented follow-up.
+
 ### 💰 Auto-payout on tournament finish
 - When a **real-money** tournament completes, `TournamentPayoutListener` (`@EventListener` on the existing
   synchronous `TournamentCompleted` domain event) credits every in-the-money finisher's crypto wallet with

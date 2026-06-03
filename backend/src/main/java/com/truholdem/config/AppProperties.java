@@ -88,7 +88,10 @@ public class AppProperties {
         /** Shared secret authenticating provider webhooks (deposit-confirmed, kyc-callback). */
         private String webhookSecret = "";
 
-        /** Active payment provider: {@code mock} (default, no network) or {@code gateway} (real HTTP gateway). */
+        /** Active payment provider: {@code mock} (default, no network), {@code gateway} (real HTTP gateway),
+         *  {@code eth-self-custody} (in-process ETH key derivation, deposits only), or {@code offline-pool}
+         *  (deposit addresses pre-generated offline and served from a watch-only pool; private keys never on
+         *  the server). */
         private String provider = "mock";
 
         /** Network the gateway operates on: {@code testnet} (default) or {@code mainnet}. Informational + sent

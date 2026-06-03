@@ -13,5 +13,6 @@
     <include file="db/changelog/01-wallet.xml"/>
     <include file="db/changelog/02-wallet-tournament-ledger-types.xml"/>
     <include file="db/changelog/03-tournament-crypto-buyin.xml"/>
+    <include file="db/changelog/04-deposit-address-pool.xml"/>
 
 </databaseChangeLog>

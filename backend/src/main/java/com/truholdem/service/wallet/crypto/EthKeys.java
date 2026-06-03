@@ -68,6 +68,28 @@ public final class EthKeys {
         }
     }
 
+    /** True iff {@code address} is a well-formed 0x-address whose EIP-55 checksum casing is exactly correct.
+     *  Rejects malformed input and addresses with wrong (e.g. tampered) checksum casing. */
+    public static boolean isValidChecksumAddress(String address) {
+        if (address == null || address.length() != 42 || !address.startsWith("0x")) {
+            return false;
+        }
+        String hex = address.substring(2);
+        byte[] addr20 = new byte[20];
+        for (int i = 0; i < 40; i++) {
+            int d = Character.digit(hex.charAt(i), 16);
+            if (d < 0) {
+                return false;
+            }
+            if (i % 2 == 0) {
+                addr20[i / 2] = (byte) (d << 4);
+            } else {
+                addr20[i / 2] |= (byte) d;
+            }
+        }
+        return address.equals(toChecksumAddress(addr20));
+    }
+
     /** EIP-55 checksum casing for a 20-byte address. */
     public static String toChecksumAddress(byte[] addr20) {
         String hex = toHex(addr20);
