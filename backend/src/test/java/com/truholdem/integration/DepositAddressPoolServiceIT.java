@@ -166,6 +166,18 @@ class DepositAddressPoolServiceIT {
     }
 
     @Test
+    @DisplayName("BTC SegWit (bc1q…) addresses import and allocate")
+    void btcSegwitImportAndAllocate() {
+        var batch = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.BTC, 2,
+                OfflineDepositPoolGenerator.BtcStyle.BECH32);
+        pool.importBatch(batch.publicEntries().stream()
+                .map(e -> new PoolEntryDto(e.asset(), e.derivationIndex(), e.address())).toList());
+
+        String address = pool.allocate(UUID.randomUUID(), CryptoAsset.BTC);
+        assertThat(address).startsWith("bc1q");
+    }
+
+    @Test
     @DisplayName("status reports free/assigned counts per asset")
     void statusCounts() {
         pool.importBatch(entries(CryptoAsset.ETH, 3));

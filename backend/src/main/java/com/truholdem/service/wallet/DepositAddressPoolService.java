@@ -77,9 +77,10 @@ public class DepositAddressPoolService {
                 throw new IllegalArgumentException(
                         "Invalid TRON (Base58Check) address for " + e.asset() + ": " + address);
             }
-            if (isBitcoinAddress(e.asset()) && !BtcKeys.isValidP2pkhAddress(address)) {
+            if (isBitcoinAddress(e.asset()) && !BtcKeys.isValidAddress(address)) {
                 throw new IllegalArgumentException(
-                        "Invalid Bitcoin P2PKH address for " + e.asset() + ": " + address);
+                        "Invalid Bitcoin address for " + e.asset() + " (expected P2PKH 1… or SegWit bc1q…): "
+                                + address);
             }
             if (repository.existsByAssetAndAddress(e.asset(), address)) {
                 skipped++;

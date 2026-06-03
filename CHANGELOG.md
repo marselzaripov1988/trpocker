@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 BTC native SegWit (bech32 `bc1q…`) addresses for the offline pool
+- The offline pool now supports **native SegWit v0 P2WPKH** (`bc1q…`) Bitcoin addresses alongside legacy
+  P2PKH — bech32 addresses are cheaper to spend from and the de-facto modern standard. New pure-Java `Bech32`
+  (BIP-173) encoder/validator + `BtcKeys.p2wpkhAddress` (same `HASH160`, bech32-encoded). No new dependency.
+- `OfflineDepositPoolGenerator` gains `--btc-style=p2pkh|bech32` (default p2pkh); BTC import validation now
+  accepts **either** format (`BtcKeys.isValidAddress`). No schema change.
+- Verified against the canonical BIP-173 vector (`bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`), encode/decode
+  round-trip, and rejection of wrong-hrp/tampered/mixed-case input; full suite green (1019). Taproot
+  (`bc1p…`, bech32m) remains a follow-up.
+
 ### 💰 BTC (legacy P2PKH) addresses for the offline pool
 - The offline generator + pool now support **Bitcoin** (legacy P2PKH `1…` addresses). A BTC address uses the
   compressed secp256k1 public key (reusing `EthKeys.publicKeyBytes`), `HASH160 = RIPEMD160(SHA-256(pubkey))`,

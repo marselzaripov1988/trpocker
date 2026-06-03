@@ -26,6 +26,25 @@ class BtcKeysTest {
     }
 
     @Test
+    @DisplayName("private key = 1 yields the canonical bech32 P2WPKH address")
+    void canonicalSegwitVector() {
+        // hash160 of the privkey-1 compressed pubkey is the BIP-173 example program.
+        assertThat(BtcKeys.p2wpkhAddress(BigInteger.ONE))
+                .isEqualTo("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4");
+        assertThat(BtcKeys.isValidP2wpkhAddress("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")).isTrue();
+    }
+
+    @Test
+    @DisplayName("isValidAddress accepts both P2PKH and bech32; rejects cross-type/garbage")
+    void acceptsBothFormats() {
+        assertThat(BtcKeys.isValidAddress(BtcKeys.p2pkhAddress(BigInteger.ONE))).isTrue();
+        assertThat(BtcKeys.isValidAddress(BtcKeys.p2wpkhAddress(BigInteger.ONE))).isTrue();
+        assertThat(BtcKeys.isValidAddress("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).as("TRON").isFalse();
+        assertThat(BtcKeys.isValidP2wpkhAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")).as("P2PKH not bech32")
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("derived addresses are well-formed P2PKH addresses")
     void derivedAddressesAreValid() {
         for (int i = 0; i < 20; i++) {

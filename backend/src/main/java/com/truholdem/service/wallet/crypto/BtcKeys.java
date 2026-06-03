@@ -29,6 +29,8 @@ public final class BtcKeys {
         return compressed;
     }
 
+    private static final String MAINNET_HRP = "bc";
+
     /** Bitcoin legacy P2PKH ({@code 1…}) address for a secp256k1 private key in [1, n-1]. */
     public static String p2pkhAddress(BigInteger priv) {
         byte[] hash160 = hash160(compressedPublicKey(priv));
@@ -38,6 +40,11 @@ public final class BtcKeys {
         return Base58.encodeChecked(payload);
     }
 
+    /** Native SegWit v0 P2WPKH ({@code bc1q…}) address — same HASH160, bech32-encoded (lower fees). */
+    public static String p2wpkhAddress(BigInteger priv) {
+        return Bech32.encodeSegwit(MAINNET_HRP, 0, hash160(compressedPublicKey(priv)));
+    }
+
     /** True iff {@code address} is a well-formed mainnet P2PKH address (Base58Check, 0x00 version, checksum). */
     public static boolean isValidP2pkhAddress(String address) {
         if (address == null || address.isEmpty() || address.charAt(0) != '1') {
@@ -45,6 +52,16 @@ public final class BtcKeys {
         }
         byte[] payload = Base58.verifyChecked(address);
         return payload != null && payload.length == 21 && (payload[0] & 0xff) == P2PKH_VERSION;
+    }
+
+    /** True iff {@code address} is a well-formed mainnet P2WPKH ({@code bc1q…}) address. */
+    public static boolean isValidP2wpkhAddress(String address) {
+        return Bech32.decodeP2wpkh(MAINNET_HRP, address) != null;
+    }
+
+    /** True for any mainnet Bitcoin deposit address we accept (legacy P2PKH or native SegWit P2WPKH). */
+    public static boolean isValidAddress(String address) {
+        return isValidP2pkhAddress(address) || isValidP2wpkhAddress(address);
     }
 
     private static byte[] hash160(byte[] data) {
