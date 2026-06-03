@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🪪 KYC verification video upload (user + passport)
+- Users can upload a **KYC verification video** (e.g. holding their passport) at
+  `POST /v1/wallet/kyc/document` (multipart); uploading moves their KYC to `PENDING`. New
+  `KycVerificationService` validates type (`video/*`) and size (`app.payments.kyc-max-upload-bytes`,
+  default 50 MB), stores the **file bytes on disk** under `app.payments.kyc-storage-dir` (keyed by a random
+  name — never the client filename), and persists only **metadata** in the DB (`kyc_documents`: content type,
+  size, sha-256, storage key, uploaded-at) — no LOB columns.
+- Moderators (ADMIN) review via `GET /v1/admin/wallet/kyc/{userId}/document` (streams the latest video) and
+  decide with `POST /v1/admin/wallet/kyc/{userId}/decision` (`VERIFIED`/`REJECTED`). Multipart limits raised
+  to ~50 MB (`spring.servlet.multipart.*`).
+- Sensitive biometric PII: the bytes are served only to ADMIN; the on-disk name is opaque. **In a cluster the
+  storage dir must be a shared volume** (documented) so any node can read what another received; object
+  storage is a follow-up. Liquibase changeset `05-kyc-documents` (Postgres-only; H2 regenerates from the
+  entity). Verified: full suite green (1023) + a fresh-Postgres cluster boots with all **six** changesets
+  applied and `ddl-auto=validate` passing on both nodes.
+
 ### 💰 Watch-only deposit detection (address → user → credit)
 - New ingestion path for the offline/watch-only pool: a node/indexer that scans the pooled addresses posts a
   detected deposit **keyed by address** (it doesn't know the user) to a new secret-guarded webhook

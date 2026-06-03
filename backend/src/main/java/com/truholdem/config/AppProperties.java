@@ -111,6 +111,13 @@ public class AppProperties {
         /** Minimum on-chain confirmations before a detected deposit is credited (watch-only ingestion). */
         private int minConfirmations = 1;
 
+        /** Directory where KYC verification videos are stored (metadata is kept in the DB). In a clustered
+         *  deployment this must be a shared volume so any node can read what another node received. */
+        private String kycStorageDir = "";
+
+        /** Max size (bytes) of a KYC verification upload. Default 50 MB. */
+        private long kycMaxUploadBytes = 52_428_800L;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -181,6 +188,22 @@ public class AppProperties {
 
         public void setMinConfirmations(int minConfirmations) {
             this.minConfirmations = minConfirmations;
+        }
+
+        public String getKycStorageDir() {
+            return kycStorageDir;
+        }
+
+        public void setKycStorageDir(String kycStorageDir) {
+            this.kycStorageDir = kycStorageDir;
+        }
+
+        public long getKycMaxUploadBytes() {
+            return kycMaxUploadBytes;
+        }
+
+        public void setKycMaxUploadBytes(long kycMaxUploadBytes) {
+            this.kycMaxUploadBytes = kycMaxUploadBytes;
         }
     }
 

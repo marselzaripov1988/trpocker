@@ -22,11 +22,18 @@ import com.truholdem.dto.wallet.KycStatusResponse;
 import com.truholdem.dto.wallet.WalletBalanceResponse;
 import com.truholdem.dto.wallet.WithdrawalResponse;
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.model.KycStatus;
 import com.truholdem.model.User;
+import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletExceptions.InsufficientFundsException;
 import com.truholdem.service.wallet.WalletExceptions.KycRequiredException;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
 import com.truholdem.service.wallet.WalletService;
+
+import java.io.IOException;
+
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
@@ -43,9 +50,11 @@ import jakarta.validation.Valid;
 public class WalletController {
 
     private final WalletService walletService;
+    private final KycVerificationService kycVerificationService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(WalletService walletService, KycVerificationService kycVerificationService) {
         this.walletService = walletService;
+        this.kycVerificationService = kycVerificationService;
     }
 
     private static UUID userId(UserDetails principal) {
@@ -80,6 +89,25 @@ public class WalletController {
             return ResponseEntity.ok(new KycStatusResponse(walletService.submitKyc(userId(principal))));
         } catch (PaymentsDisabledException e) {
             return paymentsDisabled();
+        }
+    }
+
+    /** Upload a KYC verification video (e.g. the user holding their passport); moves KYC to PENDING. */
+    @PostMapping(value = "/kyc/document", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadKycDocument(@AuthenticationPrincipal UserDetails principal,
+            @RequestParam("file") MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(new ErrorResponse("EMPTY_FILE", "No file uploaded"));
+        }
+        try {
+            KycStatus status = kycVerificationService.submitVerificationVideo(
+                    userId(principal), file.getBytes(), file.getOriginalFilename(), file.getContentType());
+            return ResponseEntity.ok(new KycStatusResponse(status));
+        } catch (PaymentsDisabledException e) {
+            return paymentsDisabled();
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("UPLOAD_FAILED", "Could not read the uploaded file"));
         }
     }
 

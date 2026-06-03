@@ -64,7 +64,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   webhooks. Remaining to make it production-real:
   - Wire a real `CryptoPaymentProvider` (gateway e.g. NOWPayments/CoinsPaid, or self-custody signer) as a
     `@Primary` bean; configure the webhook secret and verify the gateway's own signature scheme.
-  - Wire a real KYC provider (Sumsub/Onfido) → its webhook maps to `recordKycDecision`.
+  - Wire a real KYC provider (Sumsub/Onfido) → its webhook maps to `recordKycDecision`. (Manual self-KYC
+    landed: users upload a verification video at `POST /v1/wallet/kyc/document`, moderators review +
+    `VERIFIED`/`REJECTED` via the admin API.) Hardening to add: **encryption-at-rest** for stored videos,
+    **object storage** (S3/MinIO) instead of a shared filesystem volume in a cluster, a **retention/erasure**
+    policy (GDPR), and AV scanning of uploads.
   - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**
     webhook that moves `WithdrawalRequest` BROADCAST → CONFIRMED (and FAILED → balance reversal entry).
   - For self-custody: ✅ the `offline-pool` provider now persists a deposit address→user mapping
