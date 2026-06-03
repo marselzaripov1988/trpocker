@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { gameGuard, replayGuard } from './guards/game.guard';
+import { adminGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -80,6 +81,24 @@ export const routes: Routes = [
   {
     path: 'auth',
     loadChildren: () => import('./auth/auth.routes').then((m) => m.AUTH_ROUTES),
+  },
+
+  {
+    path: 'kyc',
+    loadComponent: () =>
+      import('./wallet/kyc-upload/kyc-upload.component').then(
+        (m) => m.KycUploadComponent
+      ),
+    title: 'Identity verification - TruHoldem',
+  },
+  {
+    path: 'admin/kyc',
+    loadComponent: () =>
+      import('./admin/admin-kyc-review/admin-kyc-review.component').then(
+        (m) => m.AdminKycReviewComponent
+      ),
+    canActivate: [adminGuard],
+    title: 'Admin — KYC review',
   },
 
   {

@@ -20,9 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.truholdem.config.AppProperties;
+import com.truholdem.dto.wallet.KycPendingDto;
 import com.truholdem.model.KycDocument;
 import com.truholdem.model.KycStatus;
 import com.truholdem.repository.KycDocumentRepository;
+import com.truholdem.repository.KycRecordRepository;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
 import com.truholdem.service.wallet.crypto.KycCrypto;
 
@@ -38,12 +40,15 @@ public class KycVerificationService {
     private static final Logger log = LoggerFactory.getLogger(KycVerificationService.class);
 
     private final KycDocumentRepository documentRepository;
+    private final KycRecordRepository kycRecordRepository;
     private final WalletService walletService;
     private final AppProperties appProperties;
 
-    public KycVerificationService(KycDocumentRepository documentRepository, WalletService walletService,
+    public KycVerificationService(KycDocumentRepository documentRepository,
+            KycRecordRepository kycRecordRepository, WalletService walletService,
             AppProperties appProperties) {
         this.documentRepository = documentRepository;
+        this.kycRecordRepository = kycRecordRepository;
         this.walletService = walletService;
         this.appProperties = appProperties;
     }
@@ -107,6 +112,19 @@ public class KycVerificationService {
                 throw new UncheckedIOException("Failed to read KYC document " + doc.getId(), e);
             }
         });
+    }
+
+    /** Pending KYC submissions (status PENDING with an uploaded document) awaiting moderator review. */
+    @Transactional(readOnly = true)
+    public List<KycPendingDto> listPending() {
+        return kycRecordRepository.findByStatusOrderByUpdatedAtAsc(KycStatus.PENDING).stream()
+                .flatMap(record -> documentRepository
+                        .findFirstByUserIdOrderByUploadedAtDesc(record.getUserId())
+                        .map(doc -> new KycPendingDto(record.getUserId(), record.getStatus(),
+                                doc.getUploadedAt(), doc.getOriginalFilename(), doc.getContentType(),
+                                doc.getSizeBytes()))
+                        .stream())
+                .toList();
     }
 
     /** GDPR retention: delete KYC media (file + metadata) uploaded before {@code cutoff}. Returns the count. */

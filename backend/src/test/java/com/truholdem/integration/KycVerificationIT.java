@@ -87,6 +87,20 @@ class KycVerificationIT {
     }
 
     @Test
+    @DisplayName("pending submissions are listed with document metadata")
+    void listsPending() {
+        UUID u1 = UUID.randomUUID();
+        UUID u2 = UUID.randomUUID();
+        kyc.submitVerificationVideo(u1, fakeVideo(1024), "a.mp4", "video/mp4");
+        kyc.submitVerificationVideo(u2, fakeVideo(2048), "b.webm", "video/webm");
+
+        var pending = kyc.listPending();
+
+        assertThat(pending).extracting(p -> p.userId()).contains(u1, u2);
+        assertThat(pending).allSatisfy(p -> assertThat(p.status()).isEqualTo(KycStatus.PENDING));
+    }
+
+    @Test
     @DisplayName("a non-video upload is rejected")
     void rejectsNonVideo() {
         assertThatThrownBy(() -> kyc.submitVerificationVideo(

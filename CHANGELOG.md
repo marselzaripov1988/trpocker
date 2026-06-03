@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🪪 KYC UI — player upload page + moderator review (Angular)
+- **Player page** (`/kyc`): shows current KYC status and lets the user upload a verification video
+  (`KycService` → multipart `POST /v1/wallet/kyc/document`).
+- **Moderator page** (`/admin/kyc`, ADMIN-guarded): lists pending submissions, streams the selected user's
+  video (fetched as a Blob so the auth interceptor attaches the token → object URL), and Approve / Reject /
+  Erase (GDPR) actions (`AdminKycService`).
+- Backend: new `GET /v1/admin/wallet/kyc/pending` (`KycVerificationService.listPending`, `KycPendingDto`) so
+  the moderator page has a work-list. No schema change. Backend full suite green (1023). **The Angular code is
+  not built in CI here (offline, no `node_modules`) — run `npm ci && npm run build` to compile it.**
+
 ### 🔒 KYC media: encryption at rest + GDPR retention/erasure
 - **Encryption at rest**: KYC verification videos are encrypted with **AES-256-GCM** (new pure-JDK `KycCrypto`,
   `[12-byte IV][ciphertext+tag]` on disk) when `app.payments.kyc-encryption-key` (base64 AES key) is set; the
