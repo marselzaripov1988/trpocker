@@ -82,9 +82,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     **moderator manual-approval gate landed** (`app.payments.withdrawal-approval-required`:
     PENDING_APPROVAL → approve/reject + reversal) and the **offline-signer handoff orchestration landed**
     (export the approved withdrawal's intent → sign+broadcast offline → record tx id → BROADCAST). The
-    remaining real work is the **air-gapped signer itself** — a separate program that holds the seed + a node,
-    turns the exported intent into a chain-specific tx (PSBT for BTC / raw tx for ETH-TRON), signs and
-    broadcasts; out of scope for the offline build (needs a node/RPC). Pair with a small hot float +
+    **air-gapped signer landed for Ethereum/ERC-20** (`OfflineWithdrawalSigner` + pure-Java
+    `Rlp`/`EcdsaSecp256k1`/`EthTransactionSigner`: RFC-6979 + EIP-155, no node, verified vs eth-account) — it
+    derives the key from the seed by index and emits a broadcastable raw tx. Remaining: a **BTC PSBT signer**
+    (build/sign P2WPKH/Taproot inputs — heavier, needs prevouts), a **TRON** raw-tx signer, and the actual
+    **broadcast** (a node's `eth_sendRawTransaction` / Bitcoin RPC). Pair with a small hot float +
     per-withdrawal limits + optional 2-of-N moderator (4-eyes).
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
   - **BTC generator** — ✅ landed for all three mainstream formats: legacy P2PKH `1…`, native SegWit bech32

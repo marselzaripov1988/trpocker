@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔑 Air-gapped Ethereum withdrawal signer (pure Java, no node)
+- The offline side of the withdrawal handoff: a pure-Java **EIP-155 transaction signer** that needs no node —
+  RLP encoding (`Rlp`), RFC-6979 deterministic ECDSA over secp256k1 with low-s/EIP-2 (`EcdsaSecp256k1`,
+  reusing `EthKeys`' curve math + `Keccak256`), and `EthTransactionSigner` that builds + signs a legacy tx
+  into a broadcastable raw-tx hex (native ETH **and** ERC-20 `transfer`, i.e. USDT-ERC20).
+- CLI `OfflineWithdrawalSigner` (the air-gapped tool): takes the exported withdrawal intent + chain params
+  (nonce/gas/chainId) + the seed, derives the signing key by index (same KDF as the deposit pool), and prints
+  a signed raw transaction to broadcast via any node's `eth_sendRawTransaction` — after which the tx hash is
+  recorded back via `POST /v1/admin/wallet/withdrawals/{id}/broadcast`.
+- **All signing code lives in test sources** — it touches private keys and must never ship in the online
+  server jar (same principle as the offline address generator). Verified against ground-truth vectors from an
+  independent implementation (eth-account): the canonical EIP-155 vector, a recId=1 native transfer, and an
+  ERC-20 transfer all reproduce byte-for-byte; full suite green (1027). BTC PSBT signing + broadcasting via a
+  node remain follow-ups (need a node/RPC).
+
 ### 💸 Withdrawal offline-signer (PSBT) handoff
 - Completes the offline-pool withdrawal path. After a moderator **approves** an offline-pool withdrawal it
   stays `APPROVED` (the provider can't broadcast in-process). Two admin endpoints bridge to the air-gapped
