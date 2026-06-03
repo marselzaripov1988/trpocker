@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.service.wallet.crypto.EthKeys;
+import com.truholdem.service.wallet.crypto.TronKeys;
 import com.truholdem.tools.OfflineDepositPoolGenerator.Batch;
 
 @DisplayName("Offline deposit-address pool generator")
@@ -48,5 +49,32 @@ class OfflineDepositPoolGeneratorTest {
         String expected = EthKeys.addressFromPrivateKey(EthKeys.derivePrivateKey(SEED, "eth/0"));
         assertThat(batch.keys().get(0).address()).isEqualTo(expected);
         assertThat(batch.publicEntries().get(0).derivationIndex()).isZero();
+    }
+
+    @Test
+    @DisplayName("TRC-20 produces valid, deterministic, distinct TRON addresses")
+    void tronBatch() {
+        Batch a = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.USDT_TRC20, 5);
+        Batch b = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.USDT_TRC20, 5);
+
+        assertThat(a.keys()).hasSize(5);
+        assertThat(a.keys()).allSatisfy(k -> {
+            assertThat(k.address()).startsWith("T");
+            assertThat(TronKeys.isValidAddress(k.address())).as("valid: %s", k.address()).isTrue();
+        });
+        assertThat(a.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).distinct().count())
+                .isEqualTo(5);
+        assertThat(a.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).toList())
+                .as("deterministic from seed")
+                .isEqualTo(b.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).toList());
+    }
+
+    @Test
+    @DisplayName("TRON keys are independent of the ETH keys (separate derivation label)")
+    void tronKeysDifferFromEth() {
+        String eth = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.ETH, 1).keys().get(0).privateKeyHex();
+        String tron = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.USDT_TRC20, 1)
+                .keys().get(0).privateKeyHex();
+        assertThat(tron).isNotEqualTo(eth);
     }
 }

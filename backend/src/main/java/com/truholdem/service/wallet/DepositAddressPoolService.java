@@ -20,6 +20,7 @@ import com.truholdem.model.DepositAddressStatus;
 import com.truholdem.repository.DepositAddressPoolRepository;
 import com.truholdem.service.wallet.WalletExceptions.DepositAddressPoolExhaustedException;
 import com.truholdem.service.wallet.crypto.EthKeys;
+import com.truholdem.service.wallet.crypto.TronKeys;
 
 /**
  * Serves watch-only deposit addresses from a pool that was generated OFFLINE (private keys + seed never touch
@@ -71,6 +72,10 @@ public class DepositAddressPoolService {
                 throw new IllegalArgumentException(
                         "Bad EIP-55 checksum for " + e.asset() + " address: " + address);
             }
+            if (isTronAddress(e.asset()) && !TronKeys.isValidAddress(address)) {
+                throw new IllegalArgumentException(
+                        "Invalid TRON (Base58Check) address for " + e.asset() + ": " + address);
+            }
             if (repository.existsByAssetAndAddress(e.asset(), address)) {
                 skipped++;
                 continue;
@@ -99,5 +104,10 @@ public class DepositAddressPoolService {
     /** ETH and all ERC-20 tokens share the same Ethereum address format → validate via EIP-55 checksum. */
     private static boolean isEthereumAddress(CryptoAsset asset) {
         return "ETH".equals(asset.getNetwork()) || "ERC20".equals(asset.getNetwork());
+    }
+
+    /** TRC-20 tokens use a TRON Base58Check address → validate prefix + checksum. */
+    private static boolean isTronAddress(CryptoAsset asset) {
+        return "TRC20".equals(asset.getNetwork());
     }
 }

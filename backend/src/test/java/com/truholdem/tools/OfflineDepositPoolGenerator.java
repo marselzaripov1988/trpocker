@@ -11,6 +11,7 @@ import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.service.wallet.crypto.EthKeys;
+import com.truholdem.service.wallet.crypto.TronKeys;
 
 /**
  * OFFLINE deposit-address pool generator — run this on an air-gapped machine, NOT on the server.
@@ -25,9 +26,11 @@ import com.truholdem.service.wallet.crypto.EthKeys;
  * </ul>
  *
  * <p>Usage: {@code java -cp <classpath> com.truholdem.tools.OfflineDepositPoolGenerator
- * --count=1000 [--asset=ETH] [--seed-hex=<64hex>] [--out-dir=.]}
+ * --count=1000 [--asset=ETH|USDT_ERC20|USDT_TRC20] [--seed-hex=<64hex>] [--out-dir=.]}
  *
- * <p>ETH and ERC-20 tokens (USDT_ERC20) share the same Ethereum address, so the same key batch serves them.
+ * <p>Supports the Ethereum family (ETH + ERC-20 tokens share one address) and TRON (TRC-20, {@code T…}
+ * Base58Check addresses). The TRON key set is derived under a separate label, so it does not reuse the
+ * Ethereum keys.
  */
 public final class OfflineDepositPoolGenerator {
 
@@ -50,18 +53,24 @@ public final class OfflineDepositPoolGenerator {
         }
     }
 
-    /** Deterministically derive {@code count} ETH-family keypairs from {@code seed} (index 0..count-1). */
+    /** Deterministically derive {@code count} keypairs from {@code seed} (index 0..count-1). Supports the
+     *  Ethereum family (ETH, ERC-20 tokens — shared address) and TRON (TRC-20). A per-chain derivation label
+     *  keeps the ETH and TRON key sets independent (no key reuse across chains). */
     public static Batch generate(byte[] seed, CryptoAsset asset, int count) {
-        if (!"ETH".equals(asset.getNetwork()) && !"ERC20".equals(asset.getNetwork())) {
-            throw new IllegalArgumentException("This generator produces only Ethereum addresses; got " + asset);
+        boolean eth = "ETH".equals(asset.getNetwork()) || "ERC20".equals(asset.getNetwork());
+        boolean tron = "TRC20".equals(asset.getNetwork());
+        if (!eth && !tron) {
+            throw new IllegalArgumentException("Unsupported network for this generator: " + asset);
         }
         if (count <= 0) {
             throw new IllegalArgumentException("count must be positive");
         }
+        String label = eth ? "eth/" : "tron/";
         List<Keypair> keys = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            BigInteger priv = EthKeys.derivePrivateKey(seed, "eth/" + i);
-            keys.add(new Keypair(i, priv.toString(16), EthKeys.addressFromPrivateKey(priv)));
+            BigInteger priv = EthKeys.derivePrivateKey(seed, label + i);
+            String address = eth ? EthKeys.addressFromPrivateKey(priv) : TronKeys.addressFromPrivateKey(priv);
+            keys.add(new Keypair(i, priv.toString(16), address));
         }
         return new Batch(HexFormat.of().formatHex(seed), asset, keys);
     }

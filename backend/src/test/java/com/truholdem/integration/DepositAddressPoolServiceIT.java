@@ -126,6 +126,26 @@ class DepositAddressPoolServiceIT {
     }
 
     @Test
+    @DisplayName("TRC-20 (TRON) addresses import and allocate like ETH-family")
+    void tronImportAndAllocate() {
+        pool.importBatch(entries(CryptoAsset.USDT_TRC20, 2));
+
+        String address = pool.allocate(UUID.randomUUID(), CryptoAsset.USDT_TRC20);
+
+        assertThat(address).startsWith("T");
+        assertThat(repository.countByAssetAndStatus(CryptoAsset.USDT_TRC20,
+                com.truholdem.model.DepositAddressStatus.FREE)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a malformed TRON address is rejected on import")
+    void importRejectsBadTronAddress() {
+        assertThatThrownBy(() -> pool.importBatch(
+                List.of(new PoolEntryDto(CryptoAsset.USDT_TRC20, 0, "TNotARealTronAddress000000000000000"))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("status reports free/assigned counts per asset")
     void statusCounts() {
         pool.importBatch(entries(CryptoAsset.ETH, 3));

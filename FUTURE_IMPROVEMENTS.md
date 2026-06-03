@@ -75,10 +75,9 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   - **Withdrawal / sweep** (the deliberately-unwired half): spend pooled funds via an **offline signer**
     (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. Pair with a
     small hot float + per-withdrawal limits + the moderator manual-approval gate.
-  - **USDT-TRC20 generator**: add a base58check derivation (reuse the existing secp256k1 + keccak primitives
-    + JDK SHA-256) so the offline generator emits TRON addresses; this is the highest-demand casino deposit
-    asset. Then add `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables
-    (mirrors `02-wallet-tournament-ledger-types`).
+  - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
+    Still to add: `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables
+    (mirrors `02-wallet-tournament-ledger-types`); and BTC/LTC generators (their own base58/bech32 schemes).
   - **Pool low-watermark automation**: alert/auto-page when free addresses for an asset drop below a
     threshold (the `status` endpoint already exposes counts); a watch-only node/indexer to detect deposits to
     pooled addresses (→ the `/internal/wallet/deposit` webhook).

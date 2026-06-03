@@ -34,8 +34,9 @@ public final class EthKeys {
     private EthKeys() {
     }
 
-    /** EIP-55 checksummed 0x-address for a secp256k1 private key in [1, n-1]. */
-    public static String addressFromPrivateKey(BigInteger priv) {
+    /** The raw 20-byte account address (last 20 bytes of Keccak-256 of the uncompressed public key) for a
+     *  secp256k1 private key. Shared by Ethereum (→ EIP-55 hex) and TRON (→ 0x41 prefix + Base58Check). */
+    public static byte[] addressBytesFromPrivateKey(BigInteger priv) {
         BigInteger[] pub = mul(priv, new BigInteger[] { GX, GY });
         byte[] xy = new byte[64];
         System.arraycopy(to32(pub[0]), 0, xy, 0, 32);
@@ -43,7 +44,12 @@ public final class EthKeys {
         byte[] hash = Keccak256.digest(xy);
         byte[] addr = new byte[20];
         System.arraycopy(hash, 12, addr, 0, 20);
-        return toChecksumAddress(addr);
+        return addr;
+    }
+
+    /** EIP-55 checksummed 0x-address for a secp256k1 private key in [1, n-1]. */
+    public static String addressFromPrivateKey(BigInteger priv) {
+        return toChecksumAddress(addressBytesFromPrivateKey(priv));
     }
 
     /** A fresh random secp256k1 private key. */

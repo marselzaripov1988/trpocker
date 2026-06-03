@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 USDT-TRC20 (TRON) addresses for the offline pool
+- The offline generator + pool now support **TRON (TRC-20)** alongside the Ethereum family — TRC-20 is the
+  most common crypto deposit method on poker/casino sites. A TRON account reuses the same secp256k1 + Keccak-256
+  primitives as Ethereum (`EthKeys.addressBytesFromPrivateKey`); only the encoding differs: new pure-Java
+  `Base58` + `TronKeys` add the `0x41`-prefix Base58Check (`T…`) address using JDK SHA-256 — no new dependency.
+- `OfflineDepositPoolGenerator` emits TRON addresses (`--asset=USDT_TRC20`) under a **separate derivation
+  label** so the TRON key set never reuses the Ethereum keys. `DepositAddressPoolService` import validates
+  TRC-20 addresses by Base58Check prefix + checksum (ETH-family still by EIP-55). No schema change —
+  `USDT_TRC20` was already a known asset.
+- Verified against an independent Base58Check implementation (privkey 1 → `TMVQGm1qAQYVdetCeGRRkTWYYrLXuHK2HC`)
+  and the real mainnet USDT-TRON contract address; full suite green (1006).
+
 ### 💰 Offline-generated deposit-address pool (watch-only, no keys on server)
 - New deposit provider `offline-pool` (`app.payments.provider=offline-pool`): deposit addresses are generated
   **offline** (private keys + seed never touch the server) and only their **public addresses** are imported;
