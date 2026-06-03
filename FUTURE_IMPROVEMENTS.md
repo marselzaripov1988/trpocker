@@ -76,11 +76,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. Pair with a
     small hot float + per-withdrawal limits + the moderator manual-approval gate.
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
-  - **BTC generator** — ✅ landed (`Ripemd160` + `BtcKeys`, legacy P2PKH `1…` **and** native SegWit bech32
-    `bc1q…` via `Bech32`/BIP-173). Still to add: **Taproot** (`bc1p…`, bech32m / BIP-350 — needs the bech32m
-    constant, x-only pubkey and the BIP-341 key tweak); an LTC generator (its own version bytes / bech32 hrp);
-    and `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables (mirrors
-    `02-wallet-tournament-ledger-types`).
+  - **BTC generator** — ✅ landed for all three mainstream formats: legacy P2PKH `1…`, native SegWit bech32
+    `bc1q…` (`Bech32`/BIP-173), and Taproot `bc1p…` (`TaprootKeys`/BIP-341 + bech32m/BIP-350). Still to add:
+    an LTC generator (its own version bytes / bech32 hrp); and `USDC_ERC20` (one enum value) + a
+    CHECK-widening changeset on the existing wallet tables (mirrors `02-wallet-tournament-ledger-types`).
   - **Pool low-watermark automation**: alert/auto-page when free addresses for an asset drop below a
     threshold (the `status` endpoint already exposes counts); a watch-only node/indexer to detect deposits to
     pooled addresses (→ the `/internal/wallet/deposit` webhook).

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 BTC Taproot (`bc1p…`) addresses for the offline pool
+- The offline pool now also supports **Taproot** (P2TR, key-path-only, `bc1p…`). New pure-Java `TaprootKeys`
+  implements BIP-341: x-only internal key from `d·G`, `lift_x` to the even-Y point, tweak
+  `t = tagged_hash("TapTweak", P_x)`, output key `Q = P + t·G`, then **bech32m** (BIP-350) of `Q_x` as
+  witness v1. `Bech32` was generalised to switch between bech32 (v0) and bech32m (v1+) by the witness
+  version. The secp256k1 primitives in `EthKeys` (point add/mul, field/order constants) are now
+  package-private so the crypto classes can share them — no new dependency.
+- `OfflineDepositPoolGenerator` gains `--btc-style=taproot`; BTC import validation already accepts any of
+  P2PKH / P2WPKH / P2TR via `BtcKeys.isValidAddress`. No schema change.
+- Verified against an independent BIP-341 implementation (privkey 1 →
+  `bc1pmfr3p9j00pfxjh0zmgp99y8zftmd3s5pmedqhyptwy6lm87hf5sspknck9`), bech32m encode/decode round-trip, and
+  rejection of v0/cross-type input; full suite green (1023). Bitcoin deposit addresses now cover all three
+  mainstream formats (legacy, SegWit, Taproot).
+
 ### 💰 BTC native SegWit (bech32 `bc1q…`) addresses for the offline pool
 - The offline pool now supports **native SegWit v0 P2WPKH** (`bc1q…`) Bitcoin addresses alongside legacy
   P2PKH — bech32 addresses are cheaper to spend from and the de-facto modern standard. New pure-Java `Bech32`

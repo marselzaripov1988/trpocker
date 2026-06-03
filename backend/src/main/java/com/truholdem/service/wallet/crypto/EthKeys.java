@@ -20,13 +20,14 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public final class EthKeys {
 
-    private static final BigInteger P = new BigInteger(
+    // Package-private secp256k1 constants/primitives, reused by TronKeys/BtcKeys/TaprootKeys in this package.
+    static final BigInteger P = new BigInteger(
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16);
-    private static final BigInteger N = new BigInteger(
+    static final BigInteger N = new BigInteger(
             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
-    private static final BigInteger GX = new BigInteger(
+    static final BigInteger GX = new BigInteger(
             "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798", 16);
-    private static final BigInteger GY = new BigInteger(
+    static final BigInteger GY = new BigInteger(
             "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8", 16);
     private static final BigInteger THREE = BigInteger.valueOf(3);
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -121,7 +122,7 @@ public final class EthKeys {
 
     // --- secp256k1 affine point math (a = 0) ---
 
-    private static BigInteger[] add(BigInteger[] p, BigInteger[] q) {
+    static BigInteger[] add(BigInteger[] p, BigInteger[] q) {
         if (p == null) {
             return q;
         }
@@ -144,7 +145,7 @@ public final class EthKeys {
         return new BigInteger[] { x3, y3 };
     }
 
-    private static BigInteger[] mul(BigInteger k, BigInteger[] g) {
+    static BigInteger[] mul(BigInteger k, BigInteger[] g) {
         BigInteger[] result = null;
         BigInteger[] addend = g;
         while (k.signum() > 0) {
@@ -157,7 +158,7 @@ public final class EthKeys {
         return result;
     }
 
-    private static byte[] to32(BigInteger v) {
+    static byte[] to32(BigInteger v) {
         byte[] b = v.toByteArray();
         byte[] r = new byte[32];
         if (b.length > 32) {

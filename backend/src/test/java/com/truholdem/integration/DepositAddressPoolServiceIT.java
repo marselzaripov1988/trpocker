@@ -178,6 +178,18 @@ class DepositAddressPoolServiceIT {
     }
 
     @Test
+    @DisplayName("BTC Taproot (bc1p…) addresses import and allocate")
+    void btcTaprootImportAndAllocate() {
+        var batch = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.BTC, 2,
+                OfflineDepositPoolGenerator.BtcStyle.TAPROOT);
+        pool.importBatch(batch.publicEntries().stream()
+                .map(e -> new PoolEntryDto(e.asset(), e.derivationIndex(), e.address())).toList());
+
+        String address = pool.allocate(UUID.randomUUID(), CryptoAsset.BTC);
+        assertThat(address).startsWith("bc1p");
+    }
+
+    @Test
     @DisplayName("status reports free/assigned counts per asset")
     void statusCounts() {
         pool.importBatch(entries(CryptoAsset.ETH, 3));

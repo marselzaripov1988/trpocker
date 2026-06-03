@@ -27,12 +27,13 @@ import com.truholdem.service.wallet.crypto.TronKeys;
  * </ul>
  *
  * <p>Usage: {@code java -cp <classpath> com.truholdem.tools.OfflineDepositPoolGenerator
- * --count=1000 [--asset=ETH|USDT_ERC20|USDT_TRC20|BTC] [--btc-style=p2pkh|bech32] [--seed-hex=<64hex>]
- * [--out-dir=.]}
+ * --count=1000 [--asset=ETH|USDT_ERC20|USDT_TRC20|BTC] [--btc-style=p2pkh|bech32|taproot]
+ * [--seed-hex=<64hex>] [--out-dir=.]}
  *
  * <p>Supports the Ethereum family (ETH + ERC-20 tokens share one address), TRON (TRC-20, {@code T…}
- * Base58Check) and Bitcoin (legacy P2PKH {@code 1…} or native SegWit P2WPKH {@code bc1q…} via
- * {@code --btc-style=bech32}). Each chain derives under a separate label, so the key sets never overlap.
+ * Base58Check) and Bitcoin — legacy P2PKH {@code 1…}, native SegWit P2WPKH {@code bc1q…}
+ * ({@code --btc-style=bech32}) or Taproot {@code bc1p…} ({@code --btc-style=taproot}). Each chain derives
+ * under a separate label, so the key sets never overlap.
  */
 public final class OfflineDepositPoolGenerator {
 
@@ -58,9 +59,9 @@ public final class OfflineDepositPoolGenerator {
     /** Deterministically derive {@code count} keypairs from {@code seed} (index 0..count-1). Supports the
      *  Ethereum family (ETH, ERC-20 tokens — shared address) and TRON (TRC-20). A per-chain derivation label
      *  keeps the ETH and TRON key sets independent (no key reuse across chains). */
-    /** Bitcoin address style: legacy P2PKH ({@code 1…}) or native SegWit P2WPKH ({@code bc1q…}). */
+    /** Bitcoin address style: legacy P2PKH ({@code 1…}), SegWit P2WPKH ({@code bc1q…}) or Taproot ({@code bc1p…}). */
     public enum BtcStyle {
-        P2PKH, BECH32
+        P2PKH, BECH32, TAPROOT
     }
 
     public static Batch generate(byte[] seed, CryptoAsset asset, int count) {
@@ -88,7 +89,11 @@ public final class OfflineDepositPoolGenerator {
             } else if (tron) {
                 address = TronKeys.addressFromPrivateKey(priv);
             } else {
-                address = btcStyle == BtcStyle.BECH32 ? BtcKeys.p2wpkhAddress(priv) : BtcKeys.p2pkhAddress(priv);
+                address = switch (btcStyle) {
+                    case BECH32 -> BtcKeys.p2wpkhAddress(priv);
+                    case TAPROOT -> BtcKeys.p2trAddress(priv);
+                    default -> BtcKeys.p2pkhAddress(priv);
+                };
             }
             keys.add(new Keypair(i, priv.toString(16), address));
         }

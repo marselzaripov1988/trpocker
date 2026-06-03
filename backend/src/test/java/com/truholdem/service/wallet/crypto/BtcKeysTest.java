@@ -39,6 +39,7 @@ class BtcKeysTest {
     void acceptsBothFormats() {
         assertThat(BtcKeys.isValidAddress(BtcKeys.p2pkhAddress(BigInteger.ONE))).isTrue();
         assertThat(BtcKeys.isValidAddress(BtcKeys.p2wpkhAddress(BigInteger.ONE))).isTrue();
+        assertThat(BtcKeys.isValidAddress(BtcKeys.p2trAddress(BigInteger.ONE))).as("taproot").isTrue();
         assertThat(BtcKeys.isValidAddress("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).as("TRON").isFalse();
         assertThat(BtcKeys.isValidP2wpkhAddress("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")).as("P2PKH not bech32")
                 .isFalse();

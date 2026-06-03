@@ -27,6 +27,18 @@ class Bech32Test {
     }
 
     @Test
+    @DisplayName("bech32m (witness v1) encode/decode round-trips a 32-byte program")
+    void bech32mRoundTrip() {
+        byte[] program = HexFormat.of()
+                .parseHex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798");
+        String address = Bech32.encodeSegwit("bc", 1, program);
+        assertThat(address).startsWith("bc1p");
+        assertThat(Bech32.decodeP2tr("bc", address)).isEqualTo(program);
+        // A v1 address must not validate as v0 (different checksum constant).
+        assertThat(Bech32.decodeP2wpkh("bc", address)).isNull();
+    }
+
+    @Test
     @DisplayName("rejects wrong hrp, tampered checksum, mixed case and garbage")
     void rejectsInvalid() {
         String valid = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4";

@@ -45,6 +45,11 @@ public final class BtcKeys {
         return Bech32.encodeSegwit(MAINNET_HRP, 0, hash160(compressedPublicKey(priv)));
     }
 
+    /** Taproot P2TR ({@code bc1p…}) key-path address (BIP-341, bech32m). */
+    public static String p2trAddress(BigInteger priv) {
+        return TaprootKeys.p2trAddress(priv);
+    }
+
     /** True iff {@code address} is a well-formed mainnet P2PKH address (Base58Check, 0x00 version, checksum). */
     public static boolean isValidP2pkhAddress(String address) {
         if (address == null || address.isEmpty() || address.charAt(0) != '1') {
@@ -59,9 +64,14 @@ public final class BtcKeys {
         return Bech32.decodeP2wpkh(MAINNET_HRP, address) != null;
     }
 
-    /** True for any mainnet Bitcoin deposit address we accept (legacy P2PKH or native SegWit P2WPKH). */
+    /** True iff {@code address} is a well-formed mainnet P2TR ({@code bc1p…}) address. */
+    public static boolean isValidP2trAddress(String address) {
+        return TaprootKeys.isValidAddress(address);
+    }
+
+    /** True for any mainnet Bitcoin deposit address we accept (legacy P2PKH, SegWit P2WPKH, or Taproot P2TR). */
     public static boolean isValidAddress(String address) {
-        return isValidP2pkhAddress(address) || isValidP2wpkhAddress(address);
+        return isValidP2pkhAddress(address) || isValidP2wpkhAddress(address) || isValidP2trAddress(address);
     }
 
     private static byte[] hash160(byte[] data) {
