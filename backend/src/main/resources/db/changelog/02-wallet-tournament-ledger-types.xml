@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Extend the wallet_ledger_entries.type CHECK to allow the off-chain tournament buy-in/payout types.
+      The baseline (01-wallet) generated the constraint with only DEPOSIT/WITHDRAWAL/WITHDRAWAL_REVERSAL;
+      Postgres rejects new enum values until the CHECK is widened. (H2 tests regenerate the schema from the
+      entity enum via Hibernate, so this is Postgres-only.)
+    -->
+    <changeSet id="wallet-002-tournament-ledger-types" author="truholdem" dbms="postgresql">
+        <sql>
+            ALTER TABLE wallet_ledger_entries DROP CONSTRAINT IF EXISTS wallet_ledger_entries_type_check;
+            ALTER TABLE wallet_ledger_entries ADD CONSTRAINT wallet_ledger_entries_type_check
+                CHECK (type IN ('DEPOSIT', 'WITHDRAWAL', 'WITHDRAWAL_REVERSAL',
+                                'TOURNAMENT_BUYIN', 'TOURNAMENT_PAYOUT'));
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

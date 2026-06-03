@@ -228,6 +228,57 @@ public class WalletService {
                 withdrawalId, request.getAmount(), request.getAsset(), request.getUserId());
     }
 
+    // ---- internal (off-chain) movements: real-money tournament buy-in / payout ---------------------
+
+    /**
+     * Debit the wallet for a real-money tournament buy-in. Idempotent by {@code idempotencyKey} (stored in
+     * the unique external-tx column) — a repeated charge for the same key is a no-op returning false.
+     * Throws {@link InsufficientFundsException} when the balance is too low.
+     */
+    @Transactional
+    public boolean chargeBuyIn(UUID userId, CryptoAsset asset, BigDecimal amount, String idempotencyKey) {
+        requireEnabled();
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Buy-in amount must be positive");
+        }
+        if (ledgerRepository.existsByExternalTxId(idempotencyKey)) {
+            return false;
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
+                .orElseThrow(InsufficientFundsException::new);
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException();
+        }
+        account.debit(amount);
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.tournamentBuyIn(userId, asset, amount, account.getBalance(),
+                idempotencyKey));
+        log.info("Tournament buy-in: debited {} {} from user {} ({})", amount, asset, userId, idempotencyKey);
+        return true;
+    }
+
+    /**
+     * Credit the wallet with a real-money tournament payout/prize. Idempotent by {@code idempotencyKey}.
+     */
+    @Transactional
+    public boolean awardPayout(UUID userId, CryptoAsset asset, BigDecimal amount, String idempotencyKey) {
+        requireEnabled();
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Payout amount must be positive");
+        }
+        if (ledgerRepository.existsByExternalTxId(idempotencyKey)) {
+            return false;
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
+                .orElseGet(() -> accountRepository.save(new WalletAccount(userId, asset)));
+        account.credit(amount);
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.tournamentPayout(userId, asset, amount, account.getBalance(),
+                idempotencyKey));
+        log.info("Tournament payout: credited {} {} to user {} ({})", amount, asset, userId, idempotencyKey);
+        return true;
+    }
+
     private void requireEnabled() {
         if (!appProperties.getPayments().isEnabled()) {
             throw new PaymentsDisabledException();

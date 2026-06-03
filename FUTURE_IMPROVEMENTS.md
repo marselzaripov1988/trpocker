@@ -72,6 +72,12 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   - Consider per-asset integer minor units instead of `BigDecimal(38,18)` if exact on-chain parity matters;
     add withdrawal fee handling and rate/limit + AML thresholds. Compliance (gambling + crypto licensing,
     geo-blocking) is an operational prerequisite, not code.
+- **Tournament buy-in bridge** — ✅ landed (`TournamentWalletService`, `POST /v1/tournaments/{id}/buy-in`):
+  buy-in debits the crypto wallet atomically with registration; payout credits it; idempotent per
+  (tournament, user). Remaining: **auto-trigger payout** when a player finishes/wins (the chip prize →
+  crypto conversion, hooked into the elimination/finish path, currently `payout` is an explicit call); and
+  carry the crypto buy-in on the `Tournament` entity (`cryptoBuyInAmount` + `asset`) instead of passing
+  amount/asset per call, so the server—not the caller—fixes the entry fee.
 - Re-include the heavy integration tests in `mvnw verify` once green (Docker required in CI).
 
 ---

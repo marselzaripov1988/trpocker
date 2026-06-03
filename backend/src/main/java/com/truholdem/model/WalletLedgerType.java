@@ -4,5 +4,9 @@ package com.truholdem.model;
 public enum WalletLedgerType {
     DEPOSIT,
     WITHDRAWAL,
-    WITHDRAWAL_REVERSAL
+    WITHDRAWAL_REVERSAL,
+    /** Off-chain debit: real-money tournament entry (buy-in). */
+    TOURNAMENT_BUYIN,
+    /** Off-chain credit: real-money tournament prize/payout. */
+    TOURNAMENT_PAYOUT
 }

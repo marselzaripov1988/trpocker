@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Wallet ↔ tournament buy-in/payout bridge
+- Real-money tournament entry: `TournamentWalletService.buyIn` debits the player's crypto `WalletAccount`
+  and registers them **in one transaction** (if registration fails — full / already in / not open — the
+  debit rolls back), and `payout` credits the wallet with a prize. Both are **idempotent per
+  (tournament, user)** (the idempotency key is stored in the unique `external_tx_id` column), so a repeated
+  buy-in neither double-charges nor double-registers.
+- New ledger types `TOURNAMENT_BUYIN` (debit) / `TOURNAMENT_PAYOUT` (credit) with `WalletLedgerEntry`
+  factories and `WalletService.chargeBuyIn`/`awardPayout` (flag-gated by `app.payments.enabled`). Liquibase
+  changeset `02-wallet-tournament-ledger-types` widens the `wallet_ledger_entries.type` CHECK on Postgres
+  (H2 tests regenerate it from the entity). `POST /v1/tournaments/{id}/buy-in` is the entry point.
+- In-game chips stay play-money; the bridge only moves the real crypto balance (debit on entry, credit on
+  payout). Verified: full suite green + a fresh-Postgres cluster boots with all three changesets applied and
+  `ddl-auto=validate` passing.
+
 ### 💰 Crypto wallet — on-chain deposits + KYC-gated withdrawals (flag-gated skeleton)
 - New `wallet` subsystem (default **off**, `app.payments.enabled`): a real-money crypto balance separate from
   in-game chips. Entities `WalletAccount` (authoritative balance per user+asset, optimistic-locked),

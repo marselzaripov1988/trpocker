@@ -11,5 +11,6 @@
          after the baseline. -->
     <include file="db/changelog/00-baseline.xml"/>
     <include file="db/changelog/01-wallet.xml"/>
+    <include file="db/changelog/02-wallet-tournament-ledger-types.xml"/>
 
 </databaseChangeLog>

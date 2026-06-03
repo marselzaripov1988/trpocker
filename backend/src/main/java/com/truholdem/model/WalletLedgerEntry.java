@@ -93,6 +93,21 @@ public class WalletLedgerEntry {
                 amount, balanceAfter, null, withdrawalId);
     }
 
+    /** Off-chain debit for a real-money tournament buy-in. {@code idempotencyKey} is stored in the unique
+     *  external-tx column so a repeated buy-in for the same entry is rejected. */
+    public static WalletLedgerEntry tournamentBuyIn(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, String idempotencyKey) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.TOURNAMENT_BUYIN,
+                amount.negate(), balanceAfter, idempotencyKey, null);
+    }
+
+    /** Off-chain credit for a real-money tournament prize/payout (idempotent via {@code idempotencyKey}). */
+    public static WalletLedgerEntry tournamentPayout(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, String idempotencyKey) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.TOURNAMENT_PAYOUT,
+                amount, balanceAfter, idempotencyKey, null);
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
