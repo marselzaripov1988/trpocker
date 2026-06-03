@@ -57,6 +57,9 @@ class TournamentWalletServiceIT {
         tournamentRepository.deleteAll();
         Tournament t = tournamentService.createTournament(
                 CreateTournamentRequest.sitAndGo("Buy-in SNG " + System.currentTimeMillis(), 100));
+        t.setCryptoBuyInAmount(new BigDecimal("20"));
+        t.setCryptoBuyInAsset(ASSET);
+        tournamentRepository.save(t);
         tournamentId = t.getId();
     }
 
@@ -71,7 +74,7 @@ class TournamentWalletServiceIT {
     void buyInDebitsAndRegisters() {
         UUID user = fundedUser("50");
 
-        TournamentRegistration reg = bridge.buyIn(user, tournamentId, "Alice", ASSET, new BigDecimal("20"));
+        TournamentRegistration reg = bridge.buyIn(user, tournamentId, "Alice");
 
         assertThat(reg.getStatus()).isEqualTo(RegistrationStatus.REGISTERED);
         assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("30");
@@ -83,7 +86,7 @@ class TournamentWalletServiceIT {
     void insufficientBalanceRejected() {
         UUID user = fundedUser("5");
 
-        assertThatThrownBy(() -> bridge.buyIn(user, tournamentId, "Bob", ASSET, new BigDecimal("20")))
+        assertThatThrownBy(() -> bridge.buyIn(user, tournamentId, "Bob"))
                 .isInstanceOf(InsufficientFundsException.class);
 
         assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("5");
@@ -95,8 +98,8 @@ class TournamentWalletServiceIT {
     void buyInIdempotent() {
         UUID user = fundedUser("50");
 
-        bridge.buyIn(user, tournamentId, "Carol", ASSET, new BigDecimal("20"));
-        bridge.buyIn(user, tournamentId, "Carol", ASSET, new BigDecimal("20"));
+        bridge.buyIn(user, tournamentId, "Carol");
+        bridge.buyIn(user, tournamentId, "Carol");
 
         assertThat(walletService.balance(user, ASSET)).as("charged once").isEqualByComparingTo("30");
         assertThat(registrationRepository.findByTournamentId(tournamentId)).hasSize(1);

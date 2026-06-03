@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Real-money (crypto) buy-in fields on tournaments. Nullable → play-money tournaments are unchanged.
+      Postgres-only (H2 tests regenerate the schema from the entity via Hibernate). Guarded by columnExists
+      so it is idempotent.
+    -->
+    <changeSet id="tournament-001-crypto-buyin" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="tournaments" columnName="crypto_buy_in_amount"/></not>
+        </preConditions>
+        <addColumn tableName="tournaments">
+            <column name="crypto_buy_in_amount" type="numeric(38,18)"/>
+            <column name="crypto_buy_in_asset" type="varchar(32)"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

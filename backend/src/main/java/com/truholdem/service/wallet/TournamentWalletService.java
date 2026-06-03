@@ -1,6 +1,8 @@
 package com.truholdem.service.wallet;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -8,9 +10,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.truholdem.domain.event.TournamentCompleted;
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentRegistration;
 import com.truholdem.repository.TournamentRegistrationRepository;
+import com.truholdem.repository.TournamentRepository;
 import com.truholdem.service.TournamentService;
 
 /**
@@ -28,17 +33,26 @@ public class TournamentWalletService {
     private final WalletService walletService;
     private final TournamentService tournamentService;
     private final TournamentRegistrationRepository registrationRepository;
+    private final TournamentRepository tournamentRepository;
 
     public TournamentWalletService(WalletService walletService, TournamentService tournamentService,
-            TournamentRegistrationRepository registrationRepository) {
+            TournamentRegistrationRepository registrationRepository, TournamentRepository tournamentRepository) {
         this.walletService = walletService;
         this.tournamentService = tournamentService;
         this.registrationRepository = registrationRepository;
+        this.tournamentRepository = tournamentRepository;
     }
 
+    /** Buy into a real-money tournament at its configured crypto fee (debit + register, atomically). */
     @Transactional
-    public TournamentRegistration buyIn(UUID userId, UUID tournamentId, String playerName,
-            CryptoAsset asset, BigDecimal amount) {
+    public TournamentRegistration buyIn(UUID userId, UUID tournamentId, String playerName) {
+        Tournament tournament = tournamentRepository.findById(tournamentId)
+                .orElseThrow(() -> new NoSuchElementException("Tournament not found: " + tournamentId));
+        if (!tournament.isRealMoney()) {
+            throw new IllegalStateException("Tournament " + tournamentId + " is not a real-money tournament");
+        }
+        CryptoAsset asset = tournament.getCryptoBuyInAsset();
+        BigDecimal amount = tournament.getCryptoBuyInAmount();
         boolean charged = walletService.chargeBuyIn(userId, asset, amount, buyInKey(tournamentId, userId));
         if (!charged) {
             // Already bought in (idempotent) — return the existing registration without re-charging.
@@ -54,6 +68,37 @@ public class TournamentWalletService {
     @Transactional
     public boolean payout(UUID userId, UUID tournamentId, CryptoAsset asset, BigDecimal amount) {
         return walletService.awardPayout(userId, asset, amount, payoutKey(tournamentId, userId));
+    }
+
+    /**
+     * Credit every in-the-money finisher of a completed real-money tournament with their crypto share.
+     * No-op for play-money / unknown tournaments. Best-effort per finisher (a failed credit is logged, not
+     * fatal) and idempotent via {@link #payout}. Returns the number of finishers actually credited.
+     */
+    @Transactional
+    public int payoutOnCompletion(UUID tournamentId, List<TournamentCompleted.FinishResult> finishers) {
+        Tournament tournament = tournamentRepository.findById(tournamentId).orElse(null);
+        if (tournament == null || !tournament.isRealMoney()) {
+            return 0;
+        }
+        int credited = 0;
+        for (TournamentCompleted.FinishResult finisher : finishers) {
+            BigDecimal prize = tournament.cryptoPrizeForPosition(finisher.position());
+            if (prize.signum() <= 0) {
+                continue;
+            }
+            try {
+                if (payout(finisher.playerId(), tournamentId, tournament.getCryptoBuyInAsset(), prize)) {
+                    credited++;
+                }
+                log.info("Auto-payout: tournament {} position {} → {} {} to {}", tournamentId,
+                        finisher.position(), prize, tournament.getCryptoBuyInAsset(), finisher.playerId());
+            } catch (RuntimeException e) {
+                log.warn("Auto-payout failed for tournament {} finisher {} (position {})", tournamentId,
+                        finisher.playerId(), finisher.position(), e);
+            }
+        }
+        return credited;
     }
 
     private static String buyInKey(UUID tournamentId, UUID userId) {

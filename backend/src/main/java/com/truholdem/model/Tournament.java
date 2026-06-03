@@ -1,5 +1,8 @@
 package com.truholdem.model;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -85,6 +88,15 @@ public class Tournament {
     private int maxRebuys = 0;
     private int addOnAmount = 0;
     private int bountyAmount = 0;
+
+    // Real-money entry: when both are set this is a crypto tournament (the play-money buyIn/chips above are
+    // still used for the game itself). Null → play-money only.
+    @Column(name = "crypto_buy_in_amount", precision = 38, scale = 18)
+    private BigDecimal cryptoBuyInAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "crypto_buy_in_asset", length = 32)
+    private CryptoAsset cryptoBuyInAsset;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
@@ -484,11 +496,51 @@ public class Tournament {
         if (position < 1 || position > payoutStructure.size()) {
             return 0;
         }
-        
+
         int prizePool = getPrizePool();
         int percentage = payoutStructure.get(position - 1);
-        
+
         return (prizePool * percentage) / 100;
+    }
+
+    /** True when this is a real-money (crypto) tournament. */
+    public boolean isRealMoney() {
+        return cryptoBuyInAmount != null && cryptoBuyInAmount.signum() > 0 && cryptoBuyInAsset != null;
+    }
+
+    /** Crypto prize pool = crypto buy-in × number of registered players (ZERO for play-money). */
+    public BigDecimal cryptoPrizePool() {
+        if (!isRealMoney()) {
+            return BigDecimal.ZERO;
+        }
+        return cryptoBuyInAmount.multiply(BigDecimal.valueOf(registrations.size()));
+    }
+
+    /** Crypto prize for a finishing position, by the payout structure (ZERO if play-money / out of money). */
+    public BigDecimal cryptoPrizeForPosition(int position) {
+        if (!isRealMoney() || position < 1 || position > payoutStructure.size()) {
+            return BigDecimal.ZERO;
+        }
+        int percentage = payoutStructure.get(position - 1);
+        return cryptoPrizePool()
+                .multiply(BigDecimal.valueOf(percentage))
+                .divide(BigDecimal.valueOf(100), 18, RoundingMode.DOWN);
+    }
+
+    public BigDecimal getCryptoBuyInAmount() {
+        return cryptoBuyInAmount;
+    }
+
+    public void setCryptoBuyInAmount(BigDecimal cryptoBuyInAmount) {
+        this.cryptoBuyInAmount = cryptoBuyInAmount;
+    }
+
+    public CryptoAsset getCryptoBuyInAsset() {
+        return cryptoBuyInAsset;
+    }
+
+    public void setCryptoBuyInAsset(CryptoAsset cryptoBuyInAsset) {
+        this.cryptoBuyInAsset = cryptoBuyInAsset;
     }
 
     
@@ -601,8 +653,8 @@ public class Tournament {
     protected void setMaxRebuys(int max) { this.maxRebuys = max; }
     protected void setAddOnAmount(int amount) { this.addOnAmount = amount; }
     protected void setBountyAmount(int amount) { this.bountyAmount = amount; }
-    protected void setPayoutStructure(List<Integer> structure) { 
-        this.payoutStructure = new ArrayList<>(structure); 
+    public void setPayoutStructure(List<Integer> structure) {
+        this.payoutStructure = new ArrayList<>(structure);
     }
     protected void setHandsPerRound(int handsPerRound) {
         this.handsPerRound = handsPerRound;

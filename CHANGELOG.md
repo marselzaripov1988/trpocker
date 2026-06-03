@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Auto-payout on tournament finish
+- When a **real-money** tournament completes, `TournamentPayoutListener` (`@EventListener` on the existing
+  synchronous `TournamentCompleted` domain event) credits every in-the-money finisher's crypto wallet with
+  their share of the prize pool. The listener stays thin (flag check + delegate); the work lives in
+  `TournamentWalletService.payoutOnCompletion`, which loads the tournament, computes each finisher's share
+  via `Tournament.cryptoPrizeForPosition(position)` (prize pool = crypto buy-in × registrations, split by the
+  tournament's payout-structure percentages), and credits each through the idempotent `payout`.
+- **Idempotent and best-effort**: a re-fired completion event does not double-credit (the per-(tournament,
+  user) key is stored in the unique `external_tx_id`), and a single finisher's failed credit is logged
+  without aborting the others. **No-op** for play-money tournaments and when `app.payments.enabled` is off.
+- Tournament gains `crypto_buy_in_amount numeric(38,18)` / `crypto_buy_in_asset varchar(32)` (Liquibase
+  changeset `03-tournament-crypto-buyin`, Postgres-only; H2 tests regenerate from the entity). Verified:
+  full suite green + a fresh-Postgres cluster boots with all four changesets applied and `ddl-auto=validate`
+  passing on both nodes.
+
 ### 💰 Wallet ↔ tournament buy-in/payout bridge
 - Real-money tournament entry: `TournamentWalletService.buyIn` debits the player's crypto `WalletAccount`
   and registers them **in one transaction** (if registration fails — full / already in / not open — the

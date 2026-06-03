@@ -8,18 +8,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.truholdem.dto.wallet.TournamentBuyInRequest;
 import com.truholdem.model.TournamentRegistration;
 import com.truholdem.model.User;
 import com.truholdem.service.wallet.TournamentWalletService;
 
-import jakarta.validation.Valid;
-
-/** Real-money tournament entry: debits the caller's crypto wallet and registers them. */
+/** Real-money tournament entry: debits the caller's crypto wallet (at the tournament's fee) and registers them. */
 @RestController
 @RequestMapping("/tournaments")
 public class TournamentWalletController {
@@ -33,11 +29,10 @@ public class TournamentWalletController {
     @PostMapping("/{tournamentId}/buy-in")
     public ResponseEntity<?> buyIn(
             @PathVariable UUID tournamentId,
-            @AuthenticationPrincipal UserDetails principal,
-            @Valid @RequestBody TournamentBuyInRequest request) {
+            @AuthenticationPrincipal UserDetails principal) {
         User user = (User) principal;
         TournamentRegistration registration = tournamentWalletService.buyIn(
-                user.getId(), tournamentId, user.getUsername(), request.asset(), request.amount());
+                user.getId(), tournamentId, user.getUsername());
         return ResponseEntity.status(HttpStatus.CREATED).body(java.util.Map.of(
                 "tournamentId", tournamentId,
                 "playerId", registration.getPlayerId(),
