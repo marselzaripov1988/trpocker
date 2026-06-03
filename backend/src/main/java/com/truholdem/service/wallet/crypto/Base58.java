@@ -1,6 +1,8 @@
 package com.truholdem.service.wallet.crypto;
 
 import java.math.BigInteger;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 /**
@@ -61,5 +63,45 @@ public final class Base58 {
         byte[] out = new byte[zeros + raw.length];
         System.arraycopy(raw, 0, out, zeros, raw.length);
         return out;
+    }
+
+    /** Base58Check: append the first 4 bytes of double-SHA-256 of the payload, then Base58-encode. Used by
+     *  both Bitcoin (version + HASH160) and TRON (0x41 + account hash). */
+    public static String encodeChecked(byte[] payload) {
+        byte[] checksum = Arrays.copyOf(doubleSha256(payload), 4);
+        byte[] full = new byte[payload.length + 4];
+        System.arraycopy(payload, 0, full, 0, payload.length);
+        System.arraycopy(checksum, 0, full, payload.length, 4);
+        return encode(full);
+    }
+
+    /** Decode a Base58Check string and verify its checksum; returns the payload (without the 4-byte
+     *  checksum) or {@code null} if the string is malformed or the checksum does not match. */
+    public static byte[] verifyChecked(String input) {
+        if (input == null || input.isEmpty()) {
+            return null;
+        }
+        byte[] decoded;
+        try {
+            decoded = decode(input);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        if (decoded.length < 5) {
+            return null;
+        }
+        byte[] payload = Arrays.copyOfRange(decoded, 0, decoded.length - 4);
+        byte[] checksum = Arrays.copyOfRange(decoded, decoded.length - 4, decoded.length);
+        byte[] expected = Arrays.copyOf(doubleSha256(payload), 4);
+        return Arrays.equals(checksum, expected) ? payload : null;
+    }
+
+    private static byte[] doubleSha256(byte[] input) {
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            return sha.digest(sha.digest(input));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 }

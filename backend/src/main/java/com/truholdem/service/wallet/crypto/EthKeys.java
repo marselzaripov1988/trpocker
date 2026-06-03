@@ -34,14 +34,20 @@ public final class EthKeys {
     private EthKeys() {
     }
 
-    /** The raw 20-byte account address (last 20 bytes of Keccak-256 of the uncompressed public key) for a
-     *  secp256k1 private key. Shared by Ethereum (→ EIP-55 hex) and TRON (→ 0x41 prefix + Base58Check). */
-    public static byte[] addressBytesFromPrivateKey(BigInteger priv) {
+    /** Uncompressed secp256k1 public key as 64 bytes (32-byte X || 32-byte Y, no 0x04 prefix). Shared by
+     *  Ethereum/TRON (→ Keccak-256 account hash) and Bitcoin (→ compressed key → HASH160). */
+    public static byte[] publicKeyBytes(BigInteger priv) {
         BigInteger[] pub = mul(priv, new BigInteger[] { GX, GY });
         byte[] xy = new byte[64];
         System.arraycopy(to32(pub[0]), 0, xy, 0, 32);
         System.arraycopy(to32(pub[1]), 0, xy, 32, 32);
-        byte[] hash = Keccak256.digest(xy);
+        return xy;
+    }
+
+    /** The raw 20-byte account address (last 20 bytes of Keccak-256 of the uncompressed public key) for a
+     *  secp256k1 private key. Shared by Ethereum (→ EIP-55 hex) and TRON (→ 0x41 prefix + Base58Check). */
+    public static byte[] addressBytesFromPrivateKey(BigInteger priv) {
+        byte[] hash = Keccak256.digest(publicKeyBytes(priv));
         byte[] addr = new byte[20];
         System.arraycopy(hash, 12, addr, 0, 20);
         return addr;

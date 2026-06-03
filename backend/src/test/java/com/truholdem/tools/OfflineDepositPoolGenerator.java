@@ -10,6 +10,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.service.wallet.crypto.BtcKeys;
 import com.truholdem.service.wallet.crypto.EthKeys;
 import com.truholdem.service.wallet.crypto.TronKeys;
 
@@ -26,11 +27,11 @@ import com.truholdem.service.wallet.crypto.TronKeys;
  * </ul>
  *
  * <p>Usage: {@code java -cp <classpath> com.truholdem.tools.OfflineDepositPoolGenerator
- * --count=1000 [--asset=ETH|USDT_ERC20|USDT_TRC20] [--seed-hex=<64hex>] [--out-dir=.]}
+ * --count=1000 [--asset=ETH|USDT_ERC20|USDT_TRC20|BTC] [--seed-hex=<64hex>] [--out-dir=.]}
  *
- * <p>Supports the Ethereum family (ETH + ERC-20 tokens share one address) and TRON (TRC-20, {@code T…}
- * Base58Check addresses). The TRON key set is derived under a separate label, so it does not reuse the
- * Ethereum keys.
+ * <p>Supports the Ethereum family (ETH + ERC-20 tokens share one address), TRON (TRC-20, {@code T…}
+ * Base58Check) and Bitcoin (legacy P2PKH {@code 1…}). Each chain derives under a separate label, so the key
+ * sets never overlap.
  */
 public final class OfflineDepositPoolGenerator {
 
@@ -57,19 +58,28 @@ public final class OfflineDepositPoolGenerator {
      *  Ethereum family (ETH, ERC-20 tokens — shared address) and TRON (TRC-20). A per-chain derivation label
      *  keeps the ETH and TRON key sets independent (no key reuse across chains). */
     public static Batch generate(byte[] seed, CryptoAsset asset, int count) {
-        boolean eth = "ETH".equals(asset.getNetwork()) || "ERC20".equals(asset.getNetwork());
-        boolean tron = "TRC20".equals(asset.getNetwork());
-        if (!eth && !tron) {
+        String network = asset.getNetwork();
+        boolean eth = "ETH".equals(network) || "ERC20".equals(network);
+        boolean tron = "TRC20".equals(network);
+        boolean btc = "BTC".equals(network);
+        if (!eth && !tron && !btc) {
             throw new IllegalArgumentException("Unsupported network for this generator: " + asset);
         }
         if (count <= 0) {
             throw new IllegalArgumentException("count must be positive");
         }
-        String label = eth ? "eth/" : "tron/";
+        String label = eth ? "eth/" : tron ? "tron/" : "btc/";
         List<Keypair> keys = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             BigInteger priv = EthKeys.derivePrivateKey(seed, label + i);
-            String address = eth ? EthKeys.addressFromPrivateKey(priv) : TronKeys.addressFromPrivateKey(priv);
+            String address;
+            if (eth) {
+                address = EthKeys.addressFromPrivateKey(priv);
+            } else if (tron) {
+                address = TronKeys.addressFromPrivateKey(priv);
+            } else {
+                address = BtcKeys.p2pkhAddress(priv);
+            }
             keys.add(new Keypair(i, priv.toString(16), address));
         }
         return new Batch(HexFormat.of().formatHex(seed), asset, keys);

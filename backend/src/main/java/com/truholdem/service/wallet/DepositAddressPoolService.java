@@ -19,6 +19,7 @@ import com.truholdem.model.DepositAddressPoolEntry;
 import com.truholdem.model.DepositAddressStatus;
 import com.truholdem.repository.DepositAddressPoolRepository;
 import com.truholdem.service.wallet.WalletExceptions.DepositAddressPoolExhaustedException;
+import com.truholdem.service.wallet.crypto.BtcKeys;
 import com.truholdem.service.wallet.crypto.EthKeys;
 import com.truholdem.service.wallet.crypto.TronKeys;
 
@@ -76,6 +77,10 @@ public class DepositAddressPoolService {
                 throw new IllegalArgumentException(
                         "Invalid TRON (Base58Check) address for " + e.asset() + ": " + address);
             }
+            if (isBitcoinAddress(e.asset()) && !BtcKeys.isValidP2pkhAddress(address)) {
+                throw new IllegalArgumentException(
+                        "Invalid Bitcoin P2PKH address for " + e.asset() + ": " + address);
+            }
             if (repository.existsByAssetAndAddress(e.asset(), address)) {
                 skipped++;
                 continue;
@@ -109,5 +114,10 @@ public class DepositAddressPoolService {
     /** TRC-20 tokens use a TRON Base58Check address → validate prefix + checksum. */
     private static boolean isTronAddress(CryptoAsset asset) {
         return "TRC20".equals(asset.getNetwork());
+    }
+
+    /** Bitcoin uses a legacy P2PKH Base58Check address → validate version + checksum. */
+    private static boolean isBitcoinAddress(CryptoAsset asset) {
+        return "BTC".equals(asset.getNetwork());
     }
 }

@@ -146,6 +146,26 @@ class DepositAddressPoolServiceIT {
     }
 
     @Test
+    @DisplayName("BTC (P2PKH) addresses import and allocate")
+    void btcImportAndAllocate() {
+        pool.importBatch(entries(CryptoAsset.BTC, 2));
+
+        String address = pool.allocate(UUID.randomUUID(), CryptoAsset.BTC);
+
+        assertThat(address).startsWith("1");
+        assertThat(repository.countByAssetAndStatus(CryptoAsset.BTC,
+                com.truholdem.model.DepositAddressStatus.FREE)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a malformed Bitcoin address is rejected on import")
+    void importRejectsBadBtcAddress() {
+        assertThatThrownBy(() -> pool.importBatch(
+                List.of(new PoolEntryDto(CryptoAsset.BTC, 0, "1NotARealBitcoinAddress0000000000"))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("status reports free/assigned counts per asset")
     void statusCounts() {
         pool.importBatch(entries(CryptoAsset.ETH, 3));

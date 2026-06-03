@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.service.wallet.crypto.BtcKeys;
 import com.truholdem.service.wallet.crypto.EthKeys;
 import com.truholdem.service.wallet.crypto.TronKeys;
 import com.truholdem.tools.OfflineDepositPoolGenerator.Batch;
@@ -76,5 +77,24 @@ class OfflineDepositPoolGeneratorTest {
         String tron = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.USDT_TRC20, 1)
                 .keys().get(0).privateKeyHex();
         assertThat(tron).isNotEqualTo(eth);
+    }
+
+    @Test
+    @DisplayName("BTC produces valid, deterministic, distinct P2PKH addresses with independent keys")
+    void btcBatch() {
+        Batch a = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.BTC, 5);
+        Batch b = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.BTC, 5);
+
+        assertThat(a.keys()).allSatisfy(k -> {
+            assertThat(k.address()).startsWith("1");
+            assertThat(BtcKeys.isValidP2pkhAddress(k.address())).as("valid: %s", k.address()).isTrue();
+        });
+        assertThat(a.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).distinct().count())
+                .isEqualTo(5);
+        assertThat(a.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).toList())
+                .isEqualTo(b.keys().stream().map(OfflineDepositPoolGenerator.Keypair::address).toList());
+        String btcKey = a.keys().get(0).privateKeyHex();
+        String ethKey = OfflineDepositPoolGenerator.generate(SEED, CryptoAsset.ETH, 1).keys().get(0).privateKeyHex();
+        assertThat(btcKey).as("BTC keys independent of ETH").isNotEqualTo(ethKey);
     }
 }

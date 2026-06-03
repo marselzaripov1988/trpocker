@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 BTC (legacy P2PKH) addresses for the offline pool
+- The offline generator + pool now support **Bitcoin** (legacy P2PKH `1…` addresses). A BTC address uses the
+  compressed secp256k1 public key (reusing `EthKeys.publicKeyBytes`), `HASH160 = RIPEMD160(SHA-256(pubkey))`,
+  and Base58Check with the `0x00` version byte. Two new pure-Java primitives — `Ripemd160` (the JDK has no
+  provider) and `BtcKeys` — plus shared `Base58.encodeChecked`/`verifyChecked` (now reused by `TronKeys`). No
+  new dependency; SegWit/bech32 + Taproot are documented follow-ups (P2PKH is universally accepted).
+- `OfflineDepositPoolGenerator` emits BTC addresses (`--asset=BTC`) under a separate derivation label, so the
+  BTC key set never overlaps the ETH/TRON ones; import validation checks P2PKH version + Base58Check. No
+  schema change — `BTC` was already a known asset.
+- Verified: `Ripemd160` against canonical vectors; `BtcKeys` against an independent implementation (privkey 1
+  → `1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH`) and the real Bitcoin genesis address; full suite green (1014).
+
 ### 💰 USDT-TRC20 (TRON) addresses for the offline pool
 - The offline generator + pool now support **TRON (TRC-20)** alongside the Ethereum family — TRC-20 is the
   most common crypto deposit method on poker/casino sites. A TRON account reuses the same secp256k1 + Keccak-256

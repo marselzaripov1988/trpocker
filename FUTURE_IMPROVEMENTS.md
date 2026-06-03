@@ -76,8 +76,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. Pair with a
     small hot float + per-withdrawal limits + the moderator manual-approval gate.
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
-    Still to add: `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables
-    (mirrors `02-wallet-tournament-ledger-types`); and BTC/LTC generators (their own base58/bech32 schemes).
+  - **BTC generator** — ✅ landed (`Ripemd160` + `BtcKeys`, legacy P2PKH `1…`). Still to add: SegWit/bech32
+    (`bc1…`, BIP-173) + Taproot for lower fees; an LTC generator (its own version bytes / bech32 hrp); and
+    `USDC_ERC20` (one enum value) + a CHECK-widening changeset on the existing wallet tables (mirrors
+    `02-wallet-tournament-ledger-types`).
   - **Pool low-watermark automation**: alert/auto-page when free addresses for an asset drop below a
     threshold (the `status` endpoint already exposes counts); a watch-only node/indexer to detect deposits to
     pooled addresses (→ the `/internal/wallet/deposit` webhook).
