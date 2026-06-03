@@ -16,5 +16,6 @@
     <include file="db/changelog/04-deposit-address-pool.xml"/>
     <include file="db/changelog/05-kyc-documents.xml"/>
     <include file="db/changelog/06-kyc-document-encryption.xml"/>
+    <include file="db/changelog/07-withdrawal-approval.xml"/>
 
 </databaseChangeLog>

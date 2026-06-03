@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💸 Manual withdrawal approval (moderator gate)
+- Flag-gated `app.payments.withdrawal-approval-required` (default **off** — immediate-broadcast behaviour is
+  unchanged). When **on**, `requestWithdrawal` debits the balance and parks the request in
+  **`PENDING_APPROVAL`** instead of broadcasting; a moderator then decides.
+- `WalletService.approveWithdrawal(id, moderatorId)` → broadcasts via the provider (`BROADCAST`); for a
+  provider that can't broadcast in-process (offline-pool) it stays `APPROVED`, awaiting the offline signer
+  (PSBT handoff). `rejectWithdrawal(id, moderatorId, reason)` → `REJECTED` and reverses the debit
+  (`WITHDRAWAL_REVERSAL`). Both act only on a `PENDING_APPROVAL` request (else 409); concurrent actions are
+  guarded by the row's `@Version`.
+- New `WithdrawalStatus` values `PENDING_APPROVAL`/`REJECTED` + audit columns `reviewed_by`, `reviewed_at`,
+  `rejection_reason` (Liquibase changeset `07-withdrawal-approval`: widens the status CHECK + adds columns,
+  Postgres-only; H2 regenerates from the entity). Admin API: `GET /v1/admin/wallet/withdrawals` (pending list),
+  `POST .../{id}/approve`, `POST .../{id}/reject` (ADMIN; moderator id from the authenticated principal).
+- Verified: request→PENDING_APPROVAL (debited), approve→BROADCAST, reject→REJECTED+reversal, action on a
+  non-pending request rejected; full suite green (1023) + a fresh-Postgres cluster boots with all **eight**
+  changesets applied and `ddl-auto=validate` passing on both nodes. The PSBT/offline-signer broadcast for the
+  pool is the documented next layer.
+
 ### 🪪 KYC UI — player upload page + moderator review (Angular)
 - **Player page** (`/kyc`): shows current KYC status and lets the user upload a verification video
   (`KycService` → multipart `POST /v1/wallet/kyc/document`).

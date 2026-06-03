@@ -78,8 +78,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
 - **Offline deposit-address pool** — ✅ landed (`offline-pool` provider, admin import + status, offline
   `OfflineDepositPoolGenerator`). Remaining to make it production-real:
   - **Withdrawal / sweep** (the deliberately-unwired half): spend pooled funds via an **offline signer**
-    (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. Pair with a
-    small hot float + per-withdrawal limits + the moderator manual-approval gate.
+    (air-gapped PSBT workflow or HSM hot float) — the online server only holds public addresses. The
+    **moderator manual-approval gate landed** (`app.payments.withdrawal-approval-required`:
+    PENDING_APPROVAL → approve/reject + reversal); the remaining piece is the actual PSBT handoff — for an
+    approved offline-pool withdrawal, export the unsigned tx → sign offline → import + `markBroadcast(txid)`.
+    Pair with a small hot float + per-withdrawal limits + optional 2-of-N moderator (4-eyes).
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
   - **BTC generator** — ✅ landed for all three mainstream formats: legacy P2PKH `1…`, native SegWit bech32
     `bc1q…` (`Bech32`/BIP-173), and Taproot `bc1p…` (`TaprootKeys`/BIP-341 + bech32m/BIP-350). Still to add:

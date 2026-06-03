@@ -5,8 +5,12 @@ package com.truholdem.model;
  * it then moves through broadcasting to on-chain confirmation (or failure → reversal).
  */
 public enum WithdrawalStatus {
+    /** Debited and awaiting manual moderator approval (only when withdrawal-approval-required is on). */
+    PENDING_APPROVAL,
     APPROVED,
     BROADCAST,
     CONFIRMED,
-    FAILED
+    FAILED,
+    /** Moderator rejected the request; the debit was reversed. */
+    REJECTED
 }

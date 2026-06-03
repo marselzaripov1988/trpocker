@@ -8,6 +8,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,12 +19,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.api.ApiV1Config;
+import com.truholdem.dto.wallet.AdminWithdrawalDto;
 import com.truholdem.dto.wallet.KycDecisionRequest;
 import com.truholdem.dto.wallet.KycPendingDto;
 import com.truholdem.dto.wallet.KycStatusResponse;
 import com.truholdem.dto.wallet.PoolImportRequest;
 import com.truholdem.dto.wallet.PoolImportResponse;
 import com.truholdem.dto.wallet.PoolStatusResponse;
+import com.truholdem.dto.wallet.RejectWithdrawalRequest;
+import com.truholdem.model.User;
 import com.truholdem.service.wallet.DepositAddressPoolService;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
@@ -97,6 +102,30 @@ public class AdminWalletController {
     @Operation(summary = "GDPR erasure: delete all of a user's KYC verification media")
     public ResponseEntity<Map<String, Integer>> eraseKyc(@PathVariable UUID userId) {
         return ResponseEntity.ok(Map.of("erased", kycVerificationService.eraseForUser(userId)));
+    }
+
+    @GetMapping("/withdrawals")
+    @Operation(summary = "List withdrawals awaiting moderator approval")
+    public ResponseEntity<List<AdminWithdrawalDto>> pendingWithdrawals() {
+        return ResponseEntity.ok(walletService.pendingApprovals().stream().map(AdminWithdrawalDto::from).toList());
+    }
+
+    @PostMapping("/withdrawals/{id}/approve")
+    @Operation(summary = "Approve a pending withdrawal (→ broadcast / offline-signer handoff)")
+    public ResponseEntity<AdminWithdrawalDto> approveWithdrawal(@PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails principal) {
+        return ResponseEntity.ok(AdminWithdrawalDto.from(
+                walletService.approveWithdrawal(id, ((User) principal).getId())));
+    }
+
+    @PostMapping("/withdrawals/{id}/reject")
+    @Operation(summary = "Reject a pending withdrawal (→ reverse the debit)")
+    public ResponseEntity<AdminWithdrawalDto> rejectWithdrawal(@PathVariable UUID id,
+            @RequestBody(required = false) RejectWithdrawalRequest body,
+            @AuthenticationPrincipal UserDetails principal) {
+        String reason = body != null ? body.reason() : null;
+        return ResponseEntity.ok(AdminWithdrawalDto.from(
+                walletService.rejectWithdrawal(id, ((User) principal).getId(), reason)));
     }
 
     private static MediaType parseType(String contentType) {

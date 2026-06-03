@@ -7,9 +7,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.truholdem.model.WithdrawalRequest;
+import com.truholdem.model.WithdrawalStatus;
 
 @Repository
 public interface WithdrawalRequestRepository extends JpaRepository<WithdrawalRequest, UUID> {
 
     List<WithdrawalRequest> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    List<WithdrawalRequest> findByStatusOrderByCreatedAtAsc(WithdrawalStatus status);
 }

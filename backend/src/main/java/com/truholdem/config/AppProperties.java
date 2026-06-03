@@ -85,6 +85,11 @@ public class AppProperties {
         /** Whether a withdrawal requires the user's KYC to be VERIFIED. */
         private boolean kycRequiredForWithdrawal = true;
 
+        /** Whether a withdrawal must be manually approved by a moderator before it is broadcast. When on,
+         *  a request is debited and parked in PENDING_APPROVAL until an admin approves (→ broadcast) or
+         *  rejects (→ reversal). Off (default) keeps the immediate-broadcast behaviour. */
+        private boolean withdrawalApprovalRequired = false;
+
         /** Shared secret authenticating provider webhooks (deposit-confirmed, kyc-callback). */
         private String webhookSecret = "";
 
@@ -138,6 +143,14 @@ public class AppProperties {
 
         public void setKycRequiredForWithdrawal(boolean kycRequiredForWithdrawal) {
             this.kycRequiredForWithdrawal = kycRequiredForWithdrawal;
+        }
+
+        public boolean isWithdrawalApprovalRequired() {
+            return withdrawalApprovalRequired;
+        }
+
+        public void setWithdrawalApprovalRequired(boolean withdrawalApprovalRequired) {
+            this.withdrawalApprovalRequired = withdrawalApprovalRequired;
         }
 
         public String getWebhookSecret() {

@@ -51,6 +51,16 @@ public class WithdrawalRequest {
     @Column(name = "tx_id", length = 128)
     private String txId;
 
+    /** Moderator who approved/rejected the request (manual-approval flow); null until reviewed. */
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
+    @Column(name = "rejection_reason", length = 512)
+    private String rejectionReason;
+
     @Version
     private Long version;
 
@@ -64,11 +74,16 @@ public class WithdrawalRequest {
     }
 
     public WithdrawalRequest(UUID userId, CryptoAsset asset, String toAddress, BigDecimal amount) {
+        this(userId, asset, toAddress, amount, WithdrawalStatus.APPROVED);
+    }
+
+    public WithdrawalRequest(UUID userId, CryptoAsset asset, String toAddress, BigDecimal amount,
+            WithdrawalStatus status) {
         this.userId = userId;
         this.asset = asset;
         this.toAddress = toAddress;
         this.amount = amount;
-        this.status = WithdrawalStatus.APPROVED;
+        this.status = status;
     }
 
     @PrePersist
@@ -90,6 +105,21 @@ public class WithdrawalRequest {
 
     public void markConfirmed() {
         this.status = WithdrawalStatus.CONFIRMED;
+    }
+
+    /** Moderator approves a PENDING_APPROVAL request → APPROVED (ready to broadcast). */
+    public void approve(UUID moderatorId) {
+        this.reviewedBy = moderatorId;
+        this.reviewedAt = Instant.now();
+        this.status = WithdrawalStatus.APPROVED;
+    }
+
+    /** Moderator rejects a PENDING_APPROVAL request → REJECTED (the debit is reversed by the service). */
+    public void reject(UUID moderatorId, String reason) {
+        this.reviewedBy = moderatorId;
+        this.reviewedAt = Instant.now();
+        this.rejectionReason = reason;
+        this.status = WithdrawalStatus.REJECTED;
     }
 
     public void markFailed() {
@@ -122,5 +152,21 @@ public class WithdrawalRequest {
 
     public String getTxId() {
         return txId;
+    }
+
+    public UUID getReviewedBy() {
+        return reviewedBy;
+    }
+
+    public Instant getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
     }
 }

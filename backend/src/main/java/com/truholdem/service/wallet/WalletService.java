@@ -165,10 +165,19 @@ public class WalletService {
         account.debit(amount);
         accountRepository.save(account);
 
+        boolean approvalRequired = appProperties.getPayments().isWithdrawalApprovalRequired();
+        WithdrawalStatus initialStatus = approvalRequired
+                ? WithdrawalStatus.PENDING_APPROVAL : WithdrawalStatus.APPROVED;
         WithdrawalRequest request = withdrawalRepository.save(
-                new WithdrawalRequest(userId, asset, toAddress, amount));
+                new WithdrawalRequest(userId, asset, toAddress, amount, initialStatus));
         ledgerRepository.save(WalletLedgerEntry.withdrawal(userId, asset, amount, account.getBalance(),
                 request.getId()));
+
+        if (approvalRequired) {
+            log.info("Withdrawal {} {} for user {} → {} awaiting moderator approval",
+                    amount, asset, userId, toAddress);
+            return request;
+        }
 
         String txId = paymentProvider.broadcastWithdrawal(userId, asset, toAddress, amount);
         request.markBroadcast(txId);
@@ -176,6 +185,61 @@ public class WalletService {
 
         log.info("Withdrawal {} {} for user {} → {} broadcast (tx {})", amount, asset, userId, toAddress, txId);
         return request;
+    }
+
+    @Transactional(readOnly = true)
+    public List<WithdrawalRequest> pendingApprovals() {
+        return withdrawalRepository.findByStatusOrderByCreatedAtAsc(WithdrawalStatus.PENDING_APPROVAL);
+    }
+
+    /**
+     * Moderator approves a pending withdrawal → broadcast via the provider (BROADCAST). For a provider that
+     * cannot broadcast in-process (e.g. offline-pool), it stays APPROVED, awaiting the offline signer. Only a
+     * PENDING_APPROVAL request can be approved (else {@link IllegalStateException}).
+     */
+    @Transactional
+    public WithdrawalRequest approveWithdrawal(UUID withdrawalId, UUID moderatorId) {
+        requireEnabled();
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() != WithdrawalStatus.PENDING_APPROVAL) {
+            throw new IllegalStateException("Withdrawal " + withdrawalId + " is not pending approval");
+        }
+        request.approve(moderatorId);
+        try {
+            String txId = paymentProvider.broadcastWithdrawal(
+                    request.getUserId(), request.getAsset(), request.getToAddress(), request.getAmount());
+            request.markBroadcast(txId);
+            log.info("Withdrawal {} approved by {} and broadcast (tx {})", withdrawalId, moderatorId, txId);
+        } catch (UnsupportedOperationException e) {
+            // Provider broadcasts out-of-band (offline signer / PSBT handoff) — keep APPROVED.
+            log.info("Withdrawal {} approved by {} — awaiting offline broadcast", withdrawalId, moderatorId);
+        }
+        return withdrawalRepository.save(request);
+    }
+
+    /**
+     * Moderator rejects a pending withdrawal → REJECTED and credits the debited amount back (a
+     * {@code WITHDRAWAL_REVERSAL} ledger entry). Only a PENDING_APPROVAL request can be rejected.
+     */
+    @Transactional
+    public WithdrawalRequest rejectWithdrawal(UUID withdrawalId, UUID moderatorId, String reason) {
+        requireEnabled();
+        WithdrawalRequest request = withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+        if (request.getStatus() != WithdrawalStatus.PENDING_APPROVAL) {
+            throw new IllegalStateException("Withdrawal " + withdrawalId + " is not pending approval");
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(request.getUserId(), request.getAsset())
+                .orElseGet(() -> accountRepository.save(new WalletAccount(request.getUserId(), request.getAsset())));
+        account.credit(request.getAmount());
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.withdrawalReversal(request.getUserId(), request.getAsset(),
+                request.getAmount(), account.getBalance(), request.getId()));
+        request.reject(moderatorId, reason);
+        log.info("Withdrawal {} rejected by {} — reversed {} {} to user {}",
+                withdrawalId, moderatorId, request.getAmount(), request.getAsset(), request.getUserId());
+        return withdrawalRepository.save(request);
     }
 
     @Transactional(readOnly = true)
