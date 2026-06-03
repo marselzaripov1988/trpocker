@@ -6,6 +6,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -81,6 +84,12 @@ public class AdminWalletController {
             @Valid @RequestBody KycDecisionRequest request) {
         walletService.recordKycDecision(userId, request.status(), "manual", request.note());
         return ResponseEntity.ok(new KycStatusResponse(request.status()));
+    }
+
+    @DeleteMapping("/kyc/{userId}/documents")
+    @Operation(summary = "GDPR erasure: delete all of a user's KYC verification media")
+    public ResponseEntity<Map<String, Integer>> eraseKyc(@PathVariable UUID userId) {
+        return ResponseEntity.ok(Map.of("erased", kycVerificationService.eraseForUser(userId)));
     }
 
     private static MediaType parseType(String contentType) {

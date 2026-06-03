@@ -15,5 +15,6 @@
     <include file="db/changelog/03-tournament-crypto-buyin.xml"/>
     <include file="db/changelog/04-deposit-address-pool.xml"/>
     <include file="db/changelog/05-kyc-documents.xml"/>
+    <include file="db/changelog/06-kyc-document-encryption.xml"/>
 
 </databaseChangeLog>

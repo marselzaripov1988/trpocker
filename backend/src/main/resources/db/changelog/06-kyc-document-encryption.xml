@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Flag whether a KYC document's on-disk bytes are AES-GCM encrypted (encryption-at-rest). Postgres-only
+      (H2 tests regenerate from the entity); idempotent via columnExists.
+    -->
+    <changeSet id="kyc-002-encrypted-flag" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="kyc_documents" columnName="encrypted"/></not>
+        </preConditions>
+        <addColumn tableName="kyc_documents">
+            <column name="encrypted" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

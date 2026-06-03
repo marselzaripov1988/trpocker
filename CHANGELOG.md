@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔒 KYC media: encryption at rest + GDPR retention/erasure
+- **Encryption at rest**: KYC verification videos are encrypted with **AES-256-GCM** (new pure-JDK `KycCrypto`,
+  `[12-byte IV][ciphertext+tag]` on disk) when `app.payments.kyc-encryption-key` (base64 AES key) is set; the
+  key is never stored with the data, GCM detects tampering, and reads transparently decrypt for ADMIN review.
+  A per-document `encrypted` flag (changeset `06-kyc-document-encryption`) lets the system read both plaintext
+  and encrypted files (graceful key-rollout). The sha-256 is over the plaintext either way.
+- **GDPR retention**: `KycRetentionScheduler` periodically deletes KYC media (file + metadata) older than
+  `app.payments.kyc-retention-days` (default 30; 0 = never). Idempotent (`deleteIfExists`), so it is safe on
+  every cluster node.
+- **GDPR right-to-erasure**: `DELETE /v1/admin/wallet/kyc/{userId}/documents` removes all of a user's KYC
+  media on demand.
+- Verified: encryption round-trip (on-disk bytes ≠ plaintext, length = plaintext + 28; decrypts back),
+  retention purge and erasure delete file + row; full suite green (1023) + a fresh-Postgres cluster boots with
+  all **seven** changesets applied and `ddl-auto=validate` passing on both nodes.
+
 ### 🪪 KYC verification video upload (user + passport)
 - Users can upload a **KYC verification video** (e.g. holding their passport) at
   `POST /v1/wallet/kyc/document` (multipart); uploading moves their KYC to `PENDING`. New

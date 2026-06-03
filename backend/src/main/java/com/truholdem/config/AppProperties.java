@@ -118,6 +118,12 @@ public class AppProperties {
         /** Max size (bytes) of a KYC verification upload. Default 50 MB. */
         private long kycMaxUploadBytes = 52_428_800L;
 
+        /** Base64 AES key (16/24/32 bytes) encrypting KYC videos at rest. Empty = store plaintext. */
+        private String kycEncryptionKey = "";
+
+        /** GDPR retention: delete KYC verification media older than this many days. 0 = never auto-delete. */
+        private int kycRetentionDays = 30;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -204,6 +210,22 @@ public class AppProperties {
 
         public void setKycMaxUploadBytes(long kycMaxUploadBytes) {
             this.kycMaxUploadBytes = kycMaxUploadBytes;
+        }
+
+        public String getKycEncryptionKey() {
+            return kycEncryptionKey;
+        }
+
+        public void setKycEncryptionKey(String kycEncryptionKey) {
+            this.kycEncryptionKey = kycEncryptionKey;
+        }
+
+        public int getKycRetentionDays() {
+            return kycRetentionDays;
+        }
+
+        public void setKycRetentionDays(int kycRetentionDays) {
+            this.kycRetentionDays = kycRetentionDays;
         }
     }
 
