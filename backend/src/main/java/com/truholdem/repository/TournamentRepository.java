@@ -20,6 +20,10 @@ public interface TournamentRepository extends JpaRepository<Tournament, UUID> {
     List<Tournament> findByStatus(TournamentStatus status);
 
     List<Tournament> findByStatusIn(List<TournamentStatus> statuses);
+
+    /** Tournaments due for scheduled auto-start: still in {@code status} with a scheduled time at/ before now.
+     *  (A null {@code scheduledStart} never matches the inequality, so manual-start tournaments are excluded.) */
+    List<Tournament> findByStatusAndScheduledStartLessThanEqual(TournamentStatus status, Instant cutoff);
     
     List<Tournament> findByTournamentType(TournamentType type);
 

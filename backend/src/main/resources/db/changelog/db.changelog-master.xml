@@ -20,5 +20,6 @@
     <include file="db/changelog/08-kyc-key-id.xml"/>
     <include file="db/changelog/09-kyc-key-id-widen.xml"/>
     <include file="db/changelog/10-cash-tables.xml"/>
+    <include file="db/changelog/11-tournament-scheduled-start.xml"/>
 
 </databaseChangeLog>

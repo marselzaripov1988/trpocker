@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.ScheduleTournamentRequest;
 import com.truholdem.dto.TournamentDetailResponse;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
@@ -70,6 +71,15 @@ public class AdminTournamentController {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(detail);
         }
         return ResponseEntity.ok(detail);
+    }
+
+    @PostMapping("/{id}/schedule")
+    @Operation(summary = "Schedule a tournament's automatic start time (must still be REGISTERING)")
+    public ResponseEntity<TournamentDetailResponse> scheduleStart(@PathVariable UUID id,
+            @Valid @RequestBody ScheduleTournamentRequest body) {
+        log.info("Admin scheduling tournament {} to auto-start at {}", id, body.startAt());
+        tournamentService.scheduleStart(id, body.startAt());
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
     @PostMapping("/{id}/pause")

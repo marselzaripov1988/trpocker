@@ -208,6 +208,33 @@ public class TournamentService {
         tournamentRepository.save(tournament);
     }
 
+    /** Set (or clear, with {@code null}) a tournament's scheduled auto-start time. REGISTERING only. */
+    public Tournament scheduleStart(UUID tournamentId, java.time.Instant when) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        tournament.scheduleStartAt(when);
+        log.info("Tournament {} scheduled to auto-start at {}", tournamentId, when);
+        return tournamentRepository.save(tournament);
+    }
+
+    /** IDs of tournaments due for scheduled auto-start (still REGISTERING, scheduled time reached). */
+    @Transactional(readOnly = true)
+    public List<UUID> dueForScheduledStart(java.time.Instant now) {
+        return tournamentRepository
+                .findByStatusAndScheduledStartLessThanEqual(TournamentStatus.REGISTERING, now)
+                .stream().map(Tournament::getId).toList();
+    }
+
+    /** Registered count for a tournament (used by the scheduled-start poller to enforce minPlayers). */
+    @Transactional(readOnly = true)
+    public int registeredCount(UUID tournamentId) {
+        return registrationRepository.countByTournamentId(tournamentId);
+    }
+
+    @Transactional(readOnly = true)
+    public int minPlayers(UUID tournamentId) {
+        return findTournamentOrThrow(tournamentId).getMinPlayers();
+    }
+
     
     
     

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⏰ Scheduled tournament auto-start
+- Tournaments can now start at a **scheduled time**, not just manually or (for Sit & Go) on a full table.
+  `Tournament.scheduledStart` (changeset 11, nullable) + `POST /v1/admin/tournaments/{id}/schedule {startAt}`
+  set the time while a tournament is REGISTERING. `TournamentScheduledStartService` polls (flag-gated
+  `app.tournament.scheduled-start-enabled`, default off) and auto-starts due tournaments **once minPlayers is
+  met**; under-filled ones are left REGISTERING and logged (auto-cancel + buy-in refund is a separate
+  follow-up). Cluster-safe to run on every node — `startTournament` guards on status + the entity's
+  optimistic-lock version, so a concurrent double-start has one winner and the loser's tx rolls back.
+- Verified: a unit test (dispatch + min-players gate + fault isolation + disabled-is-inert), an H2 IT (the
+  due-query returns only REGISTERING tournaments past their time; future/manual excluded; column round-trips),
+  and changeset 11 on a fresh Postgres (12 changesets, `ddl-auto=validate` passes). Full suite green (1068).
+
 ### 🎲 Cash games (ring tables) — slice 1: table config model
 - First slice of the cash-game epic (real-money ring tables, distinct from tournaments). `CashTable` persists a
   ring-table definition — stakes (SB/BB), buy-in bounds, seat count, settlement asset and rake (basis points +

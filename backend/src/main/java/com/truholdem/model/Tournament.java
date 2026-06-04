@@ -116,6 +116,10 @@ public class Tournament {
     private Instant startTime;
     private Instant endTime;
 
+    /** Optional scheduled auto-start time; when set, the scheduled-start poller starts the tournament once
+     *  this time has passed (if {@code minPlayers} is met). Null = manual start only. */
+    private Instant scheduledStart;
+
     /** Pyramid format: current survival round (1-based). */
     @Column(name = "pyramid_round", nullable = false)
     private int pyramidRound = 1;
@@ -226,6 +230,18 @@ public class Tournament {
         }
         this.status = TournamentStatus.CANCELLED;
         this.endTime = Instant.now();
+    }
+
+    /** Schedule an automatic start; only meaningful while still REGISTERING. */
+    public void scheduleStartAt(Instant when) {
+        if (status != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException("Can only schedule a tournament that is still REGISTERING");
+        }
+        this.scheduledStart = when;
+    }
+
+    public Instant getScheduledStart() {
+        return scheduledStart;
     }
 
     public void start() {

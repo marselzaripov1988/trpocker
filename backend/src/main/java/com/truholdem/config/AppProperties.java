@@ -1133,6 +1133,18 @@ public class AppProperties {
         @Min(1)
         private int pyramidTableParallelism = 8;
 
+        /** Periodically auto-start tournaments whose {@code scheduledStart} has passed (if minPlayers met).
+         *  Cluster-safe via the tournament's status guard + optimistic lock. Off by default. */
+        private boolean scheduledStartEnabled = false;
+
+        public boolean isScheduledStartEnabled() {
+            return scheduledStartEnabled;
+        }
+
+        public void setScheduledStartEnabled(boolean scheduledStartEnabled) {
+            this.scheduledStartEnabled = scheduledStartEnabled;
+        }
+
         public int getMaxPlayersLimit() {
             return maxPlayersLimit;
         }
