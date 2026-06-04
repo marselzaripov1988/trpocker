@@ -50,7 +50,8 @@ Backend is fully wired; frontend was admin-only. User wallet dashboard now start
 - [x] Deposit address as a **QR code** (`qrcode` lib → data-URL `<img>` on `/wallet`).
 - [ ] KYC as a guided flow on `/wallet` (status → upload → pending → verified), not just the standalone page.
 - [ ] Admin: **status filter** dropdown on `/admin/withdrawals` (backend already accepts `?status=`).
-- [ ] Admin: **chain-specific signing workflow** UI (eth-/btc-unsigned → broadcast → reconcile/confirmation).
+- [x] Admin: **chain-specific signing workflow** UI on `/admin/withdrawals` — Assemble ETH/BTC (coordinator)
+      → paste signed raw → Broadcast signed → Reconcile / Status, dispatched by asset network.
 - [ ] Admin: **deposit-pool dashboard** (`GET /deposit-pool/status`) + batch import UI.
 - [ ] Admin: **KYC re-encrypt** button (`POST /kyc/re-encrypt`).
 - [ ] UX polish: withdrawal status polling, asset selector niceties, toasts, upload progress.

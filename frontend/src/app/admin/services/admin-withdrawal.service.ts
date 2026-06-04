@@ -2,7 +2,10 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AdminWithdrawal, WithdrawalSigningRequest } from '../models/withdrawal.models';
+import {
+  AdminWithdrawal, WithdrawalSigningRequest,
+  EthUnsignedTx, BtcUnsignedTx, EthConfirmation, BtcConfirmation
+} from '../models/withdrawal.models';
 
 /** Admin withdrawal moderation: list pending, approve/reject, and the offline-signer (PSBT) handoff. */
 @Injectable({ providedIn: 'root' })
@@ -30,5 +33,33 @@ export class AdminWithdrawalService {
   /** Record the tx id after the offline signer broadcast the transaction. */
   recordBroadcast(id: string, txId: string): Observable<AdminWithdrawal> {
     return this.http.post<AdminWithdrawal>(`${this.url}/${id}/broadcast`, { txId });
+  }
+
+  // ---- ETH/ERC-20 coordinator (assemble from the node → broadcast signed → reconcile) -------------
+  ethUnsigned(id: string): Observable<EthUnsignedTx> {
+    return this.http.get<EthUnsignedTx>(`${this.url}/${id}/eth-unsigned`);
+  }
+  ethBroadcast(id: string, signedRawTx: string): Observable<AdminWithdrawal> {
+    return this.http.post<AdminWithdrawal>(`${this.url}/${id}/eth-broadcast`, { signedRawTx });
+  }
+  ethReconcile(id: string): Observable<AdminWithdrawal> {
+    return this.http.post<AdminWithdrawal>(`${this.url}/${id}/eth-reconcile`, {});
+  }
+  ethConfirmation(id: string): Observable<EthConfirmation> {
+    return this.http.get<EthConfirmation>(`${this.url}/${id}/eth-confirmation`);
+  }
+
+  // ---- BTC (P2WPKH) coordinator --------------------------------------------------------------------
+  btcUnsigned(id: string): Observable<BtcUnsignedTx> {
+    return this.http.get<BtcUnsignedTx>(`${this.url}/${id}/btc-unsigned`);
+  }
+  btcBroadcast(id: string, signedRawTx: string): Observable<AdminWithdrawal> {
+    return this.http.post<AdminWithdrawal>(`${this.url}/${id}/btc-broadcast`, { signedRawTx });
+  }
+  btcReconcile(id: string): Observable<AdminWithdrawal> {
+    return this.http.post<AdminWithdrawal>(`${this.url}/${id}/btc-reconcile`, {});
+  }
+  btcConfirmation(id: string): Observable<BtcConfirmation> {
+    return this.http.get<BtcConfirmation>(`${this.url}/${id}/btc-confirmation`);
   }
 }

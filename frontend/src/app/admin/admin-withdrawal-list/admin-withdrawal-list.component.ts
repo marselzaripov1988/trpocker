@@ -1,7 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Observable } from 'rxjs';
 import { AdminWithdrawalService } from '../services/admin-withdrawal.service';
-import { AdminWithdrawal, WithdrawalSigningRequest } from '../models/withdrawal.models';
+import {
+  AdminWithdrawal, WithdrawalSigningRequest, ChainUnsignedTx, ChainConfirmation
+} from '../models/withdrawal.models';
+
+type Chain = 'eth' | 'btc';
 
 @Component({
   selector: 'app-admin-withdrawal-list',
@@ -42,10 +47,22 @@ import { AdminWithdrawal, WithdrawalSigningRequest } from '../models/withdrawal.
                         <button class="btn-reject" (click)="rejectId.set(w.id)" [disabled]="busy()">Reject</button>
                       }
                       @if (w.status === 'APPROVED') {
+                        @if (chain(w); as c) {
+                          <button class="btn-approve" (click)="assembleChain(w)" [disabled]="busy()">
+                            Assemble {{ c.toUpperCase() }}
+                          </button>
+                        }
                         <button class="btn-link" (click)="exportUnsigned(w)" [disabled]="busy()">Export</button>
-                        <button class="btn-link" (click)="broadcastId.set(w.id)" [disabled]="busy()">Broadcast</button>
+                        <button class="btn-link" (click)="broadcastId.set(w.id)" [disabled]="busy()">Manual tx</button>
                       }
-                      @if (w.status === 'BROADCAST' || w.status === 'CONFIRMED') {
+                      @if (w.status === 'BROADCAST') {
+                        <span class="mono muted">tx {{ w.txId }}</span>
+                        @if (chain(w)) {
+                          <button class="btn-link" (click)="reconcileChain(w)" [disabled]="busy()">Reconcile</button>
+                          <button class="btn-link" (click)="checkConfirmation(w)" [disabled]="busy()">Status</button>
+                        }
+                      }
+                      @if (w.status === 'CONFIRMED') {
                         <span class="mono muted">tx {{ w.txId }}</span>
                       }
                     </td>
@@ -74,7 +91,29 @@ import { AdminWithdrawal, WithdrawalSigningRequest } from '../models/withdrawal.
                   @if (exported()?.withdrawalId === w.id) {
                     <tr><td colspan="6">
                       <pre class="intent">{{ exported() | json }}</pre>
-                      <p class="muted">Sign this offline (OfflineWithdrawalSigner), broadcast via a node, then use “Broadcast”.</p>
+                      <p class="muted">Sign this offline (OfflineWithdrawalSigner), broadcast via a node, then use “Manual tx”.</p>
+                    </td></tr>
+                  }
+                  @if (assembled()?.id === w.id) {
+                    <tr><td colspan="6">
+                      <p class="muted">
+                        Unsigned {{ assembled()!.chain.toUpperCase() }} tx assembled from the node — sign it
+                        <strong>offline</strong>, then paste the signed raw tx below to broadcast.
+                      </p>
+                      <pre class="intent">{{ assembled()!.data | json }}</pre>
+                      <div class="inline-form">
+                        <input type="text" placeholder="0x… / hex signed raw tx"
+                               (input)="signedRaw.set($any($event.target).value)" [value]="signedRaw()" />
+                        <button class="btn-approve" (click)="chainBroadcast(w)" [disabled]="busy() || !signedRaw()">
+                          Broadcast signed
+                        </button>
+                        <button class="btn-link" (click)="assembled.set(null)">Cancel</button>
+                      </div>
+                    </td></tr>
+                  }
+                  @if (confirmation()?.id === w.id) {
+                    <tr><td colspan="6">
+                      <pre class="intent">{{ confirmation()!.text }}</pre>
                     </td></tr>
                   }
                 }
@@ -101,7 +140,7 @@ import { AdminWithdrawal, WithdrawalSigningRequest } from '../models/withdrawal.
     .btn-link { background: none; border: none; color: #60a5fa; cursor: pointer; margin-right: 0.4rem; }
     .inline-form { display: flex; gap: 0.5rem; align-items: center; padding: 0.5rem 0; }
     .inline-form input { flex: 1; padding: 0.45rem; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
-    .intent { background: #0f172a; padding: 0.75rem; border-radius: 8px; color: #cbd5e1; overflow:auto; }
+    .intent { background: #0f172a; padding: 0.75rem; border-radius: 8px; color: #cbd5e1; overflow:auto; max-height: 320px; }
     .alert.error { background: #7f1d1d; color: #fecaca; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
     .muted { color: #94a3b8; }
   `]
@@ -120,6 +159,11 @@ export class AdminWithdrawalListComponent implements OnInit {
   readonly txId = signal('');
   readonly exported = signal<WithdrawalSigningRequest | null>(null);
 
+  /** Chain-coordinator workflow state. */
+  readonly assembled = signal<{ id: string; chain: Chain; data: ChainUnsignedTx } | null>(null);
+  readonly signedRaw = signal('');
+  readonly confirmation = signal<{ id: string; text: string } | null>(null);
+
   ngOnInit(): void {
     this.reload();
   }
@@ -131,6 +175,13 @@ export class AdminWithdrawalListComponent implements OnInit {
       next: list => { this.rows.set(list); this.loading.set(false); },
       error: err => { this.error.set(this.msg(err, 'Failed to load withdrawals')); this.loading.set(false); }
     });
+  }
+
+  /** Which online coordinator handles this asset's network, or null (manual offline path only). */
+  chain(w: AdminWithdrawal): Chain | null {
+    if (w.network === 'ETH' || w.network === 'ERC20') { return 'eth'; }
+    if (w.network === 'BTC') { return 'btc'; }
+    return null;
   }
 
   approve(w: AdminWithdrawal): void {
@@ -147,9 +198,56 @@ export class AdminWithdrawalListComponent implements OnInit {
 
   exportUnsigned(w: AdminWithdrawal): void {
     this.busy.set(true);
+    this.error.set(null);
     this.service.exportUnsigned(w.id).subscribe({
       next: intent => { this.exported.set(intent); this.busy.set(false); },
       error: err => { this.error.set(this.msg(err, 'Export failed')); this.busy.set(false); }
+    });
+  }
+
+  /** Assemble an unsigned tx from the node (ETH/BTC coordinator) for the offline signer. */
+  assembleChain(w: AdminWithdrawal): void {
+    const c = this.chain(w);
+    if (!c) { return; }
+    this.busy.set(true);
+    this.error.set(null);
+    this.signedRaw.set('');
+    const obs: Observable<ChainUnsignedTx> =
+      c === 'eth' ? this.service.ethUnsigned(w.id) : this.service.btcUnsigned(w.id);
+    obs.subscribe({
+      next: data => { this.assembled.set({ id: w.id, chain: c, data }); this.busy.set(false); },
+      error: err => { this.error.set(this.msg(err, 'Assemble failed')); this.busy.set(false); }
+    });
+  }
+
+  /** Broadcast the offline-signed raw tx via the coordinator → BROADCAST. */
+  chainBroadcast(w: AdminWithdrawal): void {
+    const a = this.assembled();
+    if (!a || a.id !== w.id) { return; }
+    const obs = a.chain === 'eth'
+      ? this.service.ethBroadcast(w.id, this.signedRaw())
+      : this.service.btcBroadcast(w.id, this.signedRaw());
+    this.run(obs, () => { this.assembled.set(null); this.signedRaw.set(''); });
+  }
+
+  /** Reconcile a BROADCAST withdrawal against the chain → CONFIRMED/FAILED. */
+  reconcileChain(w: AdminWithdrawal): void {
+    const c = this.chain(w);
+    if (!c) { return; }
+    this.run(c === 'eth' ? this.service.ethReconcile(w.id) : this.service.btcReconcile(w.id));
+  }
+
+  /** Show on-chain confirmation status without changing state. */
+  checkConfirmation(w: AdminWithdrawal): void {
+    const c = this.chain(w);
+    if (!c) { return; }
+    this.busy.set(true);
+    this.error.set(null);
+    const obs: Observable<ChainConfirmation> =
+      c === 'eth' ? this.service.ethConfirmation(w.id) : this.service.btcConfirmation(w.id);
+    obs.subscribe({
+      next: r => { this.confirmation.set({ id: w.id, text: JSON.stringify(r, null, 2) }); this.busy.set(false); },
+      error: err => { this.error.set(this.msg(err, 'Status check failed')); this.busy.set(false); }
     });
   }
 
