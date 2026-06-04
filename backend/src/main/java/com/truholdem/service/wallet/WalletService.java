@@ -192,6 +192,17 @@ public class WalletService {
         return withdrawalRepository.findByStatusOrderByCreatedAtAsc(WithdrawalStatus.PENDING_APPROVAL);
     }
 
+    /** Withdrawals for the moderation page: a single {@code status} if given, else the open review set
+     *  (PENDING_APPROVAL awaiting a decision + APPROVED awaiting the offline-signer broadcast). */
+    @Transactional(readOnly = true)
+    public List<WithdrawalRequest> withdrawalsForReview(WithdrawalStatus status) {
+        if (status != null) {
+            return withdrawalRepository.findByStatusOrderByCreatedAtAsc(status);
+        }
+        return withdrawalRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(WithdrawalStatus.PENDING_APPROVAL, WithdrawalStatus.APPROVED));
+    }
+
     /**
      * An APPROVED withdrawal awaiting an offline signature (the offline-signer / PSBT handoff). Returned so
      * the offline signer can build + sign + broadcast the chain transaction; the resulting tx id is recorded

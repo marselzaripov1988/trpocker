@@ -64,6 +64,9 @@ class WithdrawalSigningHandoffIT {
 
         assertThat(approved.getStatus()).isEqualTo(WithdrawalStatus.APPROVED);
         assertThat(approved.getTxId()).isNull();
+        // cross-session visibility: the default review list includes APPROVED (awaiting offline broadcast)
+        assertThat(walletService.withdrawalsForReview(null)).extracting(WithdrawalRequest::getId)
+                .contains(approved.getId());
     }
 
     @Test

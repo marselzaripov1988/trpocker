@@ -88,6 +88,24 @@ class WithdrawalApprovalIT {
     }
 
     @Test
+    @DisplayName("review list defaults to pending+approved and filters by status")
+    void reviewListFilters() {
+        WithdrawalRequest w = request();
+
+        assertThat(walletService.withdrawalsForReview(null)).extracting(WithdrawalRequest::getId).contains(w.getId());
+        assertThat(walletService.withdrawalsForReview(WithdrawalStatus.PENDING_APPROVAL))
+                .extracting(WithdrawalRequest::getId).contains(w.getId());
+        assertThat(walletService.withdrawalsForReview(WithdrawalStatus.BROADCAST))
+                .extracting(WithdrawalRequest::getId).doesNotContain(w.getId());
+
+        walletService.approveWithdrawal(w.getId(), moderator); // mock provider → BROADCAST
+        assertThat(walletService.withdrawalsForReview(null)).extracting(WithdrawalRequest::getId)
+                .as("no longer pending/approved once broadcast").doesNotContain(w.getId());
+        assertThat(walletService.withdrawalsForReview(WithdrawalStatus.BROADCAST))
+                .extracting(WithdrawalRequest::getId).contains(w.getId());
+    }
+
+    @Test
     @DisplayName("only a pending request can be approved/rejected")
     void rejectsActionOnNonPending() {
         WithdrawalRequest w = request();

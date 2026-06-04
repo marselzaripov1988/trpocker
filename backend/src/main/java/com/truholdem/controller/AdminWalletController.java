@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.api.ApiV1Config;
@@ -30,6 +31,7 @@ import com.truholdem.dto.wallet.PoolStatusResponse;
 import com.truholdem.dto.wallet.RejectWithdrawalRequest;
 import com.truholdem.dto.wallet.WithdrawalSigningRequestDto;
 import com.truholdem.model.User;
+import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.DepositAddressPoolService;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
@@ -107,9 +109,11 @@ public class AdminWalletController {
     }
 
     @GetMapping("/withdrawals")
-    @Operation(summary = "List withdrawals awaiting moderator approval")
-    public ResponseEntity<List<AdminWithdrawalDto>> pendingWithdrawals() {
-        return ResponseEntity.ok(walletService.pendingApprovals().stream().map(AdminWithdrawalDto::from).toList());
+    @Operation(summary = "List withdrawals for moderation (optional ?status=; default = pending + approved)")
+    public ResponseEntity<List<AdminWithdrawalDto>> withdrawals(
+            @RequestParam(required = false) WithdrawalStatus status) {
+        return ResponseEntity.ok(
+                walletService.withdrawalsForReview(status).stream().map(AdminWithdrawalDto::from).toList());
     }
 
     @PostMapping("/withdrawals/{id}/approve")

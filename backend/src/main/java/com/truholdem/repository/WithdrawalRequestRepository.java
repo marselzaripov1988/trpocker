@@ -1,5 +1,6 @@
 package com.truholdem.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,4 +16,6 @@ public interface WithdrawalRequestRepository extends JpaRepository<WithdrawalReq
     List<WithdrawalRequest> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     List<WithdrawalRequest> findByStatusOrderByCreatedAtAsc(WithdrawalStatus status);
+
+    List<WithdrawalRequest> findByStatusInOrderByCreatedAtAsc(Collection<WithdrawalStatus> statuses);
 }

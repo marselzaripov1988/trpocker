@@ -73,9 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the offline-signer handoff for approved offline-pool withdrawals: **Export** (shows the signer-ready intent
   to sign with `OfflineWithdrawalSigner`) and **Broadcast** (record the tx id) → BROADCAST. `AdminWithdrawalService`
   wraps `GET /v1/admin/wallet/withdrawals` + approve/reject/unsigned/broadcast. Nav link 💸 Withdrawals (admins).
-- Built and verified with `npm run build` (the new lazy chunk compiles). Cross-session visibility of APPROVED
-  withdrawals would want a backend `?status=` filter (follow-up); the page updates rows in place after each
-  action.
+- Built and verified with `npm run build` (the new lazy chunk compiles). The page updates rows in place after
+  each action.
+- Backend: `GET /v1/admin/wallet/withdrawals` now takes an optional `?status=` filter; with no param it returns
+  the **review set** (PENDING_APPROVAL + APPROVED), so approved-awaiting-broadcast withdrawals are visible
+  **across sessions** (not just to the moderator who approved them). `WalletService.withdrawalsForReview`.
 
 ### 💸 Manual withdrawal approval (moderator gate)
 - Flag-gated `app.payments.withdrawal-approval-required` (default **off** — immediate-broadcast behaviour is
