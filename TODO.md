@@ -48,7 +48,8 @@ Backend is fully wired; frontend was admin-only. User wallet dashboard now start
 - [x] **User wallet dashboard** (`/wallet`) — balances + refresh, deposit address per asset (copy), withdrawal
       form, withdrawal history with status badges. Nav link gated by auth.
 - [x] Deposit address as a **QR code** (`qrcode` lib → data-URL `<img>` on `/wallet`).
-- [ ] KYC as a guided flow on `/wallet` (status → upload → pending → verified), not just the standalone page.
+- [x] KYC as a guided flow on `/wallet` — the KYC component is embedded (`[embedded]="true"`) as a
+      verification card showing status → upload → pending → verified inline; standalone `/kyc` kept.
 - [x] Admin: **status filter** dropdown on `/admin/withdrawals` (`?status=`).
 - [x] Admin: **chain-specific signing workflow** UI on `/admin/withdrawals` — Assemble ETH/BTC (coordinator)
       → paste signed raw → Broadcast signed → Reconcile / Status, dispatched by asset network.

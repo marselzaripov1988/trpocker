@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import * as QRCode from 'qrcode';
+import { KycUploadComponent } from '../kyc-upload/kyc-upload.component';
 import {
   WalletService, WalletBalance, DepositAddress, Withdrawal, CreateWithdrawal
 } from '../services/wallet.service';
@@ -14,7 +15,7 @@ const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
 @Component({
   selector: 'app-wallet-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, KycUploadComponent],
   template: `
     <div class="wallet-page" data-cy="wallet-dashboard">
       <header class="wallet-header">
@@ -71,6 +72,11 @@ const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
           </div>
         }
         @if (depositError()) { <div class="alert error">{{ depositError() }}</div> }
+      </section>
+
+      <!-- Identity verification (inline KYC flow: status → upload → pending → verified) -->
+      <section class="card">
+        <app-kyc-upload [embedded]="true" />
       </section>
 
       <!-- Withdraw -->

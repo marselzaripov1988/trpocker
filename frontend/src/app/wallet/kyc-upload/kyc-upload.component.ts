@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { KycService } from '../services/kyc.service';
 
@@ -7,13 +7,16 @@ import { KycService } from '../services/kyc.service';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="kyc-page" data-cy="kyc-upload">
-      <header class="kyc-header">
-        <h1>🪪 Identity verification (KYC)</h1>
-        <p class="subtitle">Required before you can withdraw.</p>
-      </header>
+    <div class="kyc-page" [class.embedded]="embedded()" data-cy="kyc-upload">
+      @if (!embedded()) {
+        <header class="kyc-header">
+          <h1>🪪 Identity verification (KYC)</h1>
+          <p class="subtitle">Required before you can withdraw.</p>
+        </header>
+      }
 
       <section class="card">
+        @if (embedded()) { <h2 class="card-title">🪪 Identity verification (KYC)</h2> }
         <p>
           Current status:
           <span class="badge status" [class.ok]="status() === 'VERIFIED'"
@@ -53,6 +56,8 @@ import { KycService } from '../services/kyc.service';
   `,
   styles: [`
     .kyc-page { max-width: 720px; margin: 0 auto; padding: 1.5rem; }
+    .kyc-page.embedded { max-width: none; margin: 0; padding: 0; }
+    .card-title { margin: 0 0 0.75rem; font-size: 1.05rem; }
     .kyc-header h1 { margin: 0 0 0.25rem; }
     .subtitle { color: #94a3b8; margin: 0 0 1rem; }
     .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
@@ -71,6 +76,9 @@ import { KycService } from '../services/kyc.service';
 })
 export class KycUploadComponent implements OnInit {
   private readonly kyc = inject(KycService);
+
+  /** When embedded (e.g. inside the wallet dashboard), drop the standalone page header/chrome. */
+  readonly embedded = input(false);
 
   readonly status = signal<string | null>(null);
   readonly selectedFile = signal<File | null>(null);
