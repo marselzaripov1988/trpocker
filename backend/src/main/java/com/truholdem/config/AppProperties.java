@@ -130,9 +130,19 @@ public class AppProperties {
         /** Minimum on-chain confirmations before a detected deposit is credited (watch-only ingestion). */
         private int minConfirmations = 1;
 
-        /** Directory where KYC verification videos are stored (metadata is kept in the DB). In a clustered
-         *  deployment this must be a shared volume so any node can read what another node received. */
+        /** KYC media backend: {@code filesystem} (default) or {@code s3} (S3/MinIO object storage). */
+        private String kycStorageType = "filesystem";
+
+        /** Directory where KYC verification videos are stored (filesystem backend; metadata is in the DB).
+         *  In a cluster this must be a shared volume so any node can read what another node received. */
         private String kycStorageDir = "";
+
+        /** S3/MinIO object storage (when kyc-storage-type=s3): endpoint, bucket, region, credentials. */
+        private String s3Endpoint = "";
+        private String s3Bucket = "";
+        private String s3Region = "us-east-1";
+        private String s3AccessKey = "";
+        private String s3SecretKey = "";
 
         /** Max size (bytes) of a KYC verification upload. Default 50 MB. */
         private long kycMaxUploadBytes = 52_428_800L;
@@ -247,12 +257,60 @@ public class AppProperties {
             this.minConfirmations = minConfirmations;
         }
 
+        public String getKycStorageType() {
+            return kycStorageType;
+        }
+
+        public void setKycStorageType(String kycStorageType) {
+            this.kycStorageType = kycStorageType;
+        }
+
         public String getKycStorageDir() {
             return kycStorageDir;
         }
 
         public void setKycStorageDir(String kycStorageDir) {
             this.kycStorageDir = kycStorageDir;
+        }
+
+        public String getS3Endpoint() {
+            return s3Endpoint;
+        }
+
+        public void setS3Endpoint(String s3Endpoint) {
+            this.s3Endpoint = s3Endpoint;
+        }
+
+        public String getS3Bucket() {
+            return s3Bucket;
+        }
+
+        public void setS3Bucket(String s3Bucket) {
+            this.s3Bucket = s3Bucket;
+        }
+
+        public String getS3Region() {
+            return s3Region;
+        }
+
+        public void setS3Region(String s3Region) {
+            this.s3Region = s3Region;
+        }
+
+        public String getS3AccessKey() {
+            return s3AccessKey;
+        }
+
+        public void setS3AccessKey(String s3AccessKey) {
+            this.s3AccessKey = s3AccessKey;
+        }
+
+        public String getS3SecretKey() {
+            return s3SecretKey;
+        }
+
+        public void setS3SecretKey(String s3SecretKey) {
+            this.s3SecretKey = s3SecretKey;
         }
 
         public long getKycMaxUploadBytes() {

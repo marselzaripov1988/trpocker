@@ -67,9 +67,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
   - Wire a real KYC provider (Sumsub/Onfido) → its webhook maps to `recordKycDecision`. (Manual self-KYC
     landed: users upload a verification video at `POST /v1/wallet/kyc/document`, moderators review +
     `VERIFIED`/`REJECTED` via the admin API. ✅ AES-256-GCM **encryption-at-rest**, GDPR **retention** sweep
-    (`KycRetentionScheduler`) + **right-to-erasure** endpoint landed.) Hardening still to add: **object
-    storage** (S3/MinIO) instead of a shared filesystem volume in a cluster, **key rotation** (key id per
-    document) + a KMS-held key instead of a config value, and **AV scanning** of uploads.
+    (`KycRetentionScheduler`) + **right-to-erasure** endpoint landed.) Hardening still to add: **key rotation**
+    (key id per document) + a KMS-held key instead of a config value, and **AV scanning** of uploads.
+    (✅ **S3/MinIO object storage** backend landed — `kyc-storage-type=s3`, hand-rolled SigV4, no AWS SDK,
+    verified vs the official SigV4 vector + a MinIO round-trip.)
   - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**
     webhook that moves `WithdrawalRequest` BROADCAST → CONFIRMED (and FAILED → balance reversal entry).
   - For self-custody: ✅ the `offline-pool` provider now persists a deposit address→user mapping

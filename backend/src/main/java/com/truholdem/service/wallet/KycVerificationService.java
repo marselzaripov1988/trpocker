@@ -1,9 +1,5 @@
 package com.truholdem.service.wallet;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
@@ -27,6 +23,7 @@ import com.truholdem.repository.KycDocumentRepository;
 import com.truholdem.repository.KycRecordRepository;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
 import com.truholdem.service.wallet.crypto.KycCrypto;
+import com.truholdem.service.wallet.storage.KycStorage;
 
 /**
  * Handles KYC verification uploads (e.g. a video of the user holding their passport). The file bytes are
@@ -43,14 +40,16 @@ public class KycVerificationService {
     private final KycRecordRepository kycRecordRepository;
     private final WalletService walletService;
     private final AppProperties appProperties;
+    private final KycStorage storage;
 
     public KycVerificationService(KycDocumentRepository documentRepository,
             KycRecordRepository kycRecordRepository, WalletService walletService,
-            AppProperties appProperties) {
+            AppProperties appProperties, KycStorage storage) {
         this.documentRepository = documentRepository;
         this.kycRecordRepository = kycRecordRepository;
         this.walletService = walletService;
         this.appProperties = appProperties;
+        this.storage = storage;
     }
 
     /** A loaded KYC document for moderator review: the file bytes + how to serve them. */
@@ -64,7 +63,6 @@ public class KycVerificationService {
         if (!appProperties.getPayments().isEnabled()) {
             throw new PaymentsDisabledException();
         }
-        Path dir = storageDir();
         if (content == null || content.length == 0) {
             throw new IllegalArgumentException("KYC upload is empty");
         }
@@ -81,12 +79,7 @@ public class KycVerificationService {
         byte[] toStore = key.map(k -> KycCrypto.encrypt(content, k)).orElse(content);
 
         String storageKey = UUID.randomUUID().toString();
-        try {
-            Files.createDirectories(dir);
-            Files.write(dir.resolve(storageKey), toStore);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to store KYC document", e);
-        }
+        storage.store(storageKey, toStore);
 
         documentRepository.save(new KycDocument(userId, sanitize(originalFilename), contentType,
                 content.length, sha, storageKey, key.isPresent()));
@@ -100,17 +93,13 @@ public class KycVerificationService {
     @Transactional(readOnly = true)
     public Optional<LoadedDocument> loadLatest(UUID userId) {
         return documentRepository.findFirstByUserIdOrderByUploadedAtDesc(userId).map(doc -> {
-            try {
-                byte[] bytes = Files.readAllBytes(storageDir().resolve(doc.getStorageKey()));
-                if (doc.isEncrypted()) {
-                    byte[] key = encryptionKey().orElseThrow(() -> new IllegalStateException(
-                            "KYC document " + doc.getId() + " is encrypted but no key is configured"));
-                    bytes = KycCrypto.decrypt(bytes, key);
-                }
-                return new LoadedDocument(bytes, doc.getContentType(), doc.getOriginalFilename());
-            } catch (IOException e) {
-                throw new UncheckedIOException("Failed to read KYC document " + doc.getId(), e);
+            byte[] bytes = storage.load(doc.getStorageKey());
+            if (doc.isEncrypted()) {
+                byte[] key = encryptionKey().orElseThrow(() -> new IllegalStateException(
+                        "KYC document " + doc.getId() + " is encrypted but no key is configured"));
+                bytes = KycCrypto.decrypt(bytes, key);
             }
+            return new LoadedDocument(bytes, doc.getContentType(), doc.getOriginalFilename());
         });
     }
 
@@ -149,9 +138,9 @@ public class KycVerificationService {
 
     private void deleteDocument(KycDocument doc) {
         try {
-            Files.deleteIfExists(storageDir().resolve(doc.getStorageKey()));
-        } catch (IOException e) {
-            log.warn("Failed to delete KYC file for {} — removing the DB row anyway", doc.getId(), e);
+            storage.delete(doc.getStorageKey());
+        } catch (RuntimeException e) {
+            log.warn("Failed to delete KYC blob for {} — removing the DB row anyway", doc.getId(), e);
         }
         documentRepository.delete(doc);
     }
@@ -174,14 +163,6 @@ public class KycVerificationService {
     Optional<Instant> retentionCutoff() {
         int days = appProperties.getPayments().getKycRetentionDays();
         return days > 0 ? Optional.of(Instant.now().minus(days, ChronoUnit.DAYS)) : Optional.empty();
-    }
-
-    private Path storageDir() {
-        String dir = appProperties.getPayments().getKycStorageDir();
-        if (dir == null || dir.isBlank()) {
-            throw new IllegalStateException("KYC storage directory is not configured (app.payments.kyc-storage-dir)");
-        }
-        return Path.of(dir);
     }
 
     /** Never trust the client filename for the filesystem — strip path separators and cap length. */

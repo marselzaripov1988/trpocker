@@ -122,6 +122,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Navigation: a 🪪 **Verify** link (authenticated users → `/kyc`) and a 🪪 **KYC review** link (admins →
   `/admin/kyc`, in the existing admin block) added to the main nav.
 
+### 🗄️ KYC media: S3/MinIO object storage backend
+- KYC verification media can now live in **S3-compatible object storage** (AWS S3 / MinIO) instead of the
+  local filesystem — `app.payments.kyc-storage-type=s3` + `s3-endpoint/s3-bucket/s3-region/s3-access-key/
+  s3-secret-key`. Cluster-friendly (no shared volume needed). Default stays `filesystem`.
+- New `KycStorage` abstraction with `FilesystemKycStorage` (default) and `S3KycStorage`; the latter talks S3
+  over the existing RestClient signed with hand-rolled **AWS SigV4** (`AwsV4Signer`, HMAC-SHA256) — no AWS
+  SDK, no new dependency. `KycVerificationService` now delegates store/load/delete to the backend (encryption
+  + metadata unchanged). Path-style requests; the bucket is created lazily.
+- Verified: `AwsV4Signer` reproduces the **official AWS SigV4 `get-vanilla` test vector** byte-for-byte; a
+  Testcontainers **MinIO** round-trip (`S3KycStorageIT`) stores → loads → deletes through the real S3 API.
+  Filesystem path unchanged (existing KYC ITs still green). Full suite green (1035).
+
 ### 🔒 KYC media: encryption at rest + GDPR retention/erasure
 - **Encryption at rest**: KYC verification videos are encrypted with **AES-256-GCM** (new pure-JDK `KycCrypto`,
   `[12-byte IV][ciphertext+tag]` on disk) when `app.payments.kyc-encryption-key` (base64 AES key) is set; the
