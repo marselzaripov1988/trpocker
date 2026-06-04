@@ -96,9 +96,14 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     signing also landed** (`BtcSigner` sighash+DER, `TronSigner` 65-byte recoverable sig, verified vs
     embit/eth-account), and **BTC Taproot key-path signing landed** (`Schnorr` BIP-340 + `TaprootSigner` BIP-341
     tweak, verified vs the official BIP-340 vector). The offline signing primitives now cover ETH/ERC-20, BTC
-    (P2PKH/P2WPKH/Taproot) and TRON. Remaining is all **online + node-dependent**: PSBT parse/finalise + UTXO
-    selection (BTC), TRON `raw_data` assembly, the BIP-341 sighash (commits to all prevouts), and the actual
-    **broadcast** (`eth_sendRawTransaction` / Bitcoin RPC / TronGrid). Pair with a small hot float (the
+    (P2PKH/P2WPKH/Taproot) and TRON. ✅ **ETH/ERC-20 online coordinator landed** — `EthRpcClient` (pure
+    RestClient JSON-RPC, no web3j) + `EthWithdrawalCoordinator` assemble the unsigned tx from live node state,
+    broadcast the offline-signed raw tx (`eth_sendRawTransaction`), and reconcile receipts → CONFIRMED/FAILED
+    (`app.payments.eth-rpc-enabled`); verified end-to-end against a real `geth --dev` (Testcontainers). Still
+    **online + node-dependent** for the other chains: PSBT parse/finalise + UTXO selection (BTC), the BIP-341
+    sighash, TRON `raw_data` assembly, and their broadcast (Bitcoin RPC / TronGrid). Also remaining for ETH: an
+    on-chain ERC-20 token-deploy IT and a BROADCAST→CONFIRMED reconciliation scheduler. Pair with a small hot
+    float (the
     **per-tx / 24h limits + cooling period already landed**, `app.payments.max-withdrawal-per-*` /
     `withdrawal-cooling-period-minutes`); optional 2-of-N moderator (4-eyes) is intentionally not done.
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).

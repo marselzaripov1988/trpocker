@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⛓️ Online ETH/ERC-20 withdrawal coordinator (assemble → offline-sign → broadcast → confirm)
+- The online half of an ETH/ERC-20 withdrawal, the piece the air-gapped signer can't do: `EthRpcClient` (a
+  pure `RestClient` + Jackson JSON-RPC client, no web3j) reads live node state (`eth_chainId`, `eth_gasPrice`,
+  `eth_getTransactionCount`, `eth_getBalance`, `eth_getTransactionReceipt`) and broadcasts via
+  `eth_sendRawTransaction`. `EthWithdrawalCoordinator` assembles the **unsigned** tx (native ETH or an ERC-20
+  `transfer`), broadcasts the raw tx the offline signer returned, and reconciles the receipt into the
+  withdrawal state machine (→ CONFIRMED once it has the configured confirmations, → FAILED on revert).
+- **The private key never touches the server.** The coordinator only reads the chain and relays bytes; signing
+  stays offline. `EthAbi` (ERC-20 `transfer`/`balanceOf` calldata + hex/quantity helpers) is plain encoding,
+  no key material. Admin endpoints: `GET …/withdrawals/{id}/eth-unsigned`, `POST …/eth-broadcast`,
+  `POST …/eth-reconcile`, `GET …/eth-confirmation`. Flag-gated (`app.payments.eth-rpc-enabled`, default off).
+- **Verified against a real `geth --dev` node** (Testcontainers): fund a treasury address from the unlocked
+  dev account, assemble the unsigned tx from the node, EIP-155-sign it offline (test-sources signer),
+  broadcast, reconcile to CONFIRMED, and assert the recipient's on-chain balance moved by exactly the
+  withdrawn amount. Plus unit tests for the ABI/quantity encoding and the JSON-RPC envelope (fake node). Full
+  suite green (1057).
+- Honest scope: native ETH is verified end-to-end on-chain; the ERC-20 path (calldata + `balanceOf` decode) is
+  unit-verified, with a token-deploy on-chain IT and a BROADCAST→CONFIRMED reconciliation scheduler as
+  follow-ups. BTC (bitcoind regtest) and TRON coordinators are separate slices.
+
 ### 🔁 KYC re-encryption sweep (key rotation / config→KMS migration)
 - `POST /v1/admin/wallet/kyc/re-encrypt` (ADMIN) re-encrypts every KYC document under the **currently-active
   key/provider**: decrypt with the key the document recorded, re-encrypt with the active one, overwrite in

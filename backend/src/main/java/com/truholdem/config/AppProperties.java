@@ -130,6 +130,23 @@ public class AppProperties {
         /** Minimum on-chain confirmations before a detected deposit is credited (watch-only ingestion). */
         private int minConfirmations = 1;
 
+        /** Online ETH/ERC-20 withdrawal coordinator: assembles an unsigned tx from live node state (nonce,
+         *  gas price, chain id), broadcasts the offline-signed raw tx, and reconciles receipts → CONFIRMED.
+         *  Signing stays offline (never on the server). Inert unless {@code ethRpcEnabled}. */
+        private boolean ethRpcEnabled = false;
+        /** JSON-RPC endpoint of the Ethereum node (e.g. http://geth:8545). */
+        private String ethRpcUrl = "";
+        /** Chain id; 0 = query the node ({@code eth_chainId}). */
+        private long ethChainId = 0;
+        /** The treasury/hot sending address whose key signs offline (its nonce is read from the node). */
+        private String ethFromAddress = "";
+        /** Gas limit for a native ETH transfer. */
+        private long ethGasLimit = 21000;
+        /** Gas limit for an ERC-20 {@code transfer(address,uint256)}. */
+        private long erc20GasLimit = 100000;
+        /** ERC-20 contract address per asset name (e.g. {@code USDT_ERC20 -> 0x...}). */
+        private Map<String, String> erc20Contracts = new HashMap<>();
+
         /** KYC media backend: {@code filesystem} (default) or {@code s3} (S3/MinIO object storage). */
         private String kycStorageType = "filesystem";
 
@@ -282,6 +299,62 @@ public class AppProperties {
 
         public void setMinConfirmations(int minConfirmations) {
             this.minConfirmations = minConfirmations;
+        }
+
+        public boolean isEthRpcEnabled() {
+            return ethRpcEnabled;
+        }
+
+        public void setEthRpcEnabled(boolean ethRpcEnabled) {
+            this.ethRpcEnabled = ethRpcEnabled;
+        }
+
+        public String getEthRpcUrl() {
+            return ethRpcUrl;
+        }
+
+        public void setEthRpcUrl(String ethRpcUrl) {
+            this.ethRpcUrl = ethRpcUrl;
+        }
+
+        public long getEthChainId() {
+            return ethChainId;
+        }
+
+        public void setEthChainId(long ethChainId) {
+            this.ethChainId = ethChainId;
+        }
+
+        public String getEthFromAddress() {
+            return ethFromAddress;
+        }
+
+        public void setEthFromAddress(String ethFromAddress) {
+            this.ethFromAddress = ethFromAddress;
+        }
+
+        public long getEthGasLimit() {
+            return ethGasLimit;
+        }
+
+        public void setEthGasLimit(long ethGasLimit) {
+            this.ethGasLimit = ethGasLimit;
+        }
+
+        public long getErc20GasLimit() {
+            return erc20GasLimit;
+        }
+
+        public void setErc20GasLimit(long erc20GasLimit) {
+            this.erc20GasLimit = erc20GasLimit;
+        }
+
+        public Map<String, String> getErc20Contracts() {
+            return erc20Contracts;
+        }
+
+        public void setErc20Contracts(Map<String, String> erc20Contracts) {
+            this.erc20Contracts = erc20Contracts;
         }
 
         public String getKycStorageType() {

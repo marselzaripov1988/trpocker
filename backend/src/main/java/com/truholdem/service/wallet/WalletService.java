@@ -208,6 +208,13 @@ public class WalletService {
                 List.of(WithdrawalStatus.PENDING_APPROVAL, WithdrawalStatus.APPROVED));
     }
 
+    /** Load a single withdrawal by id (read-only) — used by the ETH coordinator to reconcile a broadcast. */
+    @Transactional(readOnly = true)
+    public WithdrawalRequest getWithdrawal(UUID withdrawalId) {
+        return withdrawalRepository.findById(withdrawalId)
+                .orElseThrow(() -> new NoSuchElementException("Withdrawal not found: " + withdrawalId));
+    }
+
     /**
      * An APPROVED withdrawal awaiting an offline signature (the offline-signer / PSBT handoff). Returned so
      * the offline signer can build + sign + broadcast the chain transaction; the resulting tx id is recorded

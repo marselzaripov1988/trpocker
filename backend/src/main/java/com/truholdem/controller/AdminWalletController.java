@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.wallet.AdminWithdrawalDto;
 import com.truholdem.dto.wallet.BroadcastWithdrawalRequest;
+import com.truholdem.dto.wallet.EthBroadcastRequest;
+import com.truholdem.dto.wallet.EthConfirmationDto;
+import com.truholdem.dto.wallet.EthUnsignedTxDto;
 import com.truholdem.dto.wallet.KycDecisionRequest;
 import com.truholdem.dto.wallet.KycPendingDto;
 import com.truholdem.dto.wallet.KycReEncryptResult;
@@ -36,6 +39,10 @@ import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.DepositAddressPoolService;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
+import com.truholdem.service.wallet.eth.EthWithdrawalCoordinator;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -57,12 +64,15 @@ public class AdminWalletController {
     private final DepositAddressPoolService pool;
     private final KycVerificationService kycVerificationService;
     private final WalletService walletService;
+    private final ObjectProvider<EthWithdrawalCoordinator> ethCoordinator;
 
     public AdminWalletController(DepositAddressPoolService pool,
-            KycVerificationService kycVerificationService, WalletService walletService) {
+            KycVerificationService kycVerificationService, WalletService walletService,
+            ObjectProvider<EthWithdrawalCoordinator> ethCoordinator) {
         this.pool = pool;
         this.kycVerificationService = kycVerificationService;
         this.walletService = walletService;
+        this.ethCoordinator = ethCoordinator;
     }
 
     @PostMapping("/deposit-pool/import")
@@ -152,6 +162,44 @@ public class AdminWalletController {
     public ResponseEntity<AdminWithdrawalDto> recordBroadcast(@PathVariable UUID id,
             @Valid @RequestBody BroadcastWithdrawalRequest body) {
         return ResponseEntity.ok(AdminWithdrawalDto.from(walletService.recordBroadcast(id, body.txId())));
+    }
+
+    @GetMapping("/withdrawals/{id}/eth-unsigned")
+    @Operation(summary = "Assemble an unsigned ETH/ERC-20 tx from live node state for the offline signer")
+    public ResponseEntity<EthUnsignedTxDto> ethUnsigned(@PathVariable UUID id) {
+        return ResponseEntity.ok(ethCoordinatorOrThrow().buildUnsigned(id));
+    }
+
+    @PostMapping("/withdrawals/{id}/eth-broadcast")
+    @Operation(summary = "Broadcast the offline-signed raw ETH tx and record its hash (→ BROADCAST)")
+    public ResponseEntity<AdminWithdrawalDto> ethBroadcast(@PathVariable UUID id,
+            @Valid @RequestBody EthBroadcastRequest body) {
+        return ResponseEntity.ok(
+                AdminWithdrawalDto.from(ethCoordinatorOrThrow().broadcast(id, body.signedRawTx())));
+    }
+
+    @PostMapping("/withdrawals/{id}/eth-reconcile")
+    @Operation(summary = "Reconcile a broadcast ETH withdrawal against its receipt (→ CONFIRMED / FAILED)")
+    public ResponseEntity<AdminWithdrawalDto> ethReconcile(@PathVariable UUID id) {
+        return ResponseEntity.ok(AdminWithdrawalDto.from(ethCoordinatorOrThrow().reconcile(id)));
+    }
+
+    @GetMapping("/withdrawals/{id}/eth-confirmation")
+    @Operation(summary = "On-chain confirmation status of a broadcast ETH withdrawal's transaction")
+    public ResponseEntity<EthConfirmationDto> ethConfirmation(@PathVariable UUID id) {
+        String txId = walletService.getWithdrawal(id).getTxId();
+        if (txId == null || txId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.ok(ethCoordinatorOrThrow().confirmation(txId));
+    }
+
+    private EthWithdrawalCoordinator ethCoordinatorOrThrow() {
+        EthWithdrawalCoordinator coordinator = ethCoordinator.getIfAvailable();
+        if (coordinator == null) {
+            throw new IllegalStateException("ETH RPC coordinator is disabled (app.payments.eth-rpc-enabled)");
+        }
+        return coordinator;
     }
 
     private static MediaType parseType(String contentType) {
