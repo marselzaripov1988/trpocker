@@ -118,6 +118,15 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     title: 'Admin — Withdrawals',
   },
+  {
+    path: 'admin/pool',
+    loadComponent: () =>
+      import('./admin/admin-pool/admin-pool.component').then(
+        (m) => m.AdminPoolComponent
+      ),
+    canActivate: [adminGuard],
+    title: 'Admin — Deposit pool',
+  },
 
   {
     path: 'start',

@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
@@ -13,8 +13,10 @@ export class AdminWithdrawalService {
   private readonly http = inject(HttpClient);
   private readonly url = `${environment.apiUrl}/v1/admin/wallet/withdrawals`;
 
-  listPending(): Observable<AdminWithdrawal[]> {
-    return this.http.get<AdminWithdrawal[]>(this.url);
+  /** List withdrawals for review. No status → the open set (PENDING_APPROVAL + APPROVED); else that status. */
+  listPending(status?: string): Observable<AdminWithdrawal[]> {
+    const options = status ? { params: new HttpParams().set('status', status) } : {};
+    return this.http.get<AdminWithdrawal[]>(this.url, options);
   }
 
   approve(id: string): Observable<AdminWithdrawal> {

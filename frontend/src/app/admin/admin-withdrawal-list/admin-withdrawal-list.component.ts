@@ -16,7 +16,14 @@ type Chain = 'eth' | 'btc';
     <div class="admin-page" data-cy="admin-withdrawals">
       <header class="admin-header">
         <h1>💸 Withdrawal moderation</h1>
-        <button class="btn-link" (click)="reload()">↻ Refresh</button>
+        <div class="header-actions">
+          <select [value]="statusFilter()" (change)="onFilterChange($any($event.target).value)"
+                  data-cy="status-filter" title="Filter by status">
+            <option value="">Open (pending + approved)</option>
+            @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+          </select>
+          <button class="btn-link" (click)="reload()">↻ Refresh</button>
+        </div>
       </header>
 
       @if (error()) { <div class="alert error" role="alert">{{ error() }}</div> }
@@ -128,6 +135,8 @@ type Chain = 'eth' | 'btc';
     .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
     .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
     .admin-header h1 { margin: 0; }
+    .header-actions { display: flex; gap: 0.75rem; align-items: center; }
+    .header-actions select { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 8px; padding: 0.4rem; }
     .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
     .card h2 { margin: 0 0 1rem; font-size: 1.1rem; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
@@ -147,6 +156,9 @@ type Chain = 'eth' | 'btc';
 })
 export class AdminWithdrawalListComponent implements OnInit {
   private readonly service = inject(AdminWithdrawalService);
+
+  readonly statuses = ['PENDING_APPROVAL', 'APPROVED', 'BROADCAST', 'CONFIRMED', 'FAILED', 'REJECTED'];
+  readonly statusFilter = signal('');
 
   readonly rows = signal<AdminWithdrawal[]>([]);
   readonly loading = signal(true);
@@ -168,10 +180,15 @@ export class AdminWithdrawalListComponent implements OnInit {
     this.reload();
   }
 
+  onFilterChange(status: string): void {
+    this.statusFilter.set(status);
+    this.reload();
+  }
+
   reload(): void {
     this.loading.set(true);
     this.error.set(null);
-    this.service.listPending().subscribe({
+    this.service.listPending(this.statusFilter() || undefined).subscribe({
       next: list => { this.rows.set(list); this.loading.set(false); },
       error: err => { this.error.set(this.msg(err, 'Failed to load withdrawals')); this.loading.set(false); }
     });
