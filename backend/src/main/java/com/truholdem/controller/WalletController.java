@@ -28,6 +28,7 @@ import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletExceptions.InsufficientFundsException;
 import com.truholdem.service.wallet.WalletExceptions.KycRequiredException;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
+import com.truholdem.service.wallet.WalletExceptions.WithdrawalLimitExceededException;
 import com.truholdem.service.wallet.WalletService;
 
 import java.io.IOException;
@@ -126,6 +127,9 @@ public class WalletController {
         } catch (InsufficientFundsException e) {
             return ResponseEntity.unprocessableEntity()
                     .body(new ErrorResponse("INSUFFICIENT_FUNDS", e.getMessage()));
+        } catch (WithdrawalLimitExceededException e) {
+            return ResponseEntity.unprocessableEntity()
+                    .body(new ErrorResponse("WITHDRAWAL_LIMIT", e.getMessage()));
         }
     }
 

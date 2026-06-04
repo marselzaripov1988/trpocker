@@ -68,6 +68,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verified (`WithdrawalSigningHandoffIT`, provider=offline-pool): approve leaves it APPROVED → export intent →
   record broadcast → BROADCAST; export/record on a non-APPROVED request rejected. Full suite green (1023).
 
+### 💸 Withdrawal limits + cooling period (AML controls)
+- **Per-transaction** and **rolling-24h** withdrawal limits, configured per asset
+  (`app.payments.max-withdrawal-per-tx.<ASSET>`, `…max-withdrawal-per-day.<ASSET>`; absent = no limit).
+  `requestWithdrawal` rejects an over-limit request **before debiting** (`WithdrawalLimitExceededException`
+  → HTTP 422 `WITHDRAWAL_LIMIT`); the daily total counts all of the user's non-reversed withdrawals for that
+  asset in the last 24h.
+- **Cooling period** (`app.payments.withdrawal-cooling-period-minutes`, default 0 = off): a moderator cannot
+  approve a withdrawal until the delay since the request has elapsed (`WithdrawalCoolingPeriodException`) — a
+  fraud-detection window before funds can leave.
+- No schema change. Verified (`WithdrawalLimitsIT`): over-per-tx rejected without debit; the 24h limit counts
+  prior pending withdrawals; approving inside the cooling window is blocked. Full suite green (1034).
+  (Per the request, no two-moderator / 4-eyes rule.)
+
 ### 💸 Withdrawal moderation UI (`/admin/withdrawals`, Angular)
 - Admin-guarded page listing withdrawals awaiting moderation with **Approve / Reject** (inline reason), and
   the offline-signer handoff for approved offline-pool withdrawals: **Export** (shows the signer-ready intent

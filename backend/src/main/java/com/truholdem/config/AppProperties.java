@@ -1,6 +1,9 @@
 package com.truholdem.config;
 
+import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -90,6 +93,17 @@ public class AppProperties {
          *  rejects (→ reversal). Off (default) keeps the immediate-broadcast behaviour. */
         private boolean withdrawalApprovalRequired = false;
 
+        /** Max amount per single withdrawal, keyed by {@link com.truholdem.model.CryptoAsset} name. An asset
+         *  with no entry has no per-transaction limit. */
+        private Map<String, BigDecimal> maxWithdrawalPerTx = new HashMap<>();
+
+        /** Max total withdrawal amount per rolling 24h per user, keyed by asset name. No entry = no limit. */
+        private Map<String, BigDecimal> maxWithdrawalPerDay = new HashMap<>();
+
+        /** Mandatory delay (minutes) between a withdrawal request and when it may be approved/executed — a
+         *  fraud-detection window. 0 (default) disables it. Only meaningful with approval required. */
+        private int withdrawalCoolingPeriodMinutes = 0;
+
         /** Shared secret authenticating provider webhooks (deposit-confirmed, kyc-callback). */
         private String webhookSecret = "";
 
@@ -151,6 +165,30 @@ public class AppProperties {
 
         public void setWithdrawalApprovalRequired(boolean withdrawalApprovalRequired) {
             this.withdrawalApprovalRequired = withdrawalApprovalRequired;
+        }
+
+        public Map<String, BigDecimal> getMaxWithdrawalPerTx() {
+            return maxWithdrawalPerTx;
+        }
+
+        public void setMaxWithdrawalPerTx(Map<String, BigDecimal> maxWithdrawalPerTx) {
+            this.maxWithdrawalPerTx = maxWithdrawalPerTx;
+        }
+
+        public Map<String, BigDecimal> getMaxWithdrawalPerDay() {
+            return maxWithdrawalPerDay;
+        }
+
+        public void setMaxWithdrawalPerDay(Map<String, BigDecimal> maxWithdrawalPerDay) {
+            this.maxWithdrawalPerDay = maxWithdrawalPerDay;
+        }
+
+        public int getWithdrawalCoolingPeriodMinutes() {
+            return withdrawalCoolingPeriodMinutes;
+        }
+
+        public void setWithdrawalCoolingPeriodMinutes(int withdrawalCoolingPeriodMinutes) {
+            this.withdrawalCoolingPeriodMinutes = withdrawalCoolingPeriodMinutes;
         }
 
         public String getWebhookSecret() {

@@ -1,6 +1,8 @@
 package com.truholdem.service.wallet;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -26,6 +28,8 @@ import com.truholdem.repository.WithdrawalRequestRepository;
 import com.truholdem.service.wallet.WalletExceptions.InsufficientFundsException;
 import com.truholdem.service.wallet.WalletExceptions.KycRequiredException;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
+import com.truholdem.service.wallet.WalletExceptions.WithdrawalCoolingPeriodException;
+import com.truholdem.service.wallet.WalletExceptions.WithdrawalLimitExceededException;
 
 /**
  * Crypto wallet: on-chain deposits (credited idempotently by tx id) + KYC-gated withdrawals. The
@@ -156,6 +160,7 @@ public class WalletService {
         if (appProperties.getPayments().isKycRequiredForWithdrawal() && kycStatus(userId) != KycStatus.VERIFIED) {
             throw new KycRequiredException();
         }
+        enforceWithdrawalLimits(userId, asset, amount);
 
         WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
                 .orElseThrow(InsufficientFundsException::new);
@@ -253,6 +258,14 @@ public class WalletService {
         if (request.getStatus() != WithdrawalStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Withdrawal " + withdrawalId + " is not pending approval");
         }
+        int coolingMinutes = appProperties.getPayments().getWithdrawalCoolingPeriodMinutes();
+        if (coolingMinutes > 0) {
+            Instant earliest = request.getCreatedAt().plus(coolingMinutes, ChronoUnit.MINUTES);
+            if (Instant.now().isBefore(earliest)) {
+                throw new WithdrawalCoolingPeriodException(
+                        "Withdrawal " + withdrawalId + " is in its cooling period until " + earliest);
+            }
+        }
         request.approve(moderatorId);
         try {
             String txId = paymentProvider.broadcastWithdrawal(
@@ -293,6 +306,30 @@ public class WalletService {
     @Transactional(readOnly = true)
     public List<WithdrawalRequest> withdrawals(UUID userId) {
         return withdrawalRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    /** Enforce the configured per-transaction and rolling-24h withdrawal limits for the asset (no-op when
+     *  unconfigured). Counts everything not reversed (REJECTED/FAILED) toward the daily total. */
+    private void enforceWithdrawalLimits(UUID userId, CryptoAsset asset, BigDecimal amount) {
+        BigDecimal perTx = appProperties.getPayments().getMaxWithdrawalPerTx().get(asset.name());
+        if (perTx != null && amount.compareTo(perTx) > 0) {
+            throw new WithdrawalLimitExceededException(
+                    "Amount " + amount + " exceeds the per-transaction limit of " + perTx + " " + asset);
+        }
+        BigDecimal perDay = appProperties.getPayments().getMaxWithdrawalPerDay().get(asset.name());
+        if (perDay != null) {
+            Instant cutoff = Instant.now().minus(24, ChronoUnit.HOURS);
+            BigDecimal used = withdrawalRepository
+                    .findByUserIdAndAssetAndCreatedAtAfter(userId, asset, cutoff).stream()
+                    .filter(w -> w.getStatus() != WithdrawalStatus.REJECTED
+                            && w.getStatus() != WithdrawalStatus.FAILED)
+                    .map(WithdrawalRequest::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (used.add(amount).compareTo(perDay) > 0) {
+                throw new WithdrawalLimitExceededException("Amount " + amount + " exceeds the 24h limit of "
+                        + perDay + " " + asset + " (already used " + used + ")");
+            }
+        }
     }
 
     /**

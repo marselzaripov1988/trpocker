@@ -90,8 +90,9 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     tweak, verified vs the official BIP-340 vector). The offline signing primitives now cover ETH/ERC-20, BTC
     (P2PKH/P2WPKH/Taproot) and TRON. Remaining is all **online + node-dependent**: PSBT parse/finalise + UTXO
     selection (BTC), TRON `raw_data` assembly, the BIP-341 sighash (commits to all prevouts), and the actual
-    **broadcast** (`eth_sendRawTransaction` / Bitcoin RPC / TronGrid). Pair with a small hot float +
-    per-withdrawal limits + optional 2-of-N moderator (4-eyes).
+    **broadcast** (`eth_sendRawTransaction` / Bitcoin RPC / TronGrid). Pair with a small hot float (the
+    **per-tx / 24h limits + cooling period already landed**, `app.payments.max-withdrawal-per-*` /
+    `withdrawal-cooling-period-minutes`); optional 2-of-N moderator (4-eyes) is intentionally not done.
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
   - **BTC generator** — ✅ landed for all three mainstream formats: legacy P2PKH `1…`, native SegWit bech32
     `bc1q…` (`Bech32`/BIP-173), and Taproot `bc1p…` (`TaprootKeys`/BIP-341 + bech32m/BIP-350). Still to add:

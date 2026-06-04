@@ -35,4 +35,18 @@ public final class WalletExceptions {
             super("Insufficient funds");
         }
     }
+
+    /** The withdrawal exceeds a configured per-transaction or rolling-24h limit. */
+    public static class WithdrawalLimitExceededException extends RuntimeException {
+        public WithdrawalLimitExceededException(String message) {
+            super(message);
+        }
+    }
+
+    /** A withdrawal cannot be approved yet — it is still within its mandatory cooling period. */
+    public static class WithdrawalCoolingPeriodException extends IllegalStateException {
+        public WithdrawalCoolingPeriodException(String message) {
+            super(message);
+        }
+    }
 }
