@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Cash (ring) table configuration: stakes, buy-in bounds, seats, settlement asset and rake. Postgres-only;
+      H2 tests regenerate from the entity. Idempotent via tableExists.
+    -->
+    <changeSet id="cash-001-tables" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="cash_tables"/></not>
+        </preConditions>
+        <createTable tableName="cash_tables">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="small_blind" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="big_blind" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="min_buy_in" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_buy_in" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_seats" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rake_basis_points" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rake_cap" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="active" type="boolean">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>

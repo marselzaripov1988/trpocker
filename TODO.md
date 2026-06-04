@@ -59,6 +59,26 @@ Backend is fully wired; frontend was admin-only. User wallet dashboard now start
 - [x] UX polish: withdrawal status polling (while any in-progress), KYC upload progress bar, success/error
       toasts via the global notification service. (Remaining nicety: asset-selector friendly labels.)
 
+## TODO — cash games (real-money ring tables) [NEW EPIC]
+The platform has play-money hands + tournaments (with a wallet bridge) but **no cash/ring tables**: no
+table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge, no rake, no lobby. Slices:
+- [x] **1. Table config entity** — `CashTable` (stakes SB/BB, min/max buy-in, max seats, asset, rake bps + cap,
+      active) + `CashTableRepository` + Liquibase changeset 10. Verified H2 + fresh Postgres.
+- [ ] **2. Seat/session model** — `CashSeat` (table, user, stack, seatNo, sittingOut) + repository; map a money
+      buy-in to engine chips (define chip↔asset scale).
+- [ ] **3. Sit-down (buy-in)** — `CashGameWalletService.buyIn`: debit `WalletAccount`, seat the player with a
+      stack, ledger entry. Validate min/max buy-in, seat availability, single-seat-per-table.
+- [ ] **4. Stand-up (cash-out)** — credit the remaining stack back to the wallet on leave; ledger entry;
+      handle leaving mid-hand (fold + cash out after hand).
+- [ ] **5. Rake** — take a % (with cap) from each contested pot on showdown; record house revenue.
+- [ ] **6. Engine wiring** — join/leave a live table mid-session (the engine currently seats all players at
+      `createNewGame`); reconcile with the cluster hot-state/ownership model.
+- [ ] **7. REST API** — list tables, sit/leave, table state; secure + flag-gated.
+- [ ] **8. Lobby + table UI** — browse cash tables with stakes, pick buy-in, sit/leave with a stack.
+- [ ] **9. Verify** — full suite + fresh-Postgres cluster + an end-to-end buy-in→play→cash-out IT.
+Open design questions: chip↔money scale; rake model (no-flop-no-drop?); mid-hand leave; bot seating; per-table
+single-writer under the existing cluster ownership.
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 1: table config model
+- First slice of the cash-game epic (real-money ring tables, distinct from tournaments). `CashTable` persists a
+  ring-table definition — stakes (SB/BB), buy-in bounds, seat count, settlement asset and rake (basis points +
+  cap) — with a `CashTableRepository` (+ `findByActiveTrueOrderBySmallBlindAsc`). Amounts are asset major
+  units, like the wallet. Liquibase changeset 10 creates `cash_tables` (Postgres-only; H2 regenerates from the
+  entity), verified on a fresh Postgres (11 changesets, `ddl-auto=validate` passes) + an H2 persistence test.
+  Full suite green (1064). Remaining cash-game slices (seat/buy-in/cash-out/rake/engine/API/lobby) tracked in
+  TODO.md.
+
 ### 🔁 Withdrawal reconcile scheduler + on-chain ERC-20 verification (ETH coordinator follow-ups)
 - `WithdrawalReconcileScheduler` periodically scans BROADCAST withdrawals and dispatches each to its chain
   coordinator (ETH/ERC-20 or BTC) to reach CONFIRMED (or FAILED on an ETH revert) without a manual poke. Each
