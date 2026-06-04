@@ -43,6 +43,18 @@ no infected-stick vector; camera/screen only).
       multipart QR scheme (e.g. BBQr or BC-UR) with sequence + checksum, not a hand-rolled split.
 - [ ] Keep USB/file transfer as a documented fallback.
 
+## TODO — frontend
+Backend is fully wired; frontend was admin-only. User wallet dashboard now started.
+- [x] **User wallet dashboard** (`/wallet`) — balances + refresh, deposit address per asset (copy), withdrawal
+      form, withdrawal history with status badges. Nav link gated by auth.
+- [ ] Deposit address as a **QR code** (ties into the air-gap QR TODO; needs a QR lib or inline generator).
+- [ ] KYC as a guided flow on `/wallet` (status → upload → pending → verified), not just the standalone page.
+- [ ] Admin: **status filter** dropdown on `/admin/withdrawals` (backend already accepts `?status=`).
+- [ ] Admin: **chain-specific signing workflow** UI (eth-/btc-unsigned → broadcast → reconcile/confirmation).
+- [ ] Admin: **deposit-pool dashboard** (`GET /deposit-pool/status`) + batch import UI.
+- [ ] Admin: **KYC re-encrypt** button (`POST /kyc/re-encrypt`).
+- [ ] UX polish: withdrawal status polling, asset selector niceties, toasts, upload progress.
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.

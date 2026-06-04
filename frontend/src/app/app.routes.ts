@@ -84,6 +84,15 @@ export const routes: Routes = [
   },
 
   {
+    path: 'wallet',
+    loadComponent: () =>
+      import('./wallet/wallet-dashboard/wallet-dashboard.component').then(
+        (m) => m.WalletDashboardComponent
+      ),
+    title: 'Wallet - TruHoldem',
+  },
+
+  {
     path: 'kyc',
     loadComponent: () =>
       import('./wallet/kyc-upload/kyc-upload.component').then(
