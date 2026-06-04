@@ -86,8 +86,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     `Rlp`/`EcdsaSecp256k1`/`EthTransactionSigner`: RFC-6979 + EIP-155, no node, verified vs eth-account) — it
     derives the key from the seed by index and emits a broadcastable raw tx. **BTC (P2WPKH/BIP-143) + TRON
     signing also landed** (`BtcSigner` sighash+DER, `TronSigner` 65-byte recoverable sig, verified vs
-    embit/eth-account). Remaining: **BTC Taproot key-path signing** (Schnorr/BIP-340 + the tweak), the online
-    **PSBT parse/finalise + UTXO selection** and **TRON `raw_data` assembly** (need a node), and the actual
+    embit/eth-account), and **BTC Taproot key-path signing landed** (`Schnorr` BIP-340 + `TaprootSigner` BIP-341
+    tweak, verified vs the official BIP-340 vector). The offline signing primitives now cover ETH/ERC-20, BTC
+    (P2PKH/P2WPKH/Taproot) and TRON. Remaining is all **online + node-dependent**: PSBT parse/finalise + UTXO
+    selection (BTC), TRON `raw_data` assembly, the BIP-341 sighash (commits to all prevouts), and the actual
     **broadcast** (`eth_sendRawTransaction` / Bitcoin RPC / TronGrid). Pair with a small hot float +
     per-withdrawal limits + optional 2-of-N moderator (4-eyes).
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔑 BTC Taproot key-path signer — BIP-340 Schnorr + BIP-341 tweak (pure Java)
+- `Schnorr` implements **BIP-340** signing + verification over secp256k1 (tagged hashes, even-Y nonce, x-only
+  keys), and `TaprootSigner` applies the **BIP-341** key-path tweak
+  (`(d_even + tagged_hash("TapTweak", P_x)) mod n`) and Schnorr-signs the sighash — the offline half of a
+  Taproot key-path spend. Reuses `EthKeys`' curve math; no new dependency.
+- Verified byte-for-byte against the **official BIP-340 test vector** (secret key 3) and against an
+  independent reference for the Taproot tweak: `outputKeyX(1)` and the key-path signature match, and the
+  signature verifies against the output key. Full suite green (1034).
+- Test-sources only (never ships in the server jar). As with the other signers, the **BIP-341 sighash** (which
+  commits to all spent prevout amounts + scriptPubKeys) is built online from the PSBT/node — the offline tool
+  only tweaks + signs. This completes the offline signing primitives for ETH/ERC-20, BTC (P2PKH/P2WPKH/Taproot)
+  and TRON; the remaining work is online PSBT/raw_data assembly + broadcast.
+
 ### 🔑 Air-gapped BTC (P2WPKH) + TRON signers (pure Java, no node)
 - Extend the offline signer to Bitcoin and TRON. `BtcSigner` computes the **BIP-143 P2WPKH sighash** and a
   strict-DER ECDSA signature (RFC-6979 + low-s) — exactly the value a watch-only PSBT needs finalised into the
