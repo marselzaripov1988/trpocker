@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔁 Withdrawal reconcile scheduler + on-chain ERC-20 verification (ETH coordinator follow-ups)
+- `WithdrawalReconcileScheduler` periodically scans BROADCAST withdrawals and dispatches each to its chain
+  coordinator (ETH/ERC-20 or BTC) to reach CONFIRMED (or FAILED on an ETH revert) without a manual poke. Each
+  `reconcile` is idempotent (terminal states are no-ops, `@Version` guards races), so it is safe on every node
+  in a cluster — same discipline as the KYC retention sweep. Flag-gated
+  (`app.payments.withdrawal-reconcile-enabled`, default off; interval `…-reconcile-interval-ms`). A failing
+  reconcile is logged and the sweep continues; assets with no coordinator are skipped. Unit-tested with mocked
+  coordinators (dispatch-by-asset, fault isolation, disabled-is-inert).
+- **On-chain ERC-20 verification**: a new `geth --dev` IT deploys a minimal real ERC-20 (constructor mints to
+  the treasury), then runs a full USDT_ERC20 withdrawal — the coordinator assembles the `transfer(...)` tx,
+  signs it offline, broadcasts, reconciles to CONFIRMED — and asserts the recipient's on-chain `balanceOf`
+  moved by exactly 1e6 units. This lifts the ERC-20 path from vector-only to on-chain-verified (catches
+  gas-limit, contract-address and decimals wiring that calldata vectors can't). Full suite green (1064).
+
 ### ₿ Online BTC (P2WPKH) withdrawal coordinator (UTXO select → offline-sign → broadcast → confirm)
 - The BTC counterpart of the ETH coordinator. `BtcRpcClient` (pure `RestClient` + Jackson + HTTP-Basic, no
   bitcoinj) scans the UTXO set for the treasury address (`scantxoutset` — no wallet import), broadcasts

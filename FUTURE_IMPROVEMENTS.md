@@ -104,9 +104,11 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     `scantxoutset`/`sendrawtransaction`/`getrawtransaction` + `BtcWithdrawalCoordinator` (UTXO selection, fee,
     change) assemble the unsigned tx; the offline signer (BIP-143 + `BtcTxSerializer` BIP-144, test sources)
     finalises; the coordinator broadcasts + reconciles → CONFIRMED (`app.payments.btc-rpc-enabled`); verified
-    end-to-end against a real `bitcoind -regtest` (Testcontainers). Still **online + node-dependent**: TRON
-    `raw_data` assembly + TronGrid broadcast. Remaining for ETH: on-chain ERC-20 token-deploy IT + a
-    reconciliation scheduler. Remaining for BTC: legacy/Taproot recipient scripts, multi-address treasuries,
+    end-to-end against a real `bitcoind -regtest` (Testcontainers). ✅ **Reconcile scheduler landed**
+    (`WithdrawalReconcileScheduler`, `app.payments.withdrawal-reconcile-enabled`) — periodically moves BROADCAST
+    → CONFIRMED/FAILED via the coordinators, idempotent/cluster-safe. ✅ **ERC-20 verified on-chain** (geth
+    --dev IT deploys a real token + transfers). Still **online + node-dependent**: TRON `raw_data` assembly +
+    TronGrid broadcast. Remaining for BTC: legacy/Taproot recipient scripts, multi-address treasuries,
     `estimatesmartfee`. Pair with a small hot float (the
     **per-tx / 24h limits + cooling period already landed**, `app.payments.max-withdrawal-per-*` /
     `withdrawal-cooling-period-minutes`); optional 2-of-N moderator (4-eyes) is intentionally not done.

@@ -164,6 +164,10 @@ public class AppProperties {
         /** Minimum confirmations a UTXO needs before the coordinator will spend it. */
         private int btcMinUtxoConfirmations = 1;
 
+        /** Periodically reconcile BROADCAST withdrawals against the chain via the ETH/BTC coordinators
+         *  (→ CONFIRMED / FAILED). Idempotent, so safe on every node. Inert unless payments are enabled. */
+        private boolean withdrawalReconcileEnabled = false;
+
         /** KYC media backend: {@code filesystem} (default) or {@code s3} (S3/MinIO object storage). */
         private String kycStorageType = "filesystem";
 
@@ -436,6 +440,14 @@ public class AppProperties {
 
         public void setBtcMinUtxoConfirmations(int btcMinUtxoConfirmations) {
             this.btcMinUtxoConfirmations = btcMinUtxoConfirmations;
+        }
+
+        public boolean isWithdrawalReconcileEnabled() {
+            return withdrawalReconcileEnabled;
+        }
+
+        public void setWithdrawalReconcileEnabled(boolean withdrawalReconcileEnabled) {
+            this.withdrawalReconcileEnabled = withdrawalReconcileEnabled;
         }
 
         public String getKycStorageType() {
