@@ -68,6 +68,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verified (`WithdrawalSigningHandoffIT`, provider=offline-pool): approve leaves it APPROVED → export intent →
   record broadcast → BROADCAST; export/record on a non-APPROVED request rejected. Full suite green (1023).
 
+### 💸 Withdrawal moderation UI (`/admin/withdrawals`, Angular)
+- Admin-guarded page listing withdrawals awaiting moderation with **Approve / Reject** (inline reason), and
+  the offline-signer handoff for approved offline-pool withdrawals: **Export** (shows the signer-ready intent
+  to sign with `OfflineWithdrawalSigner`) and **Broadcast** (record the tx id) → BROADCAST. `AdminWithdrawalService`
+  wraps `GET /v1/admin/wallet/withdrawals` + approve/reject/unsigned/broadcast. Nav link 💸 Withdrawals (admins).
+- Built and verified with `npm run build` (the new lazy chunk compiles). Cross-session visibility of APPROVED
+  withdrawals would want a backend `?status=` filter (follow-up); the page updates rows in place after each
+  action.
+
 ### 💸 Manual withdrawal approval (moderator gate)
 - Flag-gated `app.payments.withdrawal-approval-required` (default **off** — immediate-broadcast behaviour is
   unchanged). When **on**, `requestWithdrawal` debits the balance and parks the request in

@@ -100,6 +100,15 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     title: 'Admin — KYC review',
   },
+  {
+    path: 'admin/withdrawals',
+    loadComponent: () =>
+      import('./admin/admin-withdrawal-list/admin-withdrawal-list.component').then(
+        (m) => m.AdminWithdrawalListComponent
+      ),
+    canActivate: [adminGuard],
+    title: 'Admin — Withdrawals',
+  },
 
   {
     path: 'start',
