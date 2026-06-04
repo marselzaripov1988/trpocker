@@ -80,19 +80,20 @@ public class KycVerificationService {
         avScanner.scan(content); // rejects infected uploads (no-op unless AV scanning is enabled)
 
         String sha = sha256Hex(content); // over the plaintext, before any encryption
-        Optional<String> activeKeyId = keyProvider.activeKeyId();
-        byte[] toStore = activeKeyId
-                .map(id -> KycCrypto.encrypt(content, keyProvider.resolveKey(id)))
+        Optional<KycKeyProvider.DataKey> dataKey = keyProvider.newDataKey();
+        byte[] toStore = dataKey
+                .map(dk -> KycCrypto.encrypt(content, dk.key()))
                 .orElse(content);
+        Optional<String> keyId = dataKey.map(KycKeyProvider.DataKey::keyId);
 
         String storageKey = UUID.randomUUID().toString();
         storage.store(storageKey, toStore);
 
         documentRepository.save(new KycDocument(userId, sanitize(originalFilename), contentType,
-                content.length, sha, storageKey, activeKeyId.isPresent(), activeKeyId.orElse(null)));
+                content.length, sha, storageKey, dataKey.isPresent(), keyId.orElse(null)));
         KycStatus status = walletService.submitKyc(userId); // → PENDING (unless already VERIFIED)
         log.info("KYC verification video stored for user {} ({} bytes, {}, keyId={})",
-                userId, content.length, contentType, activeKeyId.orElse("none"));
+                userId, content.length, contentType, keyId.orElse("none"));
         return status;
     }
 

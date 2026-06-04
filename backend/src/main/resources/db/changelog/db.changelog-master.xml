@@ -18,5 +18,6 @@
     <include file="db/changelog/06-kyc-document-encryption.xml"/>
     <include file="db/changelog/07-withdrawal-approval.xml"/>
     <include file="db/changelog/08-kyc-key-id.xml"/>
+    <include file="db/changelog/09-kyc-key-id-widen.xml"/>
 
 </databaseChangeLog>

@@ -159,6 +159,19 @@ public class AppProperties {
         /** Key id (from the keyring / legacy "default") used to encrypt new KYC uploads. */
         private String kycActiveKeyId = "";
 
+        /** Which KYC key provider supplies encryption keys: "config" (the keyring above) or "kms" (AWS KMS
+         *  envelope encryption — the data key is minted/unwrapped by KMS and never lives in config). */
+        private String kycKeyProvider = "config";
+
+        /** AWS KMS (when {@code kycKeyProvider=kms}): the CMK key id/arn/alias and credentials/region. The
+         *  endpoint defaults to {@code https://kms.<region>.amazonaws.com} but can be overridden (e.g. for a
+         *  local KMS-compatible server / LocalStack). */
+        private String kmsKeyId = "";
+        private String kmsRegion = "us-east-1";
+        private String kmsAccessKey = "";
+        private String kmsSecretKey = "";
+        private String kmsEndpoint = "";
+
         /** Scan KYC uploads for malware via a ClamAV daemon (clamd, INSTREAM) before storing. */
         private boolean kycAvScanEnabled = false;
         private String clamavHost = "localhost";
@@ -357,6 +370,54 @@ public class AppProperties {
 
         public void setKycActiveKeyId(String kycActiveKeyId) {
             this.kycActiveKeyId = kycActiveKeyId;
+        }
+
+        public String getKycKeyProvider() {
+            return kycKeyProvider;
+        }
+
+        public void setKycKeyProvider(String kycKeyProvider) {
+            this.kycKeyProvider = kycKeyProvider;
+        }
+
+        public String getKmsKeyId() {
+            return kmsKeyId;
+        }
+
+        public void setKmsKeyId(String kmsKeyId) {
+            this.kmsKeyId = kmsKeyId;
+        }
+
+        public String getKmsRegion() {
+            return kmsRegion;
+        }
+
+        public void setKmsRegion(String kmsRegion) {
+            this.kmsRegion = kmsRegion;
+        }
+
+        public String getKmsAccessKey() {
+            return kmsAccessKey;
+        }
+
+        public void setKmsAccessKey(String kmsAccessKey) {
+            this.kmsAccessKey = kmsAccessKey;
+        }
+
+        public String getKmsSecretKey() {
+            return kmsSecretKey;
+        }
+
+        public void setKmsSecretKey(String kmsSecretKey) {
+            this.kmsSecretKey = kmsSecretKey;
+        }
+
+        public String getKmsEndpoint() {
+            return kmsEndpoint;
+        }
+
+        public void setKmsEndpoint(String kmsEndpoint) {
+            this.kmsEndpoint = kmsEndpoint;
         }
 
         public boolean isKycAvScanEnabled() {

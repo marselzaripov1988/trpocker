@@ -50,7 +50,9 @@ public class KycDocument {
     private boolean encrypted;
 
     /** Which keyring key id encrypted this document (for rotation); null for plaintext or legacy "default". */
-    @Column(name = "encryption_key_id", length = 64)
+    // Wide enough for a config keyring id ("default", "2026q2", ...) or a KMS-wrapped data key
+    // ("kms:" + base64(CiphertextBlob), ~250 chars).
+    @Column(name = "encryption_key_id", length = 1024)
     private String encryptionKeyId;
 
     @Column(name = "uploaded_at", nullable = false)

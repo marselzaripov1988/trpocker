@@ -70,8 +70,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     (`KycRetentionScheduler`) + **right-to-erasure** endpoint landed. ✅ **Key rotation** — versioned keyring
     + key id per document (`kyc_documents.encryption_key_id`); new uploads use the active key, old docs stay
     decryptable; `KycKeyProvider` is the drop-in seam for a KMS. ✅ **AV scanning** — clamd `INSTREAM`, infected
-    → 422, unreachable → fail-closed.) Remaining: a **live KMS-backed `KycKeyProvider`** (AWS KMS via the
-    existing SigV4 signer) so the key never sits in config at all.
+    → 422, unreachable → fail-closed.) ✅ **Live KMS-backed `KycKeyProvider`** — `KmsKycKeyProvider` does AWS
+    KMS envelope encryption (GenerateDataKey/Decrypt, SigV4 via the existing signer, no AWS SDK) so the raw key
+    never sits in config. Remaining: a one-off **re-encrypt/migration job** when switching an existing
+    deployment from the config keyring to KMS (KMS can't resolve old keyring ids).
     (✅ **S3/MinIO object storage** backend landed — `kyc-storage-type=s3`, hand-rolled SigV4, no AWS SDK,
     verified vs the official SigV4 vector + a MinIO round-trip.)
   - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**

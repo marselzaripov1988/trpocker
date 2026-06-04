@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Widen kyc_documents.encryption_key_id from varchar(64) to varchar(1024): a config keyring id is short,
+      but the KMS provider records the CMK-wrapped data key inline ("kms:" + base64(CiphertextBlob), ~250
+      chars). Postgres-only; H2 tests regenerate from the entity. Idempotent via columnExists.
+    -->
+    <changeSet id="kyc-004-encryption-key-id-widen" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <columnExists tableName="kyc_documents" columnName="encryption_key_id"/>
+        </preConditions>
+        <modifyDataType tableName="kyc_documents" columnName="encryption_key_id" newDataType="varchar(1024)"/>
+    </changeSet>
+
+</databaseChangeLog>

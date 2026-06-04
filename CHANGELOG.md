@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔐 Live AWS-KMS-backed KYC key provider (envelope encryption, no AWS SDK)
+- `KmsKycKeyProvider` is a drop-in `KycKeyProvider` (selected by `app.payments.kyc-key-provider=kms`) that uses
+  **AWS KMS envelope encryption**: each upload gets a fresh AES-256 data key from `GenerateDataKey`, the
+  plaintext key encrypts the video and is discarded, and the **CMK-wrapped data key** is recorded as the
+  document's key id (`kms:` + base64(CiphertextBlob)). Reads unwrap it with `Decrypt`. The raw key never lives
+  in config — only the CMK id + IAM credentials do.
+- Talks to the KMS JSON API directly over a `RestClient`, **SigV4-signed via the existing `AwsV4Signer`** (no
+  AWS SDK → the offline build adds no dependency), the same approach as the S3/MinIO storage backend.
+- The envelope model evolved the `KycKeyProvider` seam to mint a per-document `DataKey` (key + id);
+  `ConfigKycKeyProvider` keeps the config-keyring behaviour. `kyc_documents.encryption_key_id` widened to
+  `varchar(1024)` (changeset 09) to hold the wrapped data key.
+- Verified against a **fake in-test KMS** (`com.sun.net.httpserver`): envelope round-trip, SigV4 `Authorization`
+  + `X-Amz-Target` on the wire, non-KMS key ids rejected, missing CMK id rejected. Migration caveat documented:
+  switching an environment to KMS leaves pre-existing config-encrypted documents unreadable (re-encrypt first).
+- Verified on H2 + a fresh two-node Postgres cluster (10 changesets, `encryption_key_id varchar(1024)`,
+  `ddl-auto=validate` passes on both). Full suite green (1049).
+
 ### 🔐 KYC encryption key rotation (key-id per document) + AV scan of uploads
 - KYC videos can now be encrypted under a **versioned keyring** (`app.payments.kyc-encryption-keys.<id>` +
   `app.payments.kyc-active-key-id`) instead of a single static key. Each document records the **key id** it was

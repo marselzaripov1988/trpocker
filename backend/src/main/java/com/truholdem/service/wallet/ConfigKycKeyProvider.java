@@ -3,6 +3,7 @@ package com.truholdem.service.wallet;
 import java.util.Base64;
 import java.util.Optional;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.truholdem.config.AppProperties;
@@ -11,9 +12,11 @@ import com.truholdem.config.AppProperties;
  * KYC key provider backed by the config keyring ({@code app.payments.kyc-encryption-keys} + active id), with
  * backward compatibility for the legacy single key (exposed as id {@code "default"}). New uploads use the
  * active key id; reads resolve whichever key id the document recorded — so rotating keys (add a new key, flip
- * the active id) leaves older documents decryptable.
+ * the active id) leaves older documents decryptable. The default provider (unless
+ * {@code app.payments.kyc-key-provider=kms}).
  */
 @Component
+@ConditionalOnProperty(name = "app.payments.kyc-key-provider", havingValue = "config", matchIfMissing = true)
 public class ConfigKycKeyProvider implements KycKeyProvider {
 
     /** Key id assigned to the legacy single-key config (and to documents predating per-document key ids). */
@@ -26,6 +29,11 @@ public class ConfigKycKeyProvider implements KycKeyProvider {
     }
 
     @Override
+    public Optional<DataKey> newDataKey() {
+        return activeKeyId().map(id -> new DataKey(resolveKey(id), id));
+    }
+
+    /** Key id used to encrypt new uploads, or empty if encryption is disabled. */
     public Optional<String> activeKeyId() {
         AppProperties.Payments p = appProperties.getPayments();
         String active = p.getKycActiveKeyId();
