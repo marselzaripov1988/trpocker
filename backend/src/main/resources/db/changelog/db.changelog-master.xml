@@ -17,5 +17,6 @@
     <include file="db/changelog/05-kyc-documents.xml"/>
     <include file="db/changelog/06-kyc-document-encryption.xml"/>
     <include file="db/changelog/07-withdrawal-approval.xml"/>
+    <include file="db/changelog/08-kyc-key-id.xml"/>
 
 </databaseChangeLog>

@@ -26,6 +26,7 @@ import com.truholdem.model.KycStatus;
 import com.truholdem.model.User;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletExceptions.InsufficientFundsException;
+import com.truholdem.service.wallet.WalletExceptions.KycMediaRejectedException;
 import com.truholdem.service.wallet.WalletExceptions.KycRequiredException;
 import com.truholdem.service.wallet.WalletExceptions.PaymentsDisabledException;
 import com.truholdem.service.wallet.WalletExceptions.WithdrawalLimitExceededException;
@@ -106,6 +107,9 @@ public class WalletController {
             return ResponseEntity.ok(new KycStatusResponse(status));
         } catch (PaymentsDisabledException e) {
             return paymentsDisabled();
+        } catch (KycMediaRejectedException e) {
+            return ResponseEntity.unprocessableEntity()
+                    .body(new ErrorResponse("KYC_MEDIA_REJECTED", e.getMessage()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new ErrorResponse("UPLOAD_FAILED", "Could not read the uploaded file"));

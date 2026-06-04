@@ -49,4 +49,11 @@ public final class WalletExceptions {
             super(message);
         }
     }
+
+    /** A KYC upload was rejected (e.g. flagged by the AV scan). */
+    public static class KycMediaRejectedException extends RuntimeException {
+        public KycMediaRejectedException(String message) {
+            super(message);
+        }
+    }
 }

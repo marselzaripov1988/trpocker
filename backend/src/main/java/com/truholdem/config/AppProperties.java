@@ -147,8 +147,22 @@ public class AppProperties {
         /** Max size (bytes) of a KYC verification upload. Default 50 MB. */
         private long kycMaxUploadBytes = 52_428_800L;
 
-        /** Base64 AES key (16/24/32 bytes) encrypting KYC videos at rest. Empty = store plaintext. */
+        /** Legacy single base64 AES key encrypting KYC videos at rest. Empty = plaintext. Superseded by the
+         *  keyring below (kept for backward compatibility — exposed as key id "default"). */
         private String kycEncryptionKey = "";
+
+        /** Versioned KYC encryption keyring: key id → base64 AES key. New uploads use {@code kycActiveKeyId},
+         *  and each document records the key id it was encrypted with, so old keys still decrypt after a
+         *  rotation. (Seam for a KMS-backed key provider — a drop-in replacement for this config map.) */
+        private Map<String, String> kycEncryptionKeys = new HashMap<>();
+
+        /** Key id (from the keyring / legacy "default") used to encrypt new KYC uploads. */
+        private String kycActiveKeyId = "";
+
+        /** Scan KYC uploads for malware via a ClamAV daemon (clamd, INSTREAM) before storing. */
+        private boolean kycAvScanEnabled = false;
+        private String clamavHost = "localhost";
+        private int clamavPort = 3310;
 
         /** GDPR retention: delete KYC verification media older than this many days. 0 = never auto-delete. */
         private int kycRetentionDays = 30;
@@ -327,6 +341,46 @@ public class AppProperties {
 
         public void setKycEncryptionKey(String kycEncryptionKey) {
             this.kycEncryptionKey = kycEncryptionKey;
+        }
+
+        public Map<String, String> getKycEncryptionKeys() {
+            return kycEncryptionKeys;
+        }
+
+        public void setKycEncryptionKeys(Map<String, String> kycEncryptionKeys) {
+            this.kycEncryptionKeys = kycEncryptionKeys;
+        }
+
+        public String getKycActiveKeyId() {
+            return kycActiveKeyId;
+        }
+
+        public void setKycActiveKeyId(String kycActiveKeyId) {
+            this.kycActiveKeyId = kycActiveKeyId;
+        }
+
+        public boolean isKycAvScanEnabled() {
+            return kycAvScanEnabled;
+        }
+
+        public void setKycAvScanEnabled(boolean kycAvScanEnabled) {
+            this.kycAvScanEnabled = kycAvScanEnabled;
+        }
+
+        public String getClamavHost() {
+            return clamavHost;
+        }
+
+        public void setClamavHost(String clamavHost) {
+            this.clamavHost = clamavHost;
+        }
+
+        public int getClamavPort() {
+            return clamavPort;
+        }
+
+        public void setClamavPort(int clamavPort) {
+            this.clamavPort = clamavPort;
         }
 
         public int getKycRetentionDays() {

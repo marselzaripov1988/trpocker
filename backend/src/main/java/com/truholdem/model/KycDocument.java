@@ -45,9 +45,13 @@ public class KycDocument {
     @Column(name = "storage_key", nullable = false, length = 128)
     private String storageKey;
 
-    /** Whether the on-disk bytes are AES-GCM encrypted (sha256 is over the original plaintext either way). */
+    /** Whether the stored bytes are AES-GCM encrypted (sha256 is over the original plaintext either way). */
     @Column(nullable = false)
     private boolean encrypted;
+
+    /** Which keyring key id encrypted this document (for rotation); null for plaintext or legacy "default". */
+    @Column(name = "encryption_key_id", length = 64)
+    private String encryptionKeyId;
 
     @Column(name = "uploaded_at", nullable = false)
     private Instant uploadedAt;
@@ -56,7 +60,7 @@ public class KycDocument {
     }
 
     public KycDocument(UUID userId, String originalFilename, String contentType, long sizeBytes,
-            String sha256, String storageKey, boolean encrypted) {
+            String sha256, String storageKey, boolean encrypted, String encryptionKeyId) {
         this.userId = userId;
         this.originalFilename = originalFilename;
         this.contentType = contentType;
@@ -64,6 +68,7 @@ public class KycDocument {
         this.sha256 = sha256;
         this.storageKey = storageKey;
         this.encrypted = encrypted;
+        this.encryptionKeyId = encryptionKeyId;
     }
 
     @PrePersist
@@ -101,6 +106,10 @@ public class KycDocument {
 
     public boolean isEncrypted() {
         return encrypted;
+    }
+
+    public String getEncryptionKeyId() {
+        return encryptionKeyId;
     }
 
     public Instant getUploadedAt() {

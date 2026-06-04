@@ -4,7 +4,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -41,15 +40,20 @@ public class KycVerificationService {
     private final WalletService walletService;
     private final AppProperties appProperties;
     private final KycStorage storage;
+    private final KycKeyProvider keyProvider;
+    private final com.truholdem.service.wallet.av.KycAvScanner avScanner;
 
     public KycVerificationService(KycDocumentRepository documentRepository,
             KycRecordRepository kycRecordRepository, WalletService walletService,
-            AppProperties appProperties, KycStorage storage) {
+            AppProperties appProperties, KycStorage storage, KycKeyProvider keyProvider,
+            com.truholdem.service.wallet.av.KycAvScanner avScanner) {
         this.documentRepository = documentRepository;
         this.kycRecordRepository = kycRecordRepository;
         this.walletService = walletService;
         this.appProperties = appProperties;
         this.storage = storage;
+        this.keyProvider = keyProvider;
+        this.avScanner = avScanner;
     }
 
     /** A loaded KYC document for moderator review: the file bytes + how to serve them. */
@@ -73,19 +77,22 @@ public class KycVerificationService {
         if (contentType == null || !contentType.toLowerCase().startsWith("video/")) {
             throw new IllegalArgumentException("KYC verification upload must be a video; got " + contentType);
         }
+        avScanner.scan(content); // rejects infected uploads (no-op unless AV scanning is enabled)
 
         String sha = sha256Hex(content); // over the plaintext, before any encryption
-        Optional<byte[]> key = encryptionKey();
-        byte[] toStore = key.map(k -> KycCrypto.encrypt(content, k)).orElse(content);
+        Optional<String> activeKeyId = keyProvider.activeKeyId();
+        byte[] toStore = activeKeyId
+                .map(id -> KycCrypto.encrypt(content, keyProvider.resolveKey(id)))
+                .orElse(content);
 
         String storageKey = UUID.randomUUID().toString();
         storage.store(storageKey, toStore);
 
         documentRepository.save(new KycDocument(userId, sanitize(originalFilename), contentType,
-                content.length, sha, storageKey, key.isPresent()));
+                content.length, sha, storageKey, activeKeyId.isPresent(), activeKeyId.orElse(null)));
         KycStatus status = walletService.submitKyc(userId); // → PENDING (unless already VERIFIED)
-        log.info("KYC verification video stored for user {} ({} bytes, {}, encrypted={})",
-                userId, content.length, contentType, key.isPresent());
+        log.info("KYC verification video stored for user {} ({} bytes, {}, keyId={})",
+                userId, content.length, contentType, activeKeyId.orElse("none"));
         return status;
     }
 
@@ -95,9 +102,9 @@ public class KycVerificationService {
         return documentRepository.findFirstByUserIdOrderByUploadedAtDesc(userId).map(doc -> {
             byte[] bytes = storage.load(doc.getStorageKey());
             if (doc.isEncrypted()) {
-                byte[] key = encryptionKey().orElseThrow(() -> new IllegalStateException(
-                        "KYC document " + doc.getId() + " is encrypted but no key is configured"));
-                bytes = KycCrypto.decrypt(bytes, key);
+                String keyId = doc.getEncryptionKeyId() != null
+                        ? doc.getEncryptionKeyId() : ConfigKycKeyProvider.LEGACY_KEY_ID;
+                bytes = KycCrypto.decrypt(bytes, keyProvider.resolveKey(keyId));
             }
             return new LoadedDocument(bytes, doc.getContentType(), doc.getOriginalFilename());
         });
@@ -143,20 +150,6 @@ public class KycVerificationService {
             log.warn("Failed to delete KYC blob for {} — removing the DB row anyway", doc.getId(), e);
         }
         documentRepository.delete(doc);
-    }
-
-    /** Configured AES key bytes for at-rest encryption, or empty if not set. */
-    private Optional<byte[]> encryptionKey() {
-        String b64 = appProperties.getPayments().getKycEncryptionKey();
-        if (b64 == null || b64.isBlank()) {
-            return Optional.empty();
-        }
-        byte[] key = Base64.getDecoder().decode(b64.trim());
-        if (key.length != 16 && key.length != 24 && key.length != 32) {
-            throw new IllegalStateException("app.payments.kyc-encryption-key must be a base64 AES key of "
-                    + "16/24/32 bytes; got " + key.length);
-        }
-        return Optional.of(key);
     }
 
     /** Retention cutoff = now minus the configured retention days (or empty if retention is disabled). */

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔐 KYC encryption key rotation (key-id per document) + AV scan of uploads
+- KYC videos can now be encrypted under a **versioned keyring** (`app.payments.kyc-encryption-keys.<id>` +
+  `app.payments.kyc-active-key-id`) instead of a single static key. Each document records the **key id** it was
+  encrypted with (`kyc_documents.encryption_key_id`, changeset 08), so rotating keys is just *add a new key →
+  flip the active id* — new uploads use the new key while older documents stay decryptable under their original
+  key. The legacy single key (`kyc-encryption-key`) is still honoured, exposed internally as key id `default`.
+- New `KycKeyProvider` seam (`ConfigKycKeyProvider` is the config-backed impl) is the **drop-in point for a real
+  KMS**: a future KMS-backed provider plugs in without touching callers (reuses the existing `AwsV4Signer`/SigV4
+  for AWS KMS).
+- **Anti-virus scan** of uploads via a ClamAV daemon (clamd `INSTREAM` over a raw socket, no client dependency).
+  Enabled with `app.payments.kyc-av-scan-enabled=true`; an infected upload is rejected with **HTTP 422
+  (`KYC_MEDIA_REJECTED`)** and an unreachable/erroring clamd **fails closed** (the upload is not stored). Default
+  is a no-op scanner, so behaviour is unchanged unless enabled.
+- Verified on H2 + a fresh two-node Postgres cluster (9 changesets, `encryption_key_id varchar(64)`,
+  `ddl-auto=validate` passes on both nodes). Full suite green (1045). Live AWS-KMS-backed provider is a
+  documented follow-up.
+
 ### 🔑 BTC Taproot key-path signer — BIP-340 Schnorr + BIP-341 tweak (pure Java)
 - `Schnorr` implements **BIP-340** signing + verification over secp256k1 (tagged hashes, even-Y nonce, x-only
   keys), and `TaprootSigner` applies the **BIP-341** key-path tweak
