@@ -31,6 +31,18 @@ default; signing always stays offline (signers live in test sources, never in th
 - [ ] EIP-1559 (type-2) txs (`maxFeePerGas`/`maxPriorityFeePerGas`) — today legacy gas-price only.
 - [ ] Surface `contractAddress` on `EthRpcClient.Receipt` (currently read via raw RPC only in tests).
 
+## TODO — air-gapped signer ergonomics (QR transfer)
+Replace the USB "sneakernet" between the online admin UI and the offline signer with QR codes (no USB =
+no infected-stick vector; camera/screen only).
+- [ ] Admin UI: render the exported unsigned intent (`…/{id}/eth-unsigned` / `…/btc-unsigned` / `…/unsigned`)
+      as a **QR code** on `/admin/withdrawals` for the operator to scan on the offline machine.
+- [ ] Offline signer: accept the intent via QR scan (camera) instead of CLI args; show `from`/`amount` for
+      visual confirmation before signing (guards against a tampered intent).
+- [ ] Read the signed raw-tx back into the UI via QR (camera) → `…/eth-broadcast` / `…/btc-broadcast`.
+- [ ] **Chunking for large payloads**: BTC PSBTs / multi-input txs exceed a single QR — use an animated /
+      multipart QR scheme (e.g. BBQr or BC-UR) with sequence + checksum, not a hand-rolled split.
+- [ ] Keep USB/file transfer as a documented fallback.
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.
