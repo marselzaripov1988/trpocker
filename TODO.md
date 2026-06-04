@@ -47,7 +47,7 @@ no infected-stick vector; camera/screen only).
 Backend is fully wired; frontend was admin-only. User wallet dashboard now started.
 - [x] **User wallet dashboard** (`/wallet`) — balances + refresh, deposit address per asset (copy), withdrawal
       form, withdrawal history with status badges. Nav link gated by auth.
-- [ ] Deposit address as a **QR code** (ties into the air-gap QR TODO; needs a QR lib or inline generator).
+- [x] Deposit address as a **QR code** (`qrcode` lib → data-URL `<img>` on `/wallet`).
 - [ ] KYC as a guided flow on `/wallet` (status → upload → pending → verified), not just the standalone page.
 - [ ] Admin: **status filter** dropdown on `/admin/withdrawals` (backend already accepts `?status=`).
 - [ ] Admin: **chain-specific signing workflow** UI (eth-/btc-unsigned → broadcast → reconcile/confirmation).

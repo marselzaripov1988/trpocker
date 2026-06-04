@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import * as QRCode from 'qrcode';
 import {
   WalletService, WalletBalance, DepositAddress, Withdrawal, CreateWithdrawal
 } from '../services/wallet.service';
@@ -60,8 +61,13 @@ const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
         @if (deposit(); as d) {
           <div class="address-box" data-cy="deposit-address">
             <p class="muted">Send only <strong>{{ d.asset }}</strong> ({{ d.network }}) to this address:</p>
-            <code class="addr">{{ d.address }}</code>
-            <button class="btn-ghost" (click)="copy(d.address)">{{ copied() ? 'Copied ✓' : 'Copy' }}</button>
+            @if (qrDataUrl(); as qr) {
+              <img class="qr" [src]="qr" alt="Deposit address QR code" width="160" height="160" />
+            }
+            <div class="addr-row">
+              <code class="addr">{{ d.address }}</code>
+              <button class="btn-ghost" (click)="copy(d.address)">{{ copied() ? 'Copied ✓' : 'Copy' }}</button>
+            </div>
           </div>
         }
         @if (depositError()) { <div class="alert error">{{ depositError() }}</div> }
@@ -141,7 +147,9 @@ const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
     .balance-list li { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #293548; }
     .asset { font-weight: 600; } .net { color: #94a3b8; font-weight: 400; }
     .amount { font-variant-numeric: tabular-nums; }
-    .address-box { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .address-box { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .addr-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .qr { background: #fff; padding: 6px; border-radius: 8px; align-self: flex-start; }
     .addr { background: #0f172a; padding: 0.4rem 0.6rem; border-radius: 6px; word-break: break-all; }
     .history { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     .history th, .history td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid #293548; }
@@ -165,6 +173,7 @@ export class WalletDashboardComponent implements OnInit {
   readonly balances = signal<WalletBalance[]>([]);
   readonly withdrawals = signal<Withdrawal[]>([]);
   readonly deposit = signal<DepositAddress | null>(null);
+  readonly qrDataUrl = signal<string | null>(null);
   readonly loadingBalances = signal(false);
   readonly loadingWithdrawals = signal(false);
   readonly loadingDeposit = signal(false);
@@ -198,10 +207,17 @@ export class WalletDashboardComponent implements OnInit {
   getDepositAddress(): void {
     this.loadingDeposit.set(true);
     this.deposit.set(null);
+    this.qrDataUrl.set(null);
     this.depositError.set(null);
     this.copied.set(false);
     this.wallet.depositAddress(this.depositAsset).subscribe({
-      next: d => { this.deposit.set(d); this.loadingDeposit.set(false); },
+      next: d => {
+        this.deposit.set(d);
+        this.loadingDeposit.set(false);
+        QRCode.toDataURL(d.address, { margin: 1, width: 160 })
+          .then(url => this.qrDataUrl.set(url))
+          .catch(() => this.qrDataUrl.set(null));
+      },
       error: err => { this.depositError.set(this.msg(err)); this.loadingDeposit.set(false); }
     });
   }
