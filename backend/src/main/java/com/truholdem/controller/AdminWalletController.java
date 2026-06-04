@@ -24,6 +24,7 @@ import com.truholdem.dto.wallet.AdminWithdrawalDto;
 import com.truholdem.dto.wallet.BroadcastWithdrawalRequest;
 import com.truholdem.dto.wallet.KycDecisionRequest;
 import com.truholdem.dto.wallet.KycPendingDto;
+import com.truholdem.dto.wallet.KycReEncryptResult;
 import com.truholdem.dto.wallet.KycStatusResponse;
 import com.truholdem.dto.wallet.PoolImportRequest;
 import com.truholdem.dto.wallet.PoolImportResponse;
@@ -106,6 +107,12 @@ public class AdminWalletController {
     @Operation(summary = "GDPR erasure: delete all of a user's KYC verification media")
     public ResponseEntity<Map<String, Integer>> eraseKyc(@PathVariable UUID userId) {
         return ResponseEntity.ok(Map.of("erased", kycVerificationService.eraseForUser(userId)));
+    }
+
+    @PostMapping("/kyc/re-encrypt")
+    @Operation(summary = "Re-encrypt all KYC media under the active key/provider (rotation / KMS migration)")
+    public ResponseEntity<KycReEncryptResult> reEncryptKyc() {
+        return ResponseEntity.ok(kycVerificationService.reEncryptAll());
     }
 
     @GetMapping("/withdrawals")

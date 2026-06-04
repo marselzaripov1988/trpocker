@@ -18,6 +18,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import com.truholdem.config.TestConfig;
 import com.truholdem.config.TestSecurityConfig;
+import com.truholdem.dto.wallet.KycReEncryptResult;
 import com.truholdem.model.KycDocument;
 import com.truholdem.repository.KycDocumentRepository;
 import com.truholdem.service.wallet.KycKeyProvider;
@@ -98,5 +99,31 @@ class KycKeyRotationIT {
 
         assertThat(kyc.loadLatest(user).orElseThrow().content())
                 .as("decrypted with the recorded older key id").isEqualTo(video);
+    }
+
+    @Test
+    @DisplayName("re-encryption migrates old-key docs onto the active key, decrypts, and is idempotent")
+    void reEncryptMigratesToActiveKey() {
+        UUID user = UUID.randomUUID();
+        byte[] video = fakeVideo();
+
+        String storageKey = UUID.randomUUID().toString();
+        byte[] k1Blob = KycCrypto.encrypt(video, keyProvider.resolveKey("k1"));
+        storage.store(storageKey, k1Blob);
+        documentRepository.save(new KycDocument(user, "old.mp4", "video/mp4",
+                video.length, "sha", storageKey, true, "k1"));
+
+        KycReEncryptResult first = kyc.reEncryptAll();
+        assertThat(first.reEncrypted()).isEqualTo(1);
+
+        KycDocument doc = documentRepository.findFirstByUserIdOrderByUploadedAtDesc(user).orElseThrow();
+        assertThat(doc.getEncryptionKeyId()).as("migrated to the active key").isEqualTo("k2");
+        assertThat(doc.isEncrypted()).isTrue();
+        assertThat(storage.load(storageKey)).as("re-encrypted on disk").isNotEqualTo(k1Blob);
+        assertThat(kyc.loadLatest(user).orElseThrow().content()).isEqualTo(video);
+
+        KycReEncryptResult second = kyc.reEncryptAll();
+        assertThat(second.reEncrypted()).as("already on the active key → nothing to do").isZero();
+        assertThat(second.skipped()).isEqualTo(1);
     }
 }

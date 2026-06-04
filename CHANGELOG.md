@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔁 KYC re-encryption sweep (key rotation / config→KMS migration)
+- `POST /v1/admin/wallet/kyc/re-encrypt` (ADMIN) re-encrypts every KYC document under the **currently-active
+  key/provider**: decrypt with the key the document recorded, re-encrypt with the active one, overwrite in
+  place, and update its `encryption_key_id`. Returns `{reEncrypted, skipped, total}`.
+- Two use cases: after rotating config keys it re-keys documents off the retired key (so the old key can be
+  dropped from the ring), and when migrating to KMS the active `KmsKycKeyProvider` re-wraps each document with
+  a fresh data key. To bridge providers, the sweep **falls back to the config keyring** to decrypt ids the
+  active provider can't resolve (so config→KMS works with the old keyring still present).
+- Safe by construction: a document already on the active key is **skipped** (idempotent — a second run does
+  nothing), and an encrypted document is **never silently downgraded to plaintext** if encryption is now
+  disabled. Verified on H2: an old-key (`k1`) document migrates to the active key (`k2`), still decrypts, the
+  on-disk bytes change, and a re-run is a no-op. Full suite green (1049).
+
 ### 🔐 Live AWS-KMS-backed KYC key provider (envelope encryption, no AWS SDK)
 - `KmsKycKeyProvider` is a drop-in `KycKeyProvider` (selected by `app.payments.kyc-key-provider=kms`) that uses
   **AWS KMS envelope encryption**: each upload gets a fresh AES-256 data key from `GenerateDataKey`, the

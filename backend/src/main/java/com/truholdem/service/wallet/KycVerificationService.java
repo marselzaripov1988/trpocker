@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.dto.wallet.KycPendingDto;
+import com.truholdem.dto.wallet.KycReEncryptResult;
 import com.truholdem.model.KycDocument;
 import com.truholdem.model.KycStatus;
 import com.truholdem.repository.KycDocumentRepository;
@@ -109,6 +110,59 @@ public class KycVerificationService {
             }
             return new LoadedDocument(bytes, doc.getContentType(), doc.getOriginalFilename());
         });
+    }
+
+    /**
+     * Re-encrypt every KYC document under the currently-active key/provider. Use after rotating config keys
+     * (re-keys documents off retired keys so the old keys can be dropped) or when migrating to KMS (the active
+     * KMS provider re-wraps each document with a fresh data key). A document is skipped if it is already on the
+     * active key, or if it is encrypted but encryption is now disabled (never silently downgrade to plaintext).
+     * Documents whose existing key id the active provider cannot resolve are decrypted via the config keyring
+     * as a fallback (covers config→KMS, where old ids are keyring ids).
+     */
+    @Transactional
+    public KycReEncryptResult reEncryptAll() {
+        List<KycDocument> all = documentRepository.findAll();
+        int reEncrypted = 0;
+        int skipped = 0;
+        for (KycDocument doc : all) {
+            Optional<KycKeyProvider.DataKey> target = keyProvider.newDataKey();
+            if (doc.isEncrypted() && target.isEmpty()) {
+                skipped++; // encryption disabled now — do not downgrade existing ciphertext to plaintext
+                continue;
+            }
+            if (doc.isEncrypted()
+                    && target.map(t -> t.keyId().equals(doc.getEncryptionKeyId())).orElse(false)) {
+                skipped++; // already on the active key (config keyring); KMS ids are unique so never match
+                continue;
+            }
+            byte[] blob = storage.load(doc.getStorageKey());
+            byte[] plaintext = doc.isEncrypted()
+                    ? KycCrypto.decrypt(blob, resolveExisting(doc.getEncryptionKeyId()))
+                    : blob;
+            byte[] toStore = target.map(t -> KycCrypto.encrypt(plaintext, t.key())).orElse(plaintext);
+            storage.store(doc.getStorageKey(), toStore); // overwrite in place (same storage key)
+            doc.applyReEncryption(target.isPresent(), target.map(KycKeyProvider.DataKey::keyId).orElse(null));
+            documentRepository.save(doc);
+            reEncrypted++;
+        }
+        log.info("KYC re-encryption: re-encrypted {}, skipped {} of {} document(s)",
+                reEncrypted, skipped, all.size());
+        return new KycReEncryptResult(reEncrypted, skipped, all.size());
+    }
+
+    /** Resolve a document's existing key, falling back to the config keyring when the active provider (e.g.
+     *  KMS) cannot resolve a legacy keyring id. */
+    private byte[] resolveExisting(String keyId) {
+        try {
+            return keyProvider.resolveKey(keyId);
+        } catch (RuntimeException primary) {
+            try {
+                return new ConfigKycKeyProvider(appProperties).resolveKey(keyId);
+            } catch (RuntimeException fallbackFailed) {
+                throw primary;
+            }
+        }
     }
 
     /** Pending KYC submissions (status PENDING with an uploaded document) awaiting moderator review. */

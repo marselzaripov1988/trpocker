@@ -78,6 +78,12 @@ public class KycDocument {
         this.uploadedAt = Instant.now();
     }
 
+    /** Re-point this document at freshly re-encrypted bytes (key rotation / provider migration). */
+    public void applyReEncryption(boolean encrypted, String encryptionKeyId) {
+        this.encrypted = encrypted;
+        this.encryptionKeyId = encryptionKeyId;
+    }
+
     public UUID getId() {
         return id;
     }

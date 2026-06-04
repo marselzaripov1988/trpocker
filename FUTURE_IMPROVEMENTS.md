@@ -72,8 +72,10 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     decryptable; `KycKeyProvider` is the drop-in seam for a KMS. ✅ **AV scanning** — clamd `INSTREAM`, infected
     → 422, unreachable → fail-closed.) ✅ **Live KMS-backed `KycKeyProvider`** — `KmsKycKeyProvider` does AWS
     KMS envelope encryption (GenerateDataKey/Decrypt, SigV4 via the existing signer, no AWS SDK) so the raw key
-    never sits in config. Remaining: a one-off **re-encrypt/migration job** when switching an existing
-    deployment from the config keyring to KMS (KMS can't resolve old keyring ids).
+    never sits in config. ✅ **Re-encrypt/migration sweep** — `POST /admin/wallet/kyc/re-encrypt` re-encrypts
+    all documents under the active key/provider (config rotation re-keys off retired keys; config→KMS migration
+    re-wraps via KMS, falling back to the config keyring to decrypt old ids). Idempotent; never downgrades
+    ciphertext to plaintext.
     (✅ **S3/MinIO object storage** backend landed — `kyc-storage-type=s3`, hand-rolled SigV4, no AWS SDK,
     verified vs the official SigV4 vector + a MinIO round-trip.)
   - Deposit confirmations threshold (credit only after N confirmations) and a **withdrawal-confirmed**
