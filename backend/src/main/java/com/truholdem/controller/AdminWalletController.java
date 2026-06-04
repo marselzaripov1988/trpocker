@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.wallet.AdminWithdrawalDto;
 import com.truholdem.dto.wallet.BroadcastWithdrawalRequest;
+import com.truholdem.dto.wallet.BtcBroadcastRequest;
+import com.truholdem.dto.wallet.BtcConfirmationDto;
+import com.truholdem.dto.wallet.BtcUnsignedTxDto;
 import com.truholdem.dto.wallet.EthBroadcastRequest;
 import com.truholdem.dto.wallet.EthConfirmationDto;
 import com.truholdem.dto.wallet.EthUnsignedTxDto;
@@ -39,6 +42,7 @@ import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.DepositAddressPoolService;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
+import com.truholdem.service.wallet.btc.BtcWithdrawalCoordinator;
 import com.truholdem.service.wallet.eth.EthWithdrawalCoordinator;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -65,14 +69,17 @@ public class AdminWalletController {
     private final KycVerificationService kycVerificationService;
     private final WalletService walletService;
     private final ObjectProvider<EthWithdrawalCoordinator> ethCoordinator;
+    private final ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator;
 
     public AdminWalletController(DepositAddressPoolService pool,
             KycVerificationService kycVerificationService, WalletService walletService,
-            ObjectProvider<EthWithdrawalCoordinator> ethCoordinator) {
+            ObjectProvider<EthWithdrawalCoordinator> ethCoordinator,
+            ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator) {
         this.pool = pool;
         this.kycVerificationService = kycVerificationService;
         this.walletService = walletService;
         this.ethCoordinator = ethCoordinator;
+        this.btcCoordinator = btcCoordinator;
     }
 
     @PostMapping("/deposit-pool/import")
@@ -198,6 +205,44 @@ public class AdminWalletController {
         EthWithdrawalCoordinator coordinator = ethCoordinator.getIfAvailable();
         if (coordinator == null) {
             throw new IllegalStateException("ETH RPC coordinator is disabled (app.payments.eth-rpc-enabled)");
+        }
+        return coordinator;
+    }
+
+    @GetMapping("/withdrawals/{id}/btc-unsigned")
+    @Operation(summary = "Assemble an unsigned BTC (P2WPKH) tx (UTXO selection + fee) for the offline signer")
+    public ResponseEntity<BtcUnsignedTxDto> btcUnsigned(@PathVariable UUID id) {
+        return ResponseEntity.ok(btcCoordinatorOrThrow().buildUnsigned(id));
+    }
+
+    @PostMapping("/withdrawals/{id}/btc-broadcast")
+    @Operation(summary = "Broadcast the offline-signed raw BTC tx and record its txid (→ BROADCAST)")
+    public ResponseEntity<AdminWithdrawalDto> btcBroadcast(@PathVariable UUID id,
+            @Valid @RequestBody BtcBroadcastRequest body) {
+        return ResponseEntity.ok(
+                AdminWithdrawalDto.from(btcCoordinatorOrThrow().broadcast(id, body.signedRawTx())));
+    }
+
+    @PostMapping("/withdrawals/{id}/btc-reconcile")
+    @Operation(summary = "Reconcile a broadcast BTC withdrawal against its confirmations (→ CONFIRMED)")
+    public ResponseEntity<AdminWithdrawalDto> btcReconcile(@PathVariable UUID id) {
+        return ResponseEntity.ok(AdminWithdrawalDto.from(btcCoordinatorOrThrow().reconcile(id)));
+    }
+
+    @GetMapping("/withdrawals/{id}/btc-confirmation")
+    @Operation(summary = "On-chain confirmation status of a broadcast BTC withdrawal's transaction")
+    public ResponseEntity<BtcConfirmationDto> btcConfirmation(@PathVariable UUID id) {
+        String txId = walletService.getWithdrawal(id).getTxId();
+        if (txId == null || txId.isBlank()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+        return ResponseEntity.ok(btcCoordinatorOrThrow().confirmation(txId));
+    }
+
+    private BtcWithdrawalCoordinator btcCoordinatorOrThrow() {
+        BtcWithdrawalCoordinator coordinator = btcCoordinator.getIfAvailable();
+        if (coordinator == null) {
+            throw new IllegalStateException("BTC RPC coordinator is disabled (app.payments.btc-rpc-enabled)");
         }
         return coordinator;
     }

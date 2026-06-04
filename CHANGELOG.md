@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ₿ Online BTC (P2WPKH) withdrawal coordinator (UTXO select → offline-sign → broadcast → confirm)
+- The BTC counterpart of the ETH coordinator. `BtcRpcClient` (pure `RestClient` + Jackson + HTTP-Basic, no
+  bitcoinj) scans the UTXO set for the treasury address (`scantxoutset` — no wallet import), broadcasts
+  (`sendrawtransaction`), and reads confirmations (`getrawtransaction`). `BtcWithdrawalCoordinator` selects
+  UTXOs, sizes the fee from a configurable sat/vByte rate, computes change (dust → fee), and assembles the
+  **unsigned** P2WPKH tx for the offline signer; then broadcasts the signed raw tx and reconciles
+  confirmations → CONFIRMED. `BtcScript` maps the network to its bech32 hrp (mainnet `bc` / testnet `tb` /
+  regtest `bcrt`) and decodes a P2WPKH address to its `scriptPubKey`.
+- **The private key never touches the server.** Signing (BIP-143) and the witness-tx serialization
+  (`BtcTxSerializer`, BIP-144) live in **test sources** — the server only assembles the unsigned tx and relays
+  the opaque signed hex. Admin endpoints: `GET …/withdrawals/{id}/btc-unsigned`, `POST …/btc-broadcast`,
+  `POST …/btc-reconcile`, `GET …/btc-confirmation`. Flag-gated (`app.payments.btc-rpc-enabled`, default off).
+- **Verified against a real `bitcoind -regtest` node** (Testcontainers): fund the treasury address from the
+  node wallet, select the UTXO + fee on the server, BIP-143-sign offline and serialize the witness tx,
+  broadcast, mine, reconcile to CONFIRMED, and assert the recipient received exactly the withdrawn amount
+  on-chain. Plus a `BtcScript` unit test vs the canonical BIP-173 address. Full suite green (1061).
+- Honest scope: native-SegWit P2WPKH end-to-end on-chain. Legacy/Taproot recipient scripts, multi-address
+  treasuries, `estimatesmartfee`, and a reconciliation scheduler are follow-ups; TRON is a separate slice.
+
 ### ⛓️ Online ETH/ERC-20 withdrawal coordinator (assemble → offline-sign → broadcast → confirm)
 - The online half of an ETH/ERC-20 withdrawal, the piece the air-gapped signer can't do: `EthRpcClient` (a
   pure `RestClient` + Jackson JSON-RPC client, no web3j) reads live node state (`eth_chainId`, `eth_gasPrice`,

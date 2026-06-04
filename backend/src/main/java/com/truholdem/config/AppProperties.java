@@ -147,6 +147,23 @@ public class AppProperties {
         /** ERC-20 contract address per asset name (e.g. {@code USDT_ERC20 -> 0x...}). */
         private Map<String, String> erc20Contracts = new HashMap<>();
 
+        /** Online BTC (P2WPKH) withdrawal coordinator: selects UTXOs + fee from a Bitcoin Core node, assembles
+         *  an unsigned tx for the offline signer, broadcasts the signed raw tx, and reconciles confirmations.
+         *  Signing stays offline. Inert unless {@code btcRpcEnabled}. */
+        private boolean btcRpcEnabled = false;
+        /** Bitcoin Core JSON-RPC endpoint (e.g. http://bitcoind:18443) + HTTP-Basic credentials. */
+        private String btcRpcUrl = "";
+        private String btcRpcUser = "";
+        private String btcRpcPassword = "";
+        /** Network selecting the bech32 hrp: {@code mainnet} (bc), {@code testnet} (tb), {@code regtest} (bcrt). */
+        private String btcNetwork = "mainnet";
+        /** The treasury/hot P2WPKH address whose key signs offline (its UTXOs fund withdrawals). */
+        private String btcFromAddress = "";
+        /** Flat fee rate (sat/vByte) used to size the fee (regtest/estimate-less). */
+        private long btcFeeRateSatPerVbyte = 5;
+        /** Minimum confirmations a UTXO needs before the coordinator will spend it. */
+        private int btcMinUtxoConfirmations = 1;
+
         /** KYC media backend: {@code filesystem} (default) or {@code s3} (S3/MinIO object storage). */
         private String kycStorageType = "filesystem";
 
@@ -355,6 +372,70 @@ public class AppProperties {
 
         public void setErc20Contracts(Map<String, String> erc20Contracts) {
             this.erc20Contracts = erc20Contracts;
+        }
+
+        public boolean isBtcRpcEnabled() {
+            return btcRpcEnabled;
+        }
+
+        public void setBtcRpcEnabled(boolean btcRpcEnabled) {
+            this.btcRpcEnabled = btcRpcEnabled;
+        }
+
+        public String getBtcRpcUrl() {
+            return btcRpcUrl;
+        }
+
+        public void setBtcRpcUrl(String btcRpcUrl) {
+            this.btcRpcUrl = btcRpcUrl;
+        }
+
+        public String getBtcRpcUser() {
+            return btcRpcUser;
+        }
+
+        public void setBtcRpcUser(String btcRpcUser) {
+            this.btcRpcUser = btcRpcUser;
+        }
+
+        public String getBtcRpcPassword() {
+            return btcRpcPassword;
+        }
+
+        public void setBtcRpcPassword(String btcRpcPassword) {
+            this.btcRpcPassword = btcRpcPassword;
+        }
+
+        public String getBtcNetwork() {
+            return btcNetwork;
+        }
+
+        public void setBtcNetwork(String btcNetwork) {
+            this.btcNetwork = btcNetwork;
+        }
+
+        public String getBtcFromAddress() {
+            return btcFromAddress;
+        }
+
+        public void setBtcFromAddress(String btcFromAddress) {
+            this.btcFromAddress = btcFromAddress;
+        }
+
+        public long getBtcFeeRateSatPerVbyte() {
+            return btcFeeRateSatPerVbyte;
+        }
+
+        public void setBtcFeeRateSatPerVbyte(long btcFeeRateSatPerVbyte) {
+            this.btcFeeRateSatPerVbyte = btcFeeRateSatPerVbyte;
+        }
+
+        public int getBtcMinUtxoConfirmations() {
+            return btcMinUtxoConfirmations;
+        }
+
+        public void setBtcMinUtxoConfirmations(int btcMinUtxoConfirmations) {
+            this.btcMinUtxoConfirmations = btcMinUtxoConfirmations;
         }
 
         public String getKycStorageType() {

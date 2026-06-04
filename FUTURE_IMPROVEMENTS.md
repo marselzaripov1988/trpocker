@@ -100,10 +100,14 @@ Redis (`service/cluster/TableOwnershipRedisIT`).
     RestClient JSON-RPC, no web3j) + `EthWithdrawalCoordinator` assemble the unsigned tx from live node state,
     broadcast the offline-signed raw tx (`eth_sendRawTransaction`), and reconcile receipts → CONFIRMED/FAILED
     (`app.payments.eth-rpc-enabled`); verified end-to-end against a real `geth --dev` (Testcontainers). Still
-    **online + node-dependent** for the other chains: PSBT parse/finalise + UTXO selection (BTC), the BIP-341
-    sighash, TRON `raw_data` assembly, and their broadcast (Bitcoin RPC / TronGrid). Also remaining for ETH: an
-    on-chain ERC-20 token-deploy IT and a BROADCAST→CONFIRMED reconciliation scheduler. Pair with a small hot
-    float (the
+    ✅ **BTC (P2WPKH) online coordinator landed** — `BtcRpcClient` (pure RestClient + HTTP-Basic, no bitcoinj)
+    `scantxoutset`/`sendrawtransaction`/`getrawtransaction` + `BtcWithdrawalCoordinator` (UTXO selection, fee,
+    change) assemble the unsigned tx; the offline signer (BIP-143 + `BtcTxSerializer` BIP-144, test sources)
+    finalises; the coordinator broadcasts + reconciles → CONFIRMED (`app.payments.btc-rpc-enabled`); verified
+    end-to-end against a real `bitcoind -regtest` (Testcontainers). Still **online + node-dependent**: TRON
+    `raw_data` assembly + TronGrid broadcast. Remaining for ETH: on-chain ERC-20 token-deploy IT + a
+    reconciliation scheduler. Remaining for BTC: legacy/Taproot recipient scripts, multi-address treasuries,
+    `estimatesmartfee`. Pair with a small hot float (the
     **per-tx / 24h limits + cooling period already landed**, `app.payments.max-withdrawal-per-*` /
     `withdrawal-cooling-period-minutes`); optional 2-of-N moderator (4-eyes) is intentionally not done.
   - **USDT-TRC20 generator** — ✅ landed (`Base58` + `TronKeys`; generator + import validation support TRON).
