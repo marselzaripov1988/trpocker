@@ -56,7 +56,8 @@ Backend is fully wired; frontend was admin-only. User wallet dashboard now start
 - [x] Admin: **deposit-pool dashboard** (`/admin/pool`) — free/assigned per asset with low-watermark flag +
       batch import (paste offline `addresses.json`).
 - [x] Admin: **KYC re-encrypt** button on `/admin/kyc` (`POST /kyc/re-encrypt`, confirm + result line).
-- [ ] UX polish: withdrawal status polling, asset selector niceties, toasts, upload progress.
+- [x] UX polish: withdrawal status polling (while any in-progress), KYC upload progress bar, success/error
+      toasts via the global notification service. (Remaining nicety: asset-selector friendly labels.)
 
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**

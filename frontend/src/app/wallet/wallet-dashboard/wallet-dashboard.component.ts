@@ -1,12 +1,17 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import * as QRCode from 'qrcode';
 import { KycUploadComponent } from '../kyc-upload/kyc-upload.component';
+import { ErrorHandlerService } from '../../services/error-handler.service';
 import {
   WalletService, WalletBalance, DepositAddress, Withdrawal, CreateWithdrawal
 } from '../services/wallet.service';
+
+/** Withdrawal statuses that are still moving (worth polling for); the rest are terminal. */
+const IN_PROGRESS: readonly string[] = ['PENDING_APPROVAL', 'APPROVED', 'BROADCAST'];
+const POLL_INTERVAL_MS = 12000;
 
 /** Supported assets (CryptoAsset enum names) the player can deposit/withdraw. */
 const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
@@ -169,8 +174,10 @@ const ASSETS = ['ETH', 'BTC', 'USDT_ERC20', 'USDT_TRC20', 'LTC'];
     .muted { color: #94a3b8; }
   `]
 })
-export class WalletDashboardComponent implements OnInit {
+export class WalletDashboardComponent implements OnInit, OnDestroy {
   private readonly wallet = inject(WalletService);
+  private readonly toasts = inject(ErrorHandlerService);
+  private pollHandle: ReturnType<typeof setInterval> | null = null;
 
   readonly assets = ASSETS;
   depositAsset = 'ETH';
@@ -192,6 +199,19 @@ export class WalletDashboardComponent implements OnInit {
   ngOnInit(): void {
     this.loadBalances();
     this.loadWithdrawals();
+    // Poll while any withdrawal is still in progress, so the status reflects on-chain reconciliation.
+    this.pollHandle = setInterval(() => {
+      if (this.withdrawals().some(w => IN_PROGRESS.includes(w.status))) {
+        this.loadWithdrawals();
+        this.loadBalances();
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.pollHandle !== null) {
+      clearInterval(this.pollHandle);
+    }
   }
 
   loadBalances(): void {
@@ -224,7 +244,12 @@ export class WalletDashboardComponent implements OnInit {
           .then(url => this.qrDataUrl.set(url))
           .catch(() => this.qrDataUrl.set(null));
       },
-      error: err => { this.depositError.set(this.msg(err)); this.loadingDeposit.set(false); }
+      error: err => {
+        const m = this.msg(err);
+        this.depositError.set(m);
+        this.toasts.addError('Deposit address failed', m);
+        this.loadingDeposit.set(false);
+      }
     });
   }
 
@@ -236,11 +261,17 @@ export class WalletDashboardComponent implements OnInit {
       next: () => {
         this.submitting.set(false);
         this.withdrawSuccess.set(true);
+        this.toasts.addSuccess('Withdrawal requested', 'Track its status in your history.');
         this.form = { asset: this.form.asset, toAddress: '', amount: '' };
         this.loadWithdrawals();
         this.loadBalances();
       },
-      error: err => { this.withdrawError.set(this.msg(err)); this.submitting.set(false); }
+      error: err => {
+        const m = this.msg(err);
+        this.withdrawError.set(m);
+        this.toasts.addError('Withdrawal failed', m);
+        this.submitting.set(false);
+      }
     });
   }
 

@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpEventType } from '@angular/common/http';
 import { KycService } from '../services/kyc.service';
 
 @Component({
@@ -43,6 +44,12 @@ import { KycService } from '../services/kyc.service';
           @if (selectedFile(); as f) {
             <p class="muted">Selected: {{ f.name }} ({{ (f.size / 1048576).toFixed(1) }} MB)</p>
           }
+          @if (progress() !== null) {
+            <div class="progress" role="progressbar" [attr.aria-valuenow]="progress()">
+              <div class="progress-bar" [style.width.%]="progress()"></div>
+              <span class="progress-label">{{ progress() }}%</span>
+            </div>
+          }
         }
 
         @if (success()) {
@@ -58,6 +65,9 @@ import { KycService } from '../services/kyc.service';
     .kyc-page { max-width: 720px; margin: 0 auto; padding: 1.5rem; }
     .kyc-page.embedded { max-width: none; margin: 0; padding: 0; }
     .card-title { margin: 0 0 0.75rem; font-size: 1.05rem; }
+    .progress { position: relative; height: 18px; background: #0f172a; border-radius: 9px; overflow: hidden; margin: 0.5rem 0; }
+    .progress-bar { height: 100%; background: #2563eb; transition: width 0.2s ease; }
+    .progress-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #e2e8f0; }
     .kyc-header h1 { margin: 0 0 0.25rem; }
     .subtitle { color: #94a3b8; margin: 0 0 1rem; }
     .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
@@ -83,6 +93,7 @@ export class KycUploadComponent implements OnInit {
   readonly status = signal<string | null>(null);
   readonly selectedFile = signal<File | null>(null);
   readonly uploading = signal(false);
+  readonly progress = signal<number | null>(null);
   readonly success = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -110,18 +121,25 @@ export class KycUploadComponent implements OnInit {
       return;
     }
     this.uploading.set(true);
+    this.progress.set(0);
     this.success.set(false);
     this.error.set(null);
     this.kyc.uploadVerificationVideo(file).subscribe({
-      next: r => {
-        this.status.set(r.status);
-        this.success.set(true);
-        this.uploading.set(false);
-        this.selectedFile.set(null);
+      next: event => {
+        if (event.type === HttpEventType.UploadProgress && event.total) {
+          this.progress.set(Math.round((100 * event.loaded) / event.total));
+        } else if (event.type === HttpEventType.Response) {
+          this.status.set(event.body?.status ?? null);
+          this.success.set(true);
+          this.uploading.set(false);
+          this.progress.set(null);
+          this.selectedFile.set(null);
+        }
       },
       error: err => {
         this.error.set(err?.error?.message ?? err?.error?.error ?? 'Upload failed');
         this.uploading.set(false);
+        this.progress.set(null);
       }
     });
   }

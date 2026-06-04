@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
@@ -17,9 +17,13 @@ export class KycService {
     return this.http.get<KycStatusResponse>(this.url);
   }
 
-  uploadVerificationVideo(file: File): Observable<KycStatusResponse> {
+  /** Upload the verification video, emitting HTTP events so the UI can show upload progress. */
+  uploadVerificationVideo(file: File): Observable<HttpEvent<KycStatusResponse>> {
     const form = new FormData();
     form.append('file', file);
-    return this.http.post<KycStatusResponse>(`${this.url}/document`, form);
+    return this.http.post<KycStatusResponse>(`${this.url}/document`, form, {
+      observe: 'events',
+      reportProgress: true,
+    });
   }
 }
