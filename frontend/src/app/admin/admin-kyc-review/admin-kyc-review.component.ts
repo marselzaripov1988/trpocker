@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
-import { AdminKycService } from '../services/admin-kyc.service';
+import { AdminKycService, KycReEncryptResult } from '../services/admin-kyc.service';
 import { KycDecision, KycPendingItem } from '../models/kyc.models';
 
 @Component({
@@ -12,9 +12,21 @@ import { KycDecision, KycPendingItem } from '../models/kyc.models';
     <div class="admin-page" data-cy="admin-kyc-review">
       <header class="admin-header">
         <h1>🛡️ KYC review</h1>
-        <button class="btn-link" (click)="reload()">↻ Refresh</button>
+        <div class="header-actions">
+          <button class="btn-link" (click)="reEncrypt()" [disabled]="reEncrypting()"
+                  title="Re-encrypt all KYC media under the active key (rotation / KMS migration)"
+                  data-cy="kyc-reencrypt">
+            {{ reEncrypting() ? 'Re-encrypting…' : '🔁 Re-encrypt keys' }}
+          </button>
+          <button class="btn-link" (click)="reload()">↻ Refresh</button>
+        </div>
       </header>
 
+      @if (reEncryptResult(); as r) {
+        <div class="alert ok" role="status">
+          Re-encrypted {{ r.reEncrypted }}, skipped {{ r.skipped }} of {{ r.total }} document(s).
+        </div>
+      }
       @if (error()) {
         <div class="alert error" role="alert">{{ error() }}</div>
       }
@@ -73,6 +85,8 @@ import { KycDecision, KycPendingItem } from '../models/kyc.models';
     .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
     .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
     .admin-header h1 { margin: 0; }
+    .header-actions { display: flex; gap: 1rem; align-items: center; }
+    .alert.ok { background: #064e3b; color: #bbf7d0; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
     .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
     .card { background: #1e293b; border-radius: 12px; padding: 1.25rem; border: 1px solid #334155; }
     .card h2 { margin: 0 0 1rem; font-size: 1.1rem; }
@@ -105,6 +119,8 @@ export class AdminKycReviewComponent implements OnInit, OnDestroy {
   readonly videoUrl = signal<SafeUrl | null>(null);
   readonly note = signal('');
   readonly busy = signal(false);
+  readonly reEncrypting = signal(false);
+  readonly reEncryptResult = signal<KycReEncryptResult | null>(null);
 
   private objectUrl: string | null = null;
 
@@ -160,6 +176,19 @@ export class AdminKycReviewComponent implements OnInit, OnDestroy {
     this.adminKyc.erase(sel.userId).subscribe({
       next: () => { this.busy.set(false); this.clearSelection(); this.reload(); },
       error: err => { this.error.set(err?.error?.message ?? 'Erase failed'); this.busy.set(false); }
+    });
+  }
+
+  reEncrypt(): void {
+    if (!confirm('Re-encrypt ALL KYC media under the active key/provider? This rewrites every stored file.')) {
+      return;
+    }
+    this.reEncrypting.set(true);
+    this.error.set(null);
+    this.reEncryptResult.set(null);
+    this.adminKyc.reEncrypt().subscribe({
+      next: r => { this.reEncryptResult.set(r); this.reEncrypting.set(false); },
+      error: err => { this.error.set(err?.error?.message ?? 'Re-encryption failed'); this.reEncrypting.set(false); }
     });
   }
 

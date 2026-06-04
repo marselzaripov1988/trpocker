@@ -26,4 +26,15 @@ export class AdminKycService {
   erase(userId: string): Observable<{ erased: number }> {
     return this.http.delete<{ erased: number }>(`${this.url}/${userId}/documents`);
   }
+
+  /** Re-encrypt all KYC media under the active key/provider (key rotation / KMS migration). */
+  reEncrypt(): Observable<KycReEncryptResult> {
+    return this.http.post<KycReEncryptResult>(`${this.url}/re-encrypt`, {});
+  }
+}
+
+export interface KycReEncryptResult {
+  reEncrypted: number;
+  skipped: number;
+  total: number;
 }

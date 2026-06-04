@@ -54,7 +54,7 @@ Backend is fully wired; frontend was admin-only. User wallet dashboard now start
       → paste signed raw → Broadcast signed → Reconcile / Status, dispatched by asset network.
 - [x] Admin: **deposit-pool dashboard** (`/admin/pool`) — free/assigned per asset with low-watermark flag +
       batch import (paste offline `addresses.json`).
-- [ ] Admin: **KYC re-encrypt** button (`POST /kyc/re-encrypt`).
+- [x] Admin: **KYC re-encrypt** button on `/admin/kyc` (`POST /kyc/re-encrypt`, confirm + result line).
 - [ ] UX polish: withdrawal status polling, asset selector niceties, toasts, upload progress.
 
 ## TODO — cross-cutting / production-readiness
