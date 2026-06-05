@@ -6,6 +6,8 @@ public enum FederationShardStatus {
     PENDING,
     /** Filling toward its capacity; starts (its child pyramid tournament) when full. */
     REGISTERING,
+    /** Filled to capacity, waiting for a concurrency slot before its child pyramid is materialized. */
+    READY,
     /** The shard's pyramid is running. */
     RUNNING,
     /** The shard produced its winner. */

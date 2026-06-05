@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Federated pyramid slice 2: pre-start registrations into a federation (assigned to shards by fill order).
+      Postgres-only; H2 tests regenerate from the entities. Idempotent.
+    -->
+    <changeSet id="federated-003-registrations-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="pyramid_federation_registrations"/></not>
+        </preConditions>
+        <createTable tableName="pyramid_federation_registrations">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="federation_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_index" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="player_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="player_name" type="varchar(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="pyramid_federation_registrations"
+                constraintName="uq_federation_registration_player"
+                columnNames="federation_id, player_id"/>
+    </changeSet>
+
+</databaseChangeLog>

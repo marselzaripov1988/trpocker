@@ -1160,6 +1160,30 @@ public class AppProperties {
         @Min(2)
         private int federatedDefaultShardSize = 10_000;
 
+        /** Federated pyramid: max shards materialized/running at once (wave concurrency cap). */
+        @Min(1)
+        private int federatedMaxConcurrentShards = 8;
+
+        /** Federated pyramid: how many physical node-groups shards are round-robin pinned across. */
+        @Min(1)
+        private int federatedNodeGroupCount = 1;
+
+        public int getFederatedMaxConcurrentShards() {
+            return federatedMaxConcurrentShards;
+        }
+
+        public void setFederatedMaxConcurrentShards(int federatedMaxConcurrentShards) {
+            this.federatedMaxConcurrentShards = federatedMaxConcurrentShards;
+        }
+
+        public int getFederatedNodeGroupCount() {
+            return federatedNodeGroupCount;
+        }
+
+        public void setFederatedNodeGroupCount(int federatedNodeGroupCount) {
+            this.federatedNodeGroupCount = federatedNodeGroupCount;
+        }
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }

@@ -82,6 +82,14 @@ public class PyramidFederationShard {
         this.status = FederationShardStatus.REGISTERING;
     }
 
+    public void markReady() {
+        this.status = FederationShardStatus.READY;
+    }
+
+    public void incrementFilled() {
+        this.filledCount++;
+    }
+
     public void markRunning(UUID tournamentId) {
         this.tournamentId = tournamentId;
         this.status = FederationShardStatus.RUNNING;

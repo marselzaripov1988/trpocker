@@ -141,9 +141,10 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       brackets), `PyramidFederation` + `PyramidFederationShard` entities + status enums + repositories,
       `federated-pyramid-enabled` flag, Liquibase 16 (two tables). Verified (plan unit + repo IT + fresh
       Postgres `validate`).
-- [ ] **2. Registration + wave fill** — register into the federation; assign players to shards in fill order;
-      start a shard (create its child pyramid tournament + register its players) when it fills, capped by
-      cluster capacity; node-group assignment.
+- [x] **2. Registration + wave fill** — `FederatedPyramidService`: `createFederation` (shard skeleton +
+      node-group pinning), `register` (fill-order assignment, full shard → READY, idempotent, full-rejection),
+      `promoteShards` (materialize READY shards into running child pyramids up to the `federated-max-concurrent-shards`
+      cap). Changeset 17 (`pyramid_federation_registrations`). Verified by `FederatedPyramidServiceIT`.
 - [ ] **3. Shard run → winner capture** — run each shard's pyramid to its champion; record `winner_player_id`;
       mark shard COMPLETED; advance the federation to AWAITING_FINAL when all shards are done.
 - [ ] **4. Finalists barrier + scheduled final** — strict barrier on all winners; admin sets

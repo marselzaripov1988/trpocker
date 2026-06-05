@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 2: registration + wave fill
+- `FederatedPyramidService` orchestrates the fill phase. `createFederation(...)` lays out the federation +
+  shard skeleton from a `FederatedPyramidPlan` (seats/hands snapshotted from the pyramid config so shards
+  match the engine; shard 0 opens, the rest PENDING; each shard round-robin pinned to a node-group).
+  `register(...)` assigns a player to the open fill shard (lowest-index REGISTERING with capacity), flips a
+  full shard to **READY** and opens the next PENDING shard — idempotent per (federation, player), rejected
+  once every shard is full. The heavy `promoteShards(...)` materializes READY shards into running child
+  PYRAMID tournaments (create → seed registrations → start) up to the **wave concurrency cap**
+  (`app.tournament.federated-max-concurrent-shards`, default 8), decoupling materialization from the fast
+  registration path. New `pyramid_federation_registrations` table (changeset 17, unique
+  `(federation_id, player_id)`), a `READY` shard status, and `federated-max-concurrent-shards` /
+  `federated-node-group-count` config.
+- Verified by `FederatedPyramidServiceIT` (seats=2 → an 8-player/4-shard federation): layout, in-order
+  wave fill flipping shards to READY, capped promotion (cap 2 → 2 RUNNING with seeded child tournaments, 2
+  left READY, federation → SHARDS_RUNNING, second promote starts nothing), idempotent registration + full
+  rejection. Changeset 17 runs clean on a fresh Postgres (`ddl-auto=validate`); surefire suite green (1090).
+
 ### 🔺 Federated pyramid — slice 1: model + sharded decomposition
 - New very-large "federated" pyramid tournament type: a field (e.g. 1,000,000) is split into shards of up to
   `shardSize` (e.g. 10,000) that fill and run in waves — each shard an ordinary pyramid down to one winner —
