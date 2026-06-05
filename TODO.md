@@ -130,6 +130,17 @@ buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins);
 - [ ] **Admin UI button** — add a "Postpone / reschedule" action (date-time picker) to the admin tournament
       detail panel, calling the new endpoint and surfacing the notified-count toast.
 
+## TODO — scale / load
+- [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`
+      / `.ps1`: STOMP-over-WS fleet through the round-robin LB, per-node `websocket_sessions_local` + heap
+      report. Script compiles (`k6 inspect`), runner `bash -n` clean; `docker/nginx/scale.conf` tuned (32768
+      worker_connections, long WS timeouts).
+- [ ] **Actual sustained 10k run** — point the scenario at a sized cluster (≥4–8 nodes) + PgBouncer + a
+      multi-host k6 generator (single host is fd/port-bound). Capture per-node session split, heap, broadcast
+      latency, connect-success at 10k. This is the ops exercise; the instrument is ready.
+- [ ] **Batch chip-sync** — `TournamentChipSyncService.syncAfterHand` saves per-player in a loop; switch to
+      `saveAll` (batch) to cut DB round-trips under large-field load.
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.

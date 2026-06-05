@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 📈 Load scenario: cluster × N WebSocket clients (`websocket-cluster.js`)
+- New k6 scenario `load/k6/websocket-cluster.js` + runner `run-ws-cluster.sh` / `.ps1`: opens a fleet of
+  long-lived **STOMP-over-WebSocket** subscribers through the round-robin LB, holds them open, and reports the
+  per-node split (`websocket_sessions_local` gauge + heap scraped from each node's `/actuator/prometheus`).
+  This targets the dimension a single instance can't carry — a 10k-player tournament is a concurrent-WS /
+  memory problem (~1–2 MB heap per session), not a CPU one — and measures that the cluster spreads the
+  sessions. Talks raw STOMP to the non-SockJS `/ws` endpoint; auth optional (the interceptor allows anonymous
+  read-only, perfect for a hold-N-subscribers test); `SEED=1` seeds a 900-bot tournament so subscribers get
+  real broadcasts. Knobs: `CONNECTIONS`, `RAMP`, `HOLD`, `TOURNAMENT_ID`, `TOKEN`.
+- `docker/nginx/scale.conf` tuned for a large fleet (`worker_connections 32768`, `worker_rlimit_nofile`,
+  3600s WS read/send timeouts so held connections aren't reaped). Validated: k6 compiles the script
+  (`k6 inspect`), runner passes `bash -n`. **Honest scope:** the harness is the instrument; an actual
+  sustained 10k run needs a sized cluster (≥4–8 nodes) + PgBouncer + a multi-host generator — that ops run is
+  the remaining exercise, distinct from the code being ready. Documented in `load/k6/README.md`.
+
 ### 🔺 Buy-up pyramid — slice 7: player REST + "tickets" UI (epic complete)
 - New player-facing `PyramidBuyoutController` (`/v1/tournaments/{id}/pyramid/...`): `GET …/tickets` lists the
   buyable higher-level seats (level, seat index, price, asset) and `POST …/buy-seat` `{level, seatIndex}` buys

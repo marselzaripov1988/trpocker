@@ -122,3 +122,70 @@ error rate is actually *higher* for two test-harness reasons, not a clustering d
 So treat these as **directional** numbers for relative comparison, re-runnable at other `VUS`/`DURATION`.
 The clean takeaway: independent tables genuinely distribute across nodes and add capacity; pair the cluster
 with sticky LB (`docker/nginx/cluster.conf`) in production to minimise cross-node forwarding.
+
+---
+
+# WebSocket capacity — cluster × N WS clients (`websocket-cluster.js`)
+
+`websocket-cluster.js` opens a **fleet of long-lived STOMP-over-WebSocket subscribers** through the
+round-robin LB and holds them open, then reports how the connections spread across the nodes. This targets
+the one dimension a single instance can't carry: a 10k-player tournament isn't a CPU problem (the bot run
+finishes in seconds — see `PyramidTournament10kIT`), it's a **concurrent-connection / memory** problem
+(~1–2 MB heap per live WS session → ~15–50 GB for 10k on one JVM). The cluster's job is to spread those
+sessions; this scenario measures that it does.
+
+It talks **raw STOMP** to the non-SockJS endpoint at `addEndpoint("/ws")` (no SockJS framing). Auth is
+optional — `WebSocketAuthInterceptor` allows anonymous read-only connections, which is exactly what a
+"hold N subscribers + fan out broadcasts" test needs; pass `TOKEN` to connect authenticated.
+
+```bash
+load/k6/run-ws-cluster.sh                          # 500 connections, ramp 60s, hold 120s
+CONNECTIONS=2000 HOLD=300s load/k6/run-ws-cluster.sh
+SEED=1 CONNECTIONS=2000 load/k6/run-ws-cluster.sh  # also seed a 900-bot tournament → real broadcasts
+KEEP=1 load/k6/run-ws-cluster.sh                   # leave the stack up
+```
+```powershell
+.\load\k6\run-ws-cluster.ps1
+$env:CONNECTIONS=2000; $env:SEED='1'; .\load\k6\run-ws-cluster.ps1
+```
+
+The runner boots `docker-compose.scale.yml` (two nodes, round-robin LB on `:8092`, all Phase 5 cluster flags
+on), runs k6, then scrapes each node's `websocket_sessions_local` gauge + heap from `/actuator/prometheus`
+and prints the split:
+
+```
+=== per-node distribution (at end of run) ===
+  node-1   ws_sessions=1003   heap=512MB
+  node-2   ws_sessions=997    heap=508MB
+```
+
+### Env
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CONNECTIONS` | `500` | Target concurrent WS connections (k6 VUs) — push toward 10000 on real hardware |
+| `RAMP` | `60s` | Ramp-up to `CONNECTIONS` |
+| `HOLD` | `120s` | How long to hold the fleet open at full size |
+| `SEED` | `0` | `1` → seed + start a 900-bot tournament so subscribers get real broadcasts |
+| `TOURNAMENT_ID` | — | (script env) subscribe each VU to this tournament's topic + a table/shard topic |
+| `TOKEN` | — | optional JWT sent on the STOMP CONNECT frame (otherwise anonymous) |
+| `KEEP` | `0` | `1` → leave the stack up after the run |
+
+### Measured signals
+
+- **`ws_connect_success` / `ws_stomp_connected`** — handshake + STOMP CONNECT success rates (threshold > 95%).
+- **`ws_connect_time`** — time from socket open to STOMP `CONNECTED`.
+- **`ws_messages_received`** — broadcast frames delivered (meaningful only with `SEED=1` / `TOURNAMENT_ID`).
+- **Per-node `websocket_sessions_local`** — a balanced round-robin split confirms the LB spread the fleet;
+  the sum ≈ live connections held.
+
+### Honest scope
+
+- **Proven by this harness:** the cluster accepts and spreads a large WS fleet across nodes; per-node session
+  counts and heap are observable; broadcasts fan out to subscribers.
+- **OS-bound, not app-bound, toward 10k:** a single k6 host hits file-descriptor / ephemeral-port limits
+  long before the app does — raise `ulimit -n` (≥ 65535) and run on adequately sized hosts. The LB
+  (`docker/nginx/scale.conf`) is tuned to `worker_connections 32768` with long WS read timeouts.
+- **Not yet run at a true 10k on production-sized infra** — the scenario is the instrument; an actual 10k
+  sustained run needs a sized cluster (≥ 4–8 nodes), PgBouncer, and a multi-host load generator. That is the
+  remaining ops exercise, distinct from the code being ready.
