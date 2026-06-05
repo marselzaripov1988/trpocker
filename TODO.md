@@ -155,8 +155,12 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
 - [x] **5. Final run → grand champion** — `runFinalToChampion` (runToCompletion, no big tx) + `recordChampion`
       (self-proxy tx, idempotent): set `champion_player_id`, federation COMPLETED. Closes the engine lifecycle;
       verified by an end-to-end `FederatedPyramidFinalIT` scenario.
-- [ ] **6. REST + admin/player UI** — create federation, browse shards/finalists, admin schedule-final;
-      player sees their shard + standing.
+- [x] **6a. REST (admin + player)** — `AdminPyramidFederationController` (create/detail/promote/schedule-final/
+      start-final/run-final/drain) + `PyramidFederationController` (player register + status), flag-gated, DTOs
+      `CreateFederationRequest`/`FederationDetailResponse`/`FederationRegistrationResponse`. Verified by
+      `FederatedPyramidControllerIT`.
+- [ ] **6b. Admin/player UI** — admin create form + federation detail (shard progress, finalists, schedule-final
+      button); player view of their shard + standing.
 - [ ] **7. Real money** — buy-in per shard + prize pool split (shard payouts + final), via WalletService.
 - [ ] **8. Cluster/load verify** — physical node-group pinning under the cluster; scale test a wave of shards.
 

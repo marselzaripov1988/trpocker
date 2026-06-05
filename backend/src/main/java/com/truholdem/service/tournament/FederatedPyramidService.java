@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.model.FederationShardStatus;
 import com.truholdem.model.FederationStatus;
 import com.truholdem.model.PyramidFederation;
@@ -307,6 +308,22 @@ public class FederatedPyramidService {
         federation.complete(championPlayerId);
         federationRepository.save(federation);
         log.info("Federation {} — COMPLETED, grand champion {}", federationId, championPlayerId);
+    }
+
+    /** Read view of a federation: config, status, per-shard-status counts, champion. */
+    @Transactional(readOnly = true)
+    public FederationDetailResponse getFederationDetail(UUID federationId) {
+        PyramidFederation f = requireFederation(federationId);
+        return new FederationDetailResponse(
+                f.getId(), f.getName(), f.getStatus(), f.getShardSize(), f.getShardCount(),
+                f.getSeatsPerTable(), registrationRepository.countByFederationId(federationId),
+                f.getRegistrationDeadline(), f.getFinalScheduledStart(), f.getFinalTournamentId(),
+                f.getChampionPlayerId(),
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.PENDING),
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.REGISTERING),
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.READY),
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING),
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED));
     }
 
     /** Winners of the completed shards (the finalists), ordered by shard index. */

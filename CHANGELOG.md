@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 6a: REST (admin + player)
+- `AdminPyramidFederationController` (`/v1/admin/pyramid-federations`, ADMIN): create a federation, read its
+  detail (status + per-shard-status counts + champion), promote waves, schedule-final, start-final, run-final,
+  drain-shards. `PyramidFederationController` (`/v1/pyramid-federations`): the authenticated player registers
+  (assigned to a shard, returns the shard), and reads federation status. Both gated by
+  `app.tournament.federated-pyramid-enabled` (404 when off). New DTOs `CreateFederationRequest`,
+  `FederationDetailResponse`, `FederationRegistrationResponse`; reuses `ScheduleTournamentRequest` for the
+  final time. `FederatedPyramidService.getFederationDetail` builds the read view (service→DTO, no schema
+  change).
+- Verified by `FederatedPyramidControllerIT` (HTTP, flag on): admin create → 4 shards (1 REGISTERING / 3
+  PENDING), player register → shard 0, detail shows `registeredPlayers=1`; scheduling the final before the
+  shards are done → 409. ArchUnit + surefire suite green (1090). Frontend admin/player UI is the next step
+  (slice 6b).
+
 ### 🔺 Federated pyramid — slice 5: final run → grand champion (engine lifecycle complete)
 - `FederatedPyramidService.runFinalToChampion` runs the FINAL_RUNNING final pyramid to its single winner via
   `PyramidTournamentService.runToCompletion` (not wrapped in a transaction — same pattern as a shard run),
