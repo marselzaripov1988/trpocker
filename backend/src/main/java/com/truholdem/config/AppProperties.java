@@ -1149,6 +1149,10 @@ public class AppProperties {
          *  refund real-money buy-ins instead of leaving it REGISTERING. */
         private boolean cancelUnderfilledScheduled = true;
 
+        /** Buy-up pyramid: maximum number of higher-level seat buy-outs allowed per tournament. */
+        @Min(0)
+        private int pyramidMaxBuyouts = 10;
+
         public boolean isScheduledStartEnabled() {
             return scheduledStartEnabled;
         }
@@ -1179,6 +1183,14 @@ public class AppProperties {
 
         public void setCancelUnderfilledScheduled(boolean cancelUnderfilledScheduled) {
             this.cancelUnderfilledScheduled = cancelUnderfilledScheduled;
+        }
+
+        public int getPyramidMaxBuyouts() {
+            return pyramidMaxBuyouts;
+        }
+
+        public void setPyramidMaxBuyouts(int pyramidMaxBuyouts) {
+            this.pyramidMaxBuyouts = pyramidMaxBuyouts;
         }
 
         public int getMaxPlayersLimit() {

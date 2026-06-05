@@ -94,8 +94,10 @@ Slices:
 - [x] **2. Model + flag** — `pyramidBuyUpEnabled` flag on Tournament + `PyramidBuyout` entity/repository
       (tournament, buyer, level, seat index, price, asset) + Liquibase changeset 14 (unique: one per player,
       one per seat). Verified H2 + fresh Postgres.
-- [ ] **3. Buy-seat API + charge** — pre-start endpoint: validate empty sub-tree + cap + level range, charge
-      the wallet `buyoutPrice`, persist the buyout. Idempotent per (tournament, seat).
+- [x] **3. Buy-seat service + charge** — `PyramidBuyoutService` (availableTickets + buySeat): validate empty
+      sub-tree (above the registration frontier) + no overlap + cap + range + registered + REGISTERING; the
+      price **replaces** the buy-in (refund base + charge sub-tree price). Verified by H2 IT. (REST endpoint
+      moves to the UI slice.)
 - [ ] **4. Fixed-bracket seating at start** — switch this variant from the dynamic pyramid to the fixed
       bracket; at start, seat registered players at level 1 and bought players directly at their level
       (skipping the closed sub-trees).
@@ -103,10 +105,9 @@ Slices:
       reconcile with the existing `PyramidTournamentService` round/advance logic + cluster ownership.
 - [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
 - [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
-Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced); player pays the
-**buy-out price**; the player UI shows a "ticket" per buyable seat at each level with its computed price.
-Still open: does the buy-out price replace or add to the normal buy-in (slice 3 economics)? real-money only
-(needs `cryptoBuyInAmount`).
+Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced) + total cap 10; the
+buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins); the player UI shows a
+"ticket" per buyable seat at each level with its computed price. Real-money only (needs `cryptoBuyInAmount`).
 
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**

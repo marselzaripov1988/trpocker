@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 3: seat purchase (price replaces buy-in)
+- `PyramidBuyoutService` lets a registered player buy a higher-level seat before start. `availableTickets`
+  lists the buyable seats per level with their price (the "tickets" the player UI will show); `buySeat`
+  validates the rules and records the buy-out. **The seat price replaces the flat buy-in** — the base buy-in
+  is refunded and the sub-tree price (`seatsPerTable^(L-1) × buyIn`) charged, so the net cost is the seat
+  price. Rules enforced: buy-up + real-money + REGISTERING, player registered, level/seat in range, total cap
+  (`app.tournament.pyramid-max-buyouts`, default 10), one per player (DB), seat not taken (DB), and the
+  sub-pyramid empty — its level-1 range above the registration frontier and not overlapping another buy-out
+  (the "11 occupied → 98 buyable" rule). Verified by an H2 IT (economics, frontier, overlap, one-per-player,
+  registered-only) + `PyramidBracket` sub-tree range/overlap unit coverage. Full suite green (1082).
+
 ### 🔺 Buy-up pyramid — slices 1–2: bracket pricing core + persistence model
 - `PyramidBracket` (slice 1) models the fixed buy-up pyramid tree — tables per level (1000→100→10→1 at 10
   seats/table), buyable seats per level (= feeder tables), sub-tree level-1 seats, and the buy-out price

@@ -75,6 +75,28 @@ public final class PyramidBracket {
         return tablesAtLevel(buyLevel - 1);
     }
 
+    /** First level-1 seat index covered by the sub-pyramid under level-{@code buyLevel} seat {@code seatIndex}. */
+    public long subtreeStart(int buyLevel, int seatIndex) {
+        if (seatIndex < 0 || seatIndex >= buyableSeatsAtLevel(buyLevel)) {
+            throw new IllegalArgumentException("seatIndex out of range for level " + buyLevel + ": " + seatIndex);
+        }
+        return (long) seatIndex * subtreeLevelOneSeats(buyLevel);
+    }
+
+    /** Exclusive end of the level-1 seat range covered by that seat's sub-pyramid. */
+    public long subtreeEndExclusive(int buyLevel, int seatIndex) {
+        return subtreeStart(buyLevel, seatIndex) + subtreeLevelOneSeats(buyLevel);
+    }
+
+    /** True if two bought seats' sub-pyramids overlap in level-1 seat space (one contains/intersects the other). */
+    public boolean overlaps(int levelA, int seatA, int levelB, int seatB) {
+        long aStart = subtreeStart(levelA, seatA);
+        long aEnd = subtreeEndExclusive(levelA, seatA);
+        long bStart = subtreeStart(levelB, seatB);
+        long bEnd = subtreeEndExclusive(levelB, seatB);
+        return aStart < bEnd && bStart < aEnd;
+    }
+
     private void requireLevel(int level, int min) {
         if (level < min || level > levels()) {
             throw new IllegalArgumentException(
