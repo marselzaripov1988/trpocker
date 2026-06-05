@@ -25,5 +25,6 @@
     <include file="db/changelog/13-wallet-refund-type.xml"/>
     <include file="db/changelog/14-pyramid-buyup.xml"/>
     <include file="db/changelog/15-tournament-table-bracket-level.xml"/>
+    <include file="db/changelog/16-federated-pyramid.xml"/>
 
 </databaseChangeLog>

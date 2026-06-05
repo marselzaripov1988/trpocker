@@ -1153,6 +1153,29 @@ public class AppProperties {
         @Min(0)
         private int pyramidMaxBuyouts = 10;
 
+        /** Federated pyramid: master flag for the sharded very-large pyramid tournament type. */
+        private boolean federatedPyramidEnabled = false;
+
+        /** Federated pyramid: default players per shard (each shard is a sub-pyramid run to one winner). */
+        @Min(2)
+        private int federatedDefaultShardSize = 10_000;
+
+        public boolean isFederatedPyramidEnabled() {
+            return federatedPyramidEnabled;
+        }
+
+        public void setFederatedPyramidEnabled(boolean federatedPyramidEnabled) {
+            this.federatedPyramidEnabled = federatedPyramidEnabled;
+        }
+
+        public int getFederatedDefaultShardSize() {
+            return federatedDefaultShardSize;
+        }
+
+        public void setFederatedDefaultShardSize(int federatedDefaultShardSize) {
+            this.federatedDefaultShardSize = federatedDefaultShardSize;
+        }
+
         public boolean isScheduledStartEnabled() {
             return scheduledStartEnabled;
         }

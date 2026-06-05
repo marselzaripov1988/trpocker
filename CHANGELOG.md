@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 1: model + sharded decomposition
+- New very-large "federated" pyramid tournament type: a field (e.g. 1,000,000) is split into shards of up to
+  `shardSize` (e.g. 10,000) that fill and run in waves — each shard an ordinary pyramid down to one winner —
+  and the shard winners later meet in an admin-scheduled final. This slice lays the foundation (play-money,
+  flag-gated, no orchestration yet): `FederatedPyramidPlan` (pure) decomposes the field reusing the existing
+  `PyramidBracket` — 1,000,000 / 10,000 / seats=10 → **100 shards** of a 10k pyramid (4 levels) feeding a
+  **100-finalist** final (2 levels). `PyramidFederation` + `PyramidFederationShard` entities (status enums,
+  `@Version`, unique `(federation_id, shard_index)`, nullable `registration_deadline` = indefinite, nullable
+  `node_group` for physical shard pinning, `final_scheduled_start`) + repositories + a
+  `app.tournament.federated-pyramid-enabled` flag (+ default shard size). Liquibase changeset 16 (two tables).
+- Verified: `FederatedPyramidPlanTest` (canonical 1M case + ceil rounding + small example + validation) and
+  `PyramidFederationRepositoryIT` (defaults, ordered shards, status counts, find-by-tournament, unique index)
+  green; changeset 16 runs clean on a fresh Postgres with `ddl-auto=validate` (app starts, entities match);
+  surefire suite green (1090). Decided (this epic): shards fill in **waves** / by capacity; each shard pinned
+  to a **physical node-group**; the final waits on a **strict barrier of all winners**, then an **admin sets
+  its start time and e-mails the finalists** (reusing `TournamentNotificationService`); the registration
+  deadline can be **indefinite**. Next slices: registration + shard assignment + wave start; shard run →
+  winner capture; finalists barrier + scheduled final + run; REST/UI; real money.
+
 ### 📈 Load scenario: cluster × N WebSocket clients (`websocket-cluster.js`)
 - New k6 scenario `load/k6/websocket-cluster.js` + runner `run-ws-cluster.sh` / `.ps1`: opens a fleet of
   long-lived **STOMP-over-WebSocket** subscribers through the round-robin LB, holds them open, and reports the

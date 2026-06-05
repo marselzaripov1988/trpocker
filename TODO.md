@@ -130,6 +130,31 @@ buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins);
 - [ ] **Admin UI button** — add a "Postpone / reschedule" action (date-time picker) to the admin tournament
       detail panel, calling the new endpoint and surfacing the notified-count toast.
 
+## TODO — federated (sharded) pyramid tournament [NEW EPIC]
+A very-large pyramid split into shards that fill/run in waves, then a final among the shard winners. Canonical:
+1,000,000 → 100 shards × (10,000 → 1 winner) → final 100 → 10 → 1. Decided: shards fill in **waves** by
+capacity; each shard pinned to a **physical node-group**; final waits on a **strict barrier of all 100
+winners**, then an **admin sets the start time + e-mails finalists**; registration deadline can be
+**indefinite**; **play-money** first (real money later). Reuses `PyramidBracket` + `PyramidTournamentService`
+(each shard / the final is an ordinary PYRAMID tournament run to a champion).
+- [x] **1. Model + decomposition** — `FederatedPyramidPlan` (pure: shardCount, finalists, shard/final
+      brackets), `PyramidFederation` + `PyramidFederationShard` entities + status enums + repositories,
+      `federated-pyramid-enabled` flag, Liquibase 16 (two tables). Verified (plan unit + repo IT + fresh
+      Postgres `validate`).
+- [ ] **2. Registration + wave fill** — register into the federation; assign players to shards in fill order;
+      start a shard (create its child pyramid tournament + register its players) when it fills, capped by
+      cluster capacity; node-group assignment.
+- [ ] **3. Shard run → winner capture** — run each shard's pyramid to its champion; record `winner_player_id`;
+      mark shard COMPLETED; advance the federation to AWAITING_FINAL when all shards are done.
+- [ ] **4. Finalists barrier + scheduled final** — strict barrier on all winners; admin sets
+      `final_scheduled_start` + e-mail finalists (reuse `TournamentNotificationService`); create + seed the
+      final pyramid from the winners.
+- [ ] **5. Final run → grand champion** — run the final pyramid; set `champion_player_id`; COMPLETED.
+- [ ] **6. REST + admin/player UI** — create federation, browse shards/finalists, admin schedule-final;
+      player sees their shard + standing.
+- [ ] **7. Real money** — buy-in per shard + prize pool split (shard payouts + final), via WalletService.
+- [ ] **8. Cluster/load verify** — physical node-group pinning under the cluster; scale test a wave of shards.
+
 ## TODO — scale / load
 - [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`
       / `.ps1`: STOMP-over-WS fleet through the round-robin LB, per-node `websocket_sessions_local` + heap

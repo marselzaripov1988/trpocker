@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Federated (sharded) pyramid: a master `pyramid_federations` row plus one `pyramid_federation_shards`
+      row per shard. Shards fill/run in waves (each backed by a child pyramid tournament) and contribute one
+      winner each to the admin-scheduled final. Postgres-only; H2 tests regenerate from the entities. Idempotent.
+    -->
+    <changeSet id="federated-001-federations-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="pyramid_federations"/></not>
+        </preConditions>
+        <createTable tableName="pyramid_federations">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="name" type="varchar(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(24)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_size" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_count" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="seats_per_table" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="hands_per_round" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="registration_deadline" type="timestamp with time zone"/>
+            <column name="final_scheduled_start" type="timestamp with time zone"/>
+            <column name="final_tournament_id" type="uuid"/>
+            <column name="champion_player_id" type="uuid"/>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="bigint"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="federated-002-shards-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="pyramid_federation_shards"/></not>
+        </preConditions>
+        <createTable tableName="pyramid_federation_shards">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="federation_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_index" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tournament_id" type="uuid"/>
+            <column name="winner_player_id" type="uuid"/>
+            <column name="node_group" type="varchar(64)"/>
+            <column name="filled_count" type="integer" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="bigint"/>
+        </createTable>
+        <addUniqueConstraint tableName="pyramid_federation_shards"
+                constraintName="uq_federation_shard_index"
+                columnNames="federation_id, shard_index"/>
+    </changeSet>
+
+</databaseChangeLog>
