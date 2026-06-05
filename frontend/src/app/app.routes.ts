@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { gameGuard, replayGuard } from './guards/game.guard';
-import { adminGuard } from './guards/auth.guard';
+import { adminGuard, authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   {
@@ -126,6 +126,24 @@ export const routes: Routes = [
       ),
     canActivate: [adminGuard],
     title: 'Admin — Deposit pool',
+  },
+  {
+    path: 'admin/federations',
+    loadComponent: () =>
+      import('./admin/admin-federation/admin-federation.component').then(
+        (m) => m.AdminFederationComponent
+      ),
+    canActivate: [adminGuard],
+    title: 'Admin — Federated Pyramids',
+  },
+  {
+    path: 'federations/:id',
+    loadComponent: () =>
+      import('./federation/federation-view/federation-view.component').then(
+        (m) => m.FederationViewComponent
+      ),
+    canActivate: [authGuard],
+    title: 'Federated Pyramid - TruHoldem',
   },
 
   {

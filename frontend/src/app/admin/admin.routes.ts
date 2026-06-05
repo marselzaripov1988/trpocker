@@ -21,15 +21,6 @@ export const ADMIN_ROUTES: Routes = [
     title: 'Admin — Create Tournament'
   },
   {
-    path: 'federations',
-    canActivate: [adminGuard],
-    loadComponent: () =>
-      import('./admin-federation/admin-federation.component').then(
-        m => m.AdminFederationComponent
-      ),
-    title: 'Admin — Federated Pyramids'
-  },
-  {
     path: ':id',
     canActivate: [adminGuard],
     loadComponent: () =>

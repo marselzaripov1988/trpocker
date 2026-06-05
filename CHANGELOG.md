@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 6c: player UI (+ admin route fix)
+- New player view `FederationViewComponent` at `/federations/:id` (auth-guarded): shows the field's status,
+  shard progress (registered / running / done-of-total), the scheduled final and grand champion, and a
+  **Register** button (enabled while REGISTERING/SHARDS_RUNNING) that assigns the caller to a shard and then
+  shows "you're in shard #N (status)". New player `FederationService` + `federation.models.ts`.
+- **Fix (from 6b):** the admin federations route had been added under `ADMIN_ROUTES` (mounted at
+  `/admin/tournaments`), so it resolved at `/admin/tournaments/federations` while the nav link pointed at
+  `/admin/federations` — broken. Moved it to a proper top-level `admin/federations` route in `app.routes.ts`
+  (mirroring `admin/pool`), so the **🔗 Pyramids** nav link now works.
+- Verified: eslint clean and `ng build --configuration production` green.
+
 ### 🔺 Federated pyramid — slice 6b: admin UI
 - New admin page **🔗 Pyramids** (`/admin/federations`, behind the existing admin guard + nav link): a create
   form (name, starting players, shard size, optional registration deadline = blank for indefinite) and, once
