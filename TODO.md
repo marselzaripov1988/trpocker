@@ -79,6 +79,32 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
 Open design questions: chip↔money scale; rake model (no-flop-no-drop?); mid-hand leave; bot seating; per-table
 single-writer under the existing cluster ownership.
 
+## TODO — buy-up pyramid tournament [NEW EPIC]
+A pyramid variant (real-money) that **starts when full**; before start, a player can **buy a guaranteed seat at
+a higher level**, closing the fight of the whole sub-pyramid below it. Fixed bracket tree (1000→100→10→1 for
+seats=10): each level-L seat is fed by one level-(L-1) table. Rules (clarified):
+- Buy only **before start**; seat at level L is buyable **only if its sub-pyramid is empty** (no registered
+  players below). Buyable level-L seats = clean feeder tables at level L-1 (e.g. 11 occupied L1 seats dirty 2
+  tables → 98 of 100 L2 seats buyable).
+- **Price = sub-tree buy-ins** = `seatsPerTable^(L-1) × buyIn` (L2 = 10×, L3 = 100×).
+- Cap: ≤ 10 buy-outs.
+Slices:
+- [x] **1. Bracket + pricing core** — `PyramidBracket` (levels, table counts, sub-tree seats, buy-out price,
+      buyable seats) + unit tests vs the 1000/10 example.
+- [ ] **2. Model + flag** — `pyramidBuyUpEnabled` flag (or new type) on Tournament + a `PyramidBuyout` record
+      (tournament, level, seat/feeder index, buyer, price, asset) + repository + Liquibase changeset.
+- [ ] **3. Buy-seat API + charge** — pre-start endpoint: validate empty sub-tree + cap + level range, charge
+      the wallet `buyoutPrice`, persist the buyout. Idempotent per (tournament, seat).
+- [ ] **4. Fixed-bracket seating at start** — switch this variant from the dynamic pyramid to the fixed
+      bracket; at start, seat registered players at level 1 and bought players directly at their level
+      (skipping the closed sub-trees).
+- [ ] **5. Engine integration** — advancement through the fixed bracket; bought players already in place;
+      reconcile with the existing `PyramidTournamentService` round/advance logic + cluster ownership.
+- [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
+- [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
+Open: is the buyer a registered player or any user? exact cap semantics (per-buyer vs total)? does a bought
+player still pay the normal buy-in too, or only the buy-out price? real-money only (needs `cryptoBuyInAmount`).
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.
