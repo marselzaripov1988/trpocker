@@ -71,6 +71,31 @@ public class TournamentWalletService {
     }
 
     /**
+     * Cancel a tournament and, for a real-money one, credit every registrant's buy-in back to their wallet.
+     * The refund is idempotent per (tournament, user), so a re-run does not double-refund. Returns the number
+     * of buy-ins refunded (0 for play-money tournaments). Refund + cancel run in one transaction.
+     */
+    @Transactional
+    public int cancelAndRefund(UUID tournamentId) {
+        Tournament tournament = tournamentRepository.findById(tournamentId)
+                .orElseThrow(() -> new NoSuchElementException("Tournament not found: " + tournamentId));
+        int refunded = 0;
+        if (tournament.isRealMoney()) {
+            CryptoAsset asset = tournament.getCryptoBuyInAsset();
+            BigDecimal amount = tournament.getCryptoBuyInAmount();
+            for (TournamentRegistration reg : registrationRepository.findByTournamentId(tournamentId)) {
+                if (walletService.refundBuyIn(reg.getPlayerId(), asset, amount,
+                        refundKey(tournamentId, reg.getPlayerId()))) {
+                    refunded++;
+                }
+            }
+        }
+        tournamentService.cancelTournament(tournamentId);
+        log.info("Tournament {} cancelled — refunded {} buy-in(s)", tournamentId, refunded);
+        return refunded;
+    }
+
+    /**
      * Credit every in-the-money finisher of a completed real-money tournament with their crypto share.
      * No-op for play-money / unknown tournaments. Best-effort per finisher (a failed credit is logged, not
      * fatal) and idempotent via {@link #payout}. Returns the number of finishers actually credited.
@@ -107,5 +132,9 @@ public class TournamentWalletService {
 
     private static String payoutKey(UUID tournamentId, UUID userId) {
         return "tpayout:" + tournamentId + ":" + userId;
+    }
+
+    private static String refundKey(UUID tournamentId, UUID userId) {
+        return "trefund:" + tournamentId + ":" + userId;
     }
 }

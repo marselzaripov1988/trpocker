@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💸 Auto-cancel under-filled scheduled tournaments with buy-in refund
+- A scheduled (non-full-required) tournament that is still below `minPlayers` at its slot is now **cancelled
+  and its real-money buy-ins refunded**, instead of being left REGISTERING. `TournamentWalletService
+  .cancelAndRefund` credits each registrant's buy-in back (new `TOURNAMENT_REFUND` ledger type, changeset 13
+  widens the `wallet_ledger_entries.type` CHECK) and marks the tournament CANCELLED — all in one transaction,
+  idempotent per (tournament, user) so a re-run never double-refunds. Play-money tournaments just cancel.
+  Flag-gated (`app.tournament.cancel-underfilled-scheduled`, default true); full-required tournaments still
+  postpone a day rather than cancel.
+- Verified: scheduler unit tests (cancel+refund when under min / leave open when disabled), an H2 IT (two
+  buy-ins refunded, balances restored, status CANCELLED; refund idempotency), and changeset 13 on a fresh
+  Postgres (14 changesets, the CHECK now lists `TOURNAMENT_REFUND`, `ddl-auto=validate` passes). Full suite
+  green (1076). (Refund on a manual admin cancel reuses the same primitive — a small follow-up to wire.)
+
 ### ⏰ Time-of-day tournaments that start when full (or postpone a day)
 - A tournament can be pinned to a **time-of-day slot** that starts only if the table is **full** at that time;
   if under-filled, the slot **postpones to the next day**. `POST /v1/admin/tournaments/{id}/schedule-daily

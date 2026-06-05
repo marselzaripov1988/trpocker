@@ -15,11 +15,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.truholdem.config.AppProperties;
+import com.truholdem.service.wallet.TournamentWalletService;
 
 @DisplayName("TournamentScheduledStartService (auto-start due tournaments, min-players gated)")
 class TournamentScheduledStartServiceTest {
 
     private final TournamentService tournamentService = mock(TournamentService.class);
+    private final TournamentWalletService tournamentWalletService = mock(TournamentWalletService.class);
 
     private AppProperties props(boolean enabled) {
         AppProperties p = new AppProperties();
@@ -28,7 +30,7 @@ class TournamentScheduledStartServiceTest {
     }
 
     private TournamentScheduledStartService service(AppProperties props) {
-        return new TournamentScheduledStartService(tournamentService, props);
+        return new TournamentScheduledStartService(tournamentService, tournamentWalletService, props);
     }
 
     @Test
@@ -40,8 +42,8 @@ class TournamentScheduledStartServiceTest {
     }
 
     @Test
-    @DisplayName("starts a due tournament that meets minPlayers; skips one that does not")
-    void startsOnlyWhenEnoughPlayers() {
+    @DisplayName("starts a due tournament that meets minPlayers; cancels+refunds one that does not")
+    void startsWhenEnoughCancelsWhenNot() {
         UUID enough = UUID.randomUUID();
         UUID tooFew = UUID.randomUUID();
         when(tournamentService.dueForScheduledStart(any())).thenReturn(List.of(enough, tooFew));
@@ -50,10 +52,28 @@ class TournamentScheduledStartServiceTest {
         when(tournamentService.registeredCount(tooFew)).thenReturn(1);
         when(tournamentService.minPlayers(tooFew)).thenReturn(2);
 
-        service(props(true)).startDueTournaments();
+        service(props(true)).startDueTournaments(); // cancelUnderfilledScheduled defaults to true
 
         verify(tournamentService).startTournament(enough);
         verify(tournamentService, never()).startTournament(tooFew);
+        verify(tournamentWalletService).cancelAndRefund(tooFew);
+        verify(tournamentWalletService, never()).cancelAndRefund(enough);
+    }
+
+    @Test
+    @DisplayName("under-filled is left REGISTERING when cancel-underfilled is disabled")
+    void leavesOpenWhenCancelDisabled() {
+        UUID tooFew = UUID.randomUUID();
+        AppProperties p = props(true);
+        p.getTournament().setCancelUnderfilledScheduled(false);
+        when(tournamentService.dueForScheduledStart(any())).thenReturn(List.of(tooFew));
+        when(tournamentService.registeredCount(tooFew)).thenReturn(1);
+        when(tournamentService.minPlayers(tooFew)).thenReturn(2);
+
+        service(p).startDueTournaments();
+
+        verify(tournamentService, never()).startTournament(tooFew);
+        verifyNoInteractions(tournamentWalletService);
     }
 
     @Test

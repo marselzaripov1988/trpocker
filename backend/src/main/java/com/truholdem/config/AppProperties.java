@@ -1145,6 +1145,10 @@ public class AppProperties {
         /** Zone in which a time-of-day slot is interpreted. */
         private String scheduledStartZone = "UTC";
 
+        /** When a scheduled (non-full-required) tournament is under minPlayers at its slot, cancel it and
+         *  refund real-money buy-ins instead of leaving it REGISTERING. */
+        private boolean cancelUnderfilledScheduled = true;
+
         public boolean isScheduledStartEnabled() {
             return scheduledStartEnabled;
         }
@@ -1167,6 +1171,14 @@ public class AppProperties {
 
         public void setScheduledStartZone(String scheduledStartZone) {
             this.scheduledStartZone = scheduledStartZone;
+        }
+
+        public boolean isCancelUnderfilledScheduled() {
+            return cancelUnderfilledScheduled;
+        }
+
+        public void setCancelUnderfilledScheduled(boolean cancelUnderfilledScheduled) {
+            this.cancelUnderfilledScheduled = cancelUnderfilledScheduled;
         }
 
         public int getMaxPlayersLimit() {

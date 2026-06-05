@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import com.truholdem.config.AppProperties;
+import com.truholdem.service.wallet.TournamentWalletService;
 
 /**
  * Periodically auto-starts tournaments whose {@code scheduledStart} time has passed, provided they have at
@@ -24,10 +25,13 @@ public class TournamentScheduledStartService {
     private static final Logger log = LoggerFactory.getLogger(TournamentScheduledStartService.class);
 
     private final TournamentService tournamentService;
+    private final TournamentWalletService tournamentWalletService;
     private final AppProperties appProperties;
 
-    public TournamentScheduledStartService(TournamentService tournamentService, AppProperties appProperties) {
+    public TournamentScheduledStartService(TournamentService tournamentService,
+            TournamentWalletService tournamentWalletService, AppProperties appProperties) {
         this.tournamentService = tournamentService;
+        this.tournamentWalletService = tournamentWalletService;
         this.appProperties = appProperties;
     }
 
@@ -61,6 +65,10 @@ public class TournamentScheduledStartService {
         if (registered >= minPlayers) {
             tournamentService.startTournament(id);
             log.info("Auto-started scheduled tournament {} ({} players)", id, registered);
+        } else if (appProperties.getTournament().isCancelUnderfilledScheduled()) {
+            int refunded = tournamentWalletService.cancelAndRefund(id);
+            log.info("Scheduled tournament {} under-filled ({}/{}) — cancelled, refunded {} buy-in(s)",
+                    id, registered, minPlayers, refunded);
         } else {
             log.warn("Scheduled tournament {} is due but has {}/{} players — leaving REGISTERING",
                     id, registered, minPlayers);

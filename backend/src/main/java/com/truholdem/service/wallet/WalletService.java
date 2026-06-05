@@ -435,6 +435,29 @@ public class WalletService {
         return true;
     }
 
+    /**
+     * Credit a real-money tournament buy-in back to the wallet when the tournament is cancelled. Idempotent by
+     * {@code idempotencyKey} (so a re-run of the cancel sweep does not double-refund).
+     */
+    @Transactional
+    public boolean refundBuyIn(UUID userId, CryptoAsset asset, BigDecimal amount, String idempotencyKey) {
+        requireEnabled();
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Refund amount must be positive");
+        }
+        if (ledgerRepository.existsByExternalTxId(idempotencyKey)) {
+            return false;
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
+                .orElseGet(() -> accountRepository.save(new WalletAccount(userId, asset)));
+        account.credit(amount);
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.tournamentRefund(userId, asset, amount, account.getBalance(),
+                idempotencyKey));
+        log.info("Tournament refund: credited {} {} to user {} ({})", amount, asset, userId, idempotencyKey);
+        return true;
+    }
+
     private void requireEnabled() {
         if (!appProperties.getPayments().isEnabled()) {
             throw new PaymentsDisabledException();

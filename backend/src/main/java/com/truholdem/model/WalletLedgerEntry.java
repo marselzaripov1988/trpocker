@@ -108,6 +108,13 @@ public class WalletLedgerEntry {
                 amount, balanceAfter, idempotencyKey, null);
     }
 
+    /** Off-chain credit-back of a buy-in when a real-money tournament is cancelled (idempotent). */
+    public static WalletLedgerEntry tournamentRefund(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, String idempotencyKey) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.TOURNAMENT_REFUND,
+                amount, balanceAfter, idempotencyKey, null);
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();

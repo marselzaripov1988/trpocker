@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Allow the new TOURNAMENT_REFUND ledger type (buy-in credited back on tournament cancellation). Widen the
+      wallet_ledger_entries.type CHECK the same way changeset 02 did for the buy-in/payout types. Postgres-only
+      (H2 tests regenerate the schema from the entity enum via Hibernate).
+    -->
+    <changeSet id="wallet-003-tournament-refund-type" author="truholdem" dbms="postgresql">
+        <sql>
+            ALTER TABLE wallet_ledger_entries DROP CONSTRAINT IF EXISTS wallet_ledger_entries_type_check;
+            ALTER TABLE wallet_ledger_entries ADD CONSTRAINT wallet_ledger_entries_type_check
+                CHECK (type IN ('DEPOSIT', 'WITHDRAWAL', 'WITHDRAWAL_REVERSAL',
+                                'TOURNAMENT_BUYIN', 'TOURNAMENT_PAYOUT', 'TOURNAMENT_REFUND'));
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

@@ -22,5 +22,6 @@
     <include file="db/changelog/10-cash-tables.xml"/>
     <include file="db/changelog/11-tournament-scheduled-start.xml"/>
     <include file="db/changelog/12-tournament-require-full.xml"/>
+    <include file="db/changelog/13-wallet-refund-type.xml"/>
 
 </databaseChangeLog>

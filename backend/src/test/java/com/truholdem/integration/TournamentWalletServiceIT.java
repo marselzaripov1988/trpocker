@@ -106,6 +106,35 @@ class TournamentWalletServiceIT {
     }
 
     @Test
+    @DisplayName("cancel+refund returns every buy-in and marks the tournament CANCELLED")
+    void cancelAndRefund() {
+        UUID a = fundedUser("50");
+        UUID b = fundedUser("50");
+        bridge.buyIn(a, tournamentId, "A"); // 50 → 30
+        bridge.buyIn(b, tournamentId, "B"); // 50 → 30
+
+        int refunded = bridge.cancelAndRefund(tournamentId);
+
+        assertThat(refunded).isEqualTo(2);
+        assertThat(walletService.balance(a, ASSET)).isEqualByComparingTo("50");
+        assertThat(walletService.balance(b, ASSET)).isEqualByComparingTo("50");
+        assertThat(tournamentRepository.findById(tournamentId).orElseThrow().getStatus())
+                .isEqualTo(com.truholdem.model.TournamentStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("refund is idempotent per (tournament, user) — a repeat does not double-credit")
+    void refundIdempotent() {
+        UUID user = fundedUser("30");
+        String key = "trefund:" + tournamentId + ":" + user;
+
+        assertThat(walletService.refundBuyIn(user, ASSET, new BigDecimal("20"), key)).isTrue();
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("50");
+        assertThat(walletService.refundBuyIn(user, ASSET, new BigDecimal("20"), key)).as("idempotent").isFalse();
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("50");
+    }
+
+    @Test
     @DisplayName("payout credits the wallet (idempotent)")
     void payoutCredits() {
         UUID user = fundedUser("10");
