@@ -148,9 +148,10 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
 - [x] **3. Shard run → winner capture** — `runShardToWinner` (runToCompletion, no big tx) + `recordShardWinner`
       (self-proxy tx: COMPLETED + `winner_player_id`, promote next wave, flip to AWAITING_FINAL when all done)
       + `drainShards` driver. Verified by `FederatedPyramidServiceIT` (all shards → winners → AWAITING_FINAL).
-- [ ] **4. Finalists barrier + scheduled final** — strict barrier on all winners; admin sets
-      `final_scheduled_start` + e-mail finalists (reuse `TournamentNotificationService`); create + seed the
-      final pyramid from the winners.
+- [x] **4. Finalists barrier + scheduled final** — `scheduleFinal` (AWAITING_FINAL → FINAL_SCHEDULED, admin
+      sets time, e-mails finalists via `notifyFederationFinalScheduled` + `EmailService` template) + `startFinal`
+      (create + seed the final pyramid from the shard winners, start, → FINAL_RUNNING). Verified by
+      `FederatedPyramidFinalIT` (e-mail to real users, end-to-end seeding, guards).
 - [ ] **5. Final run → grand champion** — run the final pyramid; set `champion_player_id`; COMPLETED.
 - [ ] **6. REST + admin/player UI** — create federation, browse shards/finalists, admin schedule-final;
       player sees their shard + standing.

@@ -24,6 +24,7 @@ import com.truholdem.repository.PyramidFederationRegistrationRepository;
 import com.truholdem.repository.PyramidFederationRepository;
 import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.notification.TournamentNotificationService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
 
 /**
@@ -46,6 +47,7 @@ public class FederatedPyramidService {
     private final PyramidFederationRegistrationRepository registrationRepository;
     private final TournamentService tournamentService;
     private final PyramidTournamentService pyramidTournamentService;
+    private final TournamentNotificationService notificationService;
     private final AppProperties.Tournament tournamentProperties;
     /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
     private final FederatedPyramidService self;
@@ -54,12 +56,14 @@ public class FederatedPyramidService {
             PyramidFederationShardRepository shardRepository,
             PyramidFederationRegistrationRepository registrationRepository,
             TournamentService tournamentService, PyramidTournamentService pyramidTournamentService,
+            TournamentNotificationService notificationService,
             AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
         this.registrationRepository = registrationRepository;
         this.tournamentService = tournamentService;
         this.pyramidTournamentService = pyramidTournamentService;
+        this.notificationService = notificationService;
         this.tournamentProperties = appProperties.getTournament();
         this.self = self;
     }
@@ -219,6 +223,72 @@ public class FederatedPyramidService {
             federationRepository.save(federation);
             log.info("Federation {} — all {} shards done; AWAITING_FINAL", federationId, federation.getShardCount());
         }
+    }
+
+    /**
+     * Admin action: once all shards are done (AWAITING_FINAL), set the final's start time and e-mail the
+     * finalists (the shard winners). The time may be any future instant. Moves the federation to
+     * FINAL_SCHEDULED. Returns the count of finalists e-mailed (0 for finalists with no owning user).
+     */
+    @Transactional
+    public int scheduleFinal(UUID federationId, Instant when) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() != FederationStatus.AWAITING_FINAL) {
+            throw new IllegalStateException(
+                    "Final can only be scheduled once all shards are done (status " + federation.getStatus() + ")");
+        }
+        if (when == null || !when.isAfter(Instant.now())) {
+            throw new IllegalArgumentException("Final start time must be in the future");
+        }
+        federation.scheduleFinal(when);
+        federationRepository.save(federation);
+        List<UUID> finalists = finalistPlayerIds(federationId);
+        int notified = notificationService.notifyFederationFinalScheduled(
+                federation.getName(), finalists, when);
+        log.info("Federation {} — final scheduled for {} ({} finalists, {} e-mailed)",
+                federationId, when, finalists.size(), notified);
+        return notified;
+    }
+
+    /**
+     * Create and seed the final pyramid from the shard winners and start it (mirrors a shard start). Allowed
+     * from FINAL_SCHEDULED (the admin's slot) or directly from AWAITING_FINAL. Moves the federation to
+     * FINAL_RUNNING; running it to the grand champion is the next slice.
+     */
+    @Transactional
+    public PyramidFederation startFinal(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() != FederationStatus.FINAL_SCHEDULED
+                && federation.getStatus() != FederationStatus.AWAITING_FINAL) {
+            throw new IllegalStateException("Final cannot start from status " + federation.getStatus());
+        }
+        Tournament finalT = tournamentService.createTournament(CreateTournamentRequest.pyramid(
+                federation.getName() + " — final", federation.getShardCount(),
+                federation.getSeatsPerTable(), federation.getHandsPerRound()));
+        for (PyramidFederationShard shard :
+                shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED)) {
+            UUID winner = shard.getWinnerPlayerId();
+            if (winner == null) {
+                continue;
+            }
+            String name = registrationRepository.findByFederationIdAndPlayerId(federationId, winner)
+                    .map(PyramidFederationRegistration::getPlayerName).orElse("Finalist");
+            tournamentService.registerPlayer(finalT.getId(), winner, name);
+        }
+        tournamentService.startTournament(finalT.getId());
+        federation.markFinalRunning(finalT.getId());
+        federationRepository.save(federation);
+        log.info("Federation {} — final tournament {} created + started", federationId, finalT.getId());
+        return federation;
+    }
+
+    /** Winners of the completed shards (the finalists), ordered by shard index. */
+    private List<UUID> finalistPlayerIds(UUID federationId) {
+        return shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED).stream()
+                .sorted((a, b) -> Integer.compare(a.getShardIndex(), b.getShardIndex()))
+                .map(PyramidFederationShard::getWinnerPlayerId)
+                .filter(w -> w != null)
+                .toList();
     }
 
     private void startShard(PyramidFederation federation, PyramidFederationShard shard) {

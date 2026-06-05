@@ -3,6 +3,8 @@ package com.truholdem.service.notification;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,6 +66,28 @@ public class TournamentNotificationService {
         }
         log.info("Tournament {} reschedule — notified {} registrant(s) by e-mail",
                 result.tournamentId(), notified);
+        return notified;
+    }
+
+    /**
+     * E-mail every resolvable finalist (one shard winner each) that a federated pyramid's final has been
+     * scheduled. Same resolution + best-effort rules as {@link #notifyRescheduled}. Returns the count e-mailed.
+     */
+    @Transactional(readOnly = true)
+    public int notifyFederationFinalScheduled(String federationName, List<UUID> finalistPlayerIds, Instant when) {
+        String slot = format(when);
+        int notified = 0;
+        for (UUID playerId : finalistPlayerIds) {
+            User user = userRepository.findById(playerId).orElse(null);
+            if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
+                continue;
+            }
+            emailService.sendFederationFinalScheduledEmail(
+                    user.getEmail(), user.getUsername(), federationName, slot);
+            notified++;
+        }
+        log.info("Federated pyramid '{}' final scheduled — notified {} finalist(s) by e-mail",
+                federationName, notified);
         return notified;
     }
 

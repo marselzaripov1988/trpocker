@@ -96,6 +96,22 @@ public class EmailService {
         sendHtmlEmail(to, subject, htmlContent);
     }
 
+    /**
+     * Notify a federated-pyramid finalist (a shard winner) that the final has been scheduled. Best-effort and
+     * @Async; short-circuits (logs only) when mail is disabled.
+     */
+    @Async
+    public void sendFederationFinalScheduledEmail(String to, String username, String federationName,
+            String finalStart) {
+        if (!mailEnabled) {
+            logger.info("Email sending is disabled. Skipping federation-final email to: {}", to);
+            return;
+        }
+        String subject = "You're in the final: " + federationName;
+        String htmlContent = buildFederationFinalScheduledHtml(username, federationName, finalStart);
+        sendHtmlEmail(to, subject, htmlContent);
+    }
+
     private void sendHtmlEmail(String to, String subject, String htmlContent) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -278,5 +294,42 @@ public class EmailService {
             </body>
             </html>
             """.formatted(username, tournamentName, previousStart, newStart);
+    }
+
+    private String buildFederationFinalScheduledHtml(String username, String federationName, String finalStart) {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #f59e0b 0%%, #b45309 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .header h1 { margin: 0; font-size: 28px; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .slot { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #f59e0b; }
+                    .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>&#127942; You reached the final!</h1>
+                    </div>
+                    <div class="content">
+                        <h2>Congratulations, %s!</h2>
+                        <p>You won your shard of <strong>%s</strong> and have qualified for the grand final
+                           among all the shard winners. The final has been scheduled:</p>
+                        <div class="slot">Final starts: <strong>%s</strong></div>
+                        <p>Be at the tables on time. Good luck &mdash; one of you becomes the champion!</p>
+                    </div>
+                    <div class="footer">
+                        <p>&copy; 2024 TruHoldem. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """.formatted(username, federationName, finalStart);
     }
 }

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 4: finalists barrier + admin-scheduled final
+- With the federation at AWAITING_FINAL (all shard winners gathered), `FederatedPyramidService.scheduleFinal`
+  lets an admin set the final's start time (any future instant) → FINAL_SCHEDULED, and e-mails every finalist
+  via a new `TournamentNotificationService.notifyFederationFinalScheduled` + `EmailService`
+  "you reached the final" template (resolving each shard winner's owning user; bots/no-user are skipped).
+  `startFinal` then creates the final PYRAMID tournament, seeds it from the shard winners (preserving their
+  names), starts it, and moves the federation to FINAL_RUNNING (running it to the grand champion is slice 5).
+  No schema change (uses the existing `final_scheduled_start` / `final_tournament_id` columns).
+- Verified by `FederatedPyramidFinalIT`: scheduling e-mails all three real-user finalists and sets
+  FINAL_SCHEDULED + the time; an end-to-end 8-player/4-shard federation drains → schedules → `startFinal`
+  seeds the 4 winners into the final pyramid (FINAL_RUNNING); and the guards reject scheduling before all
+  shards are done or for a past time. Surefire suite green (1090).
+
 ### 🔺 Federated pyramid — slice 3: shard run → winner capture
 - `FederatedPyramidService.runShardToWinner` runs a RUNNING shard's pyramid to its single winner via
   `PyramidTournamentService.runToCompletion` (which manages its own per-round transactions, so the run is
