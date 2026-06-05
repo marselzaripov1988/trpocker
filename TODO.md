@@ -145,8 +145,9 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       node-group pinning), `register` (fill-order assignment, full shard → READY, idempotent, full-rejection),
       `promoteShards` (materialize READY shards into running child pyramids up to the `federated-max-concurrent-shards`
       cap). Changeset 17 (`pyramid_federation_registrations`). Verified by `FederatedPyramidServiceIT`.
-- [ ] **3. Shard run → winner capture** — run each shard's pyramid to its champion; record `winner_player_id`;
-      mark shard COMPLETED; advance the federation to AWAITING_FINAL when all shards are done.
+- [x] **3. Shard run → winner capture** — `runShardToWinner` (runToCompletion, no big tx) + `recordShardWinner`
+      (self-proxy tx: COMPLETED + `winner_player_id`, promote next wave, flip to AWAITING_FINAL when all done)
+      + `drainShards` driver. Verified by `FederatedPyramidServiceIT` (all shards → winners → AWAITING_FINAL).
 - [ ] **4. Finalists barrier + scheduled final** — strict barrier on all winners; admin sets
       `final_scheduled_start` + e-mail finalists (reuse `TournamentNotificationService`); create + seed the
       final pyramid from the winners.

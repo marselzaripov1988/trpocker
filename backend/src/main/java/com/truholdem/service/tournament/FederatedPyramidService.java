@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import com.truholdem.repository.PyramidFederationRegistrationRepository;
 import com.truholdem.repository.PyramidFederationRepository;
 import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
 
 /**
  * Orchestrates the registration + wave-fill phase of a federated pyramid. Players register into the
@@ -43,17 +45,23 @@ public class FederatedPyramidService {
     private final PyramidFederationShardRepository shardRepository;
     private final PyramidFederationRegistrationRepository registrationRepository;
     private final TournamentService tournamentService;
+    private final PyramidTournamentService pyramidTournamentService;
     private final AppProperties.Tournament tournamentProperties;
+    /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
+    private final FederatedPyramidService self;
 
     public FederatedPyramidService(PyramidFederationRepository federationRepository,
             PyramidFederationShardRepository shardRepository,
             PyramidFederationRegistrationRepository registrationRepository,
-            TournamentService tournamentService, AppProperties appProperties) {
+            TournamentService tournamentService, PyramidTournamentService pyramidTournamentService,
+            AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
         this.registrationRepository = registrationRepository;
         this.tournamentService = tournamentService;
+        this.pyramidTournamentService = pyramidTournamentService;
         this.tournamentProperties = appProperties.getTournament();
+        this.self = self;
     }
 
     /**
@@ -148,6 +156,69 @@ public class FederatedPyramidService {
                     federationId, started, running);
         }
         return started;
+    }
+
+    /**
+     * Run one RUNNING shard's pyramid to its single winner (reusing {@link PyramidTournamentService}, which
+     * manages its own per-round transactions — so this is intentionally <b>not</b> wrapped in a transaction),
+     * then record the winner, free the wave slot (promote the next READY shard) and, once every shard is
+     * done, flip the federation to AWAITING_FINAL. Returns the pyramid run result (champion = the finalist).
+     */
+    public PyramidRunResult runShardToWinner(UUID federationId, UUID shardId) {
+        PyramidFederationShard shard = shardRepository.findById(shardId)
+                .orElseThrow(() -> new NoSuchElementException("Shard not found: " + shardId));
+        if (shard.getStatus() != FederationShardStatus.RUNNING) {
+            throw new IllegalStateException("Shard " + shardId + " is not RUNNING (" + shard.getStatus() + ")");
+        }
+        PyramidRunResult result = pyramidTournamentService.runToCompletion(shard.getTournamentId());
+        self.recordShardWinner(federationId, shardId, result.championId());
+        return result;
+    }
+
+    /** Record a shard's winner, promote the next wave into the freed slot, and await-final when all are done. */
+    @Transactional
+    public void recordShardWinner(UUID federationId, UUID shardId, UUID championId) {
+        PyramidFederationShard shard = shardRepository.findById(shardId).orElseThrow();
+        if (shard.getStatus() == FederationShardStatus.COMPLETED) {
+            return; // idempotent
+        }
+        shard.completeWith(championId);
+        shardRepository.save(shard);
+        log.info("Federation {} — shard {} complete, winner {}", federationId, shard.getShardIndex(), championId);
+        promoteShards(federationId);
+        maybeAwaitFinal(federationId);
+    }
+
+    /**
+     * Drive the whole shard phase to completion (for tests / a manual admin trigger): start the first wave,
+     * then run every RUNNING shard to its winner — each completion auto-promotes the next READY shard — until
+     * no shard is running. Returns the federation's resulting status (AWAITING_FINAL when all shards finished).
+     */
+    public FederationStatus drainShards(UUID federationId) {
+        self.promoteShards(federationId);
+        int guard = 0;
+        while (guard++ < 100_000) {
+            List<PyramidFederationShard> running = shardRepository
+                    .findByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING);
+            if (running.isEmpty()) {
+                break;
+            }
+            for (PyramidFederationShard shard : running) {
+                runShardToWinner(federationId, shard.getId());
+            }
+        }
+        return requireFederation(federationId).getStatus();
+    }
+
+    private void maybeAwaitFinal(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() == FederationStatus.SHARDS_RUNNING
+                && shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED)
+                        == federation.getShardCount()) {
+            federation.markAwaitingFinal();
+            federationRepository.save(federation);
+            log.info("Federation {} — all {} shards done; AWAITING_FINAL", federationId, federation.getShardCount());
+        }
     }
 
     private void startShard(PyramidFederation federation, PyramidFederationShard shard) {

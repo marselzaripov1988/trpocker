@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 3: shard run → winner capture
+- `FederatedPyramidService.runShardToWinner` runs a RUNNING shard's pyramid to its single winner via
+  `PyramidTournamentService.runToCompletion` (which manages its own per-round transactions, so the run is
+  intentionally not wrapped in one big transaction), then records the winner in a separate transactional step
+  (via a `@Lazy` self-proxy): `recordShardWinner` marks the shard COMPLETED with its `winner_player_id`,
+  promotes the next READY shard into the freed wave slot, and — once every shard is done — flips the
+  federation to **AWAITING_FINAL** (the barrier for the admin-scheduled final). `drainShards` drives the whole
+  shard phase (start first wave → run each running shard → next wave auto-promotes) for tests / a manual
+  trigger. No schema change.
+- Verified by a new `FederatedPyramidServiceIT` scenario (8-player / 4-shard federation, seats=2): draining
+  runs all four 2-player pyramids to a champion, every shard ends COMPLETED with a winner, and the federation
+  reaches AWAITING_FINAL. Surefire suite green (1090).
+
 ### 🔺 Federated pyramid — slice 2: registration + wave fill
 - `FederatedPyramidService` orchestrates the fill phase. `createFederation(...)` lays out the federation +
   shard skeleton from a `FederatedPyramidPlan` (seats/hands snapshotted from the pyramid config so shards

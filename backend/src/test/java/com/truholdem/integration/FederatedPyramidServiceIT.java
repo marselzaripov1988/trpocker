@@ -114,6 +114,21 @@ class FederatedPyramidServiceIT {
     }
 
     @Test
+    @DisplayName("draining runs every shard to a winner and flips the federation to AWAITING_FINAL")
+    void drainToAwaitFinal() {
+        register(8);
+
+        FederationStatus status = federatedService.drainShards(federationId);
+
+        assertThat(status).isEqualTo(FederationStatus.AWAITING_FINAL);
+        var shards = shardRepository.findByFederationIdOrderByShardIndexAsc(federationId);
+        assertThat(shards).allMatch(s -> s.getStatus() == FederationShardStatus.COMPLETED);
+        assertThat(shards).allMatch(s -> s.getWinnerPlayerId() != null);
+        assertThat(shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED))
+                .isEqualTo(4);
+    }
+
+    @Test
     @DisplayName("registration is idempotent per player and rejected once every shard is full")
     void idempotentAndFull() {
         UUID player = UUID.randomUUID();
