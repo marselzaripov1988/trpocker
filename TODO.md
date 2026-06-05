@@ -116,6 +116,17 @@ Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enfo
 buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins); the player UI shows a
 "ticket" per buyable seat at each level with its computed price. Real-money only (needs `cryptoBuyInAmount`).
 
+## TODO — admin reschedule + notifications [NEW]
+- [x] **Postpone under-filled tournament + e-mail registrants** — `POST /admin/tournaments/{id}/reschedule`
+      → `TournamentService.rescheduleIfUnderfilled` (REGISTERING + future-time + not-yet-full guards) +
+      `TournamentNotificationService` e-mail via the existing flag-gated `EmailService`. Verified by
+      `TournamentRescheduleIT`.
+- [ ] **SMS channel** — `users` has no phone column and no SMS gateway is wired; add a `phone` column +
+      a provider adapter (could reuse the existing `RestClient`, no new dep) behind a flag, then extend
+      `TournamentNotificationService` to fan out to SMS as well as e-mail.
+- [ ] **Admin UI button** — add a "Postpone / reschedule" action (date-time picker) to the admin tournament
+      detail panel, calling the new endpoint and surfacing the notified-count toast.
+
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
       so withdrawals can't silently exceed available on-chain funds.

@@ -5,6 +5,7 @@ import com.truholdem.domain.event.*;
 import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.dto.LeaderboardEntryDto;
 import com.truholdem.dto.TournamentDetailResponse;
+import com.truholdem.dto.TournamentRescheduleResult;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.*;
 import com.truholdem.repository.TournamentRegistrationRepository;
@@ -231,6 +232,40 @@ public class TournamentService {
         log.info("Tournament {} pinned to {} (requireFull={}) → first slot {}",
                 tournamentId, timeOfDay, requireFull, slot);
         return tournamentRepository.save(tournament);
+    }
+
+    /**
+     * Admin action: postpone an <b>under-filled</b> tournament's start to a new time and report what changed
+     * (so registrants can be notified). Allowed only while REGISTERING, only when the new time is in the
+     * future, and only when the required head-count has <b>not</b> yet been reached — the required count is
+     * {@code maxPlayers} for a full-required tournament, otherwise {@code minPlayers}. The {@code requireFull}
+     * flag is preserved. Throws {@link IllegalStateException} if already started/enough players, or
+     * {@link IllegalArgumentException} if the new time is not in the future.
+     */
+    public TournamentRescheduleResult rescheduleIfUnderfilled(UUID tournamentId, java.time.Instant newStart) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        if (tournament.getStatus() != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException(
+                    "Only a REGISTERING tournament can be rescheduled (was " + tournament.getStatus() + ")");
+        }
+        if (newStart == null || !newStart.isAfter(java.time.Instant.now())) {
+            throw new IllegalArgumentException("New start time must be in the future");
+        }
+        int registered = registrationRepository.countByTournamentId(tournamentId);
+        int required = tournament.isRequireFullToStart()
+                ? tournament.getMaxPlayers()
+                : tournament.getMinPlayers();
+        if (registered >= required) {
+            throw new IllegalStateException(
+                    "Tournament already has the required players (" + registered + "/" + required
+                            + ") — reschedule is only for under-filled tournaments");
+        }
+        java.time.Instant previousStart = tournament.getScheduledStart();
+        tournament.scheduleStartAt(newStart, tournament.isRequireFullToStart());
+        tournamentRepository.save(tournament);
+        log.info("Tournament {} under-filled ({}/{}) — admin rescheduled from {} to {}",
+                tournamentId, registered, required, previousStart, newStart);
+        return new TournamentRescheduleResult(tournamentId, tournament.getName(), previousStart, newStart);
     }
 
     /** True if the tournament only starts at its slot when the table is full. */

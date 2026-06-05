@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🛎️ Admin: postpone an under-filled tournament + e-mail its registrants
+- New admin action `POST /admin/tournaments/{id}/reschedule` (body `{ "startAt": Instant }`) moves an
+  under-filled tournament's start to a later time. `TournamentService.rescheduleIfUnderfilled` guards it:
+  REGISTERING only, the new time must be in the future, and it is rejected (409) once the required
+  head-count is reached — `maxPlayers` for a full-required tournament, otherwise `minPlayers`. A non-future
+  time is a 400. The `requireFull` flag is preserved.
+- Registrants are then notified by e-mail via the new `TournamentNotificationService`, reusing the existing
+  flag-gated `EmailService` (`app.mail.enabled`) infrastructure with a new "tournament rescheduled" template.
+  A registrant's address is resolved by treating the registration's `playerId` as the owning `User` id
+  (which it is for real-money entrants registered via the wallet bridge); bots / play-money randoms with no
+  user or no e-mail are skipped. Returns the number actually e-mailed.
+- Verified by `TournamentRescheduleIT` (full Spring context): under-filled → postponed and exactly the two
+  real registered users e-mailed (the bot skipped); enough players → 409 and no e-mails; past time → 400.
+  Surefire suite green (1086); the modified `AdminTournamentController` / `TournamentWalletService` beans
+  boot cleanly in every full-context IT. **SMS and an admin UI button are documented follow-ups** (the
+  `users` table has no phone column and no SMS gateway is wired — both would need new infrastructure).
+
 ### 🔺 Buy-up pyramid — slice 6: refund buy-outs on cancellation
 - `TournamentWalletService.cancelAndRefund` is now buy-up-aware: a player who bought a higher-level seat paid
   the seat **price** (which replaced the flat buy-in), so on cancellation they are made whole with that price,

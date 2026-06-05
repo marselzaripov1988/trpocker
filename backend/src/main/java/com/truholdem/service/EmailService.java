@@ -80,6 +80,22 @@ public class EmailService {
         sendHtmlEmail(to, subject, htmlContent);
     }
 
+    /**
+     * Notify a registrant that an under-filled tournament's start time has been moved. Best-effort and
+     * @Async; short-circuits (logs only) when mail is disabled, exactly like the other templates.
+     */
+    @Async
+    public void sendTournamentRescheduledEmail(String to, String username, String tournamentName,
+            String previousStart, String newStart) {
+        if (!mailEnabled) {
+            logger.info("Email sending is disabled. Skipping reschedule email to: {}", to);
+            return;
+        }
+        String subject = "Tournament rescheduled: " + tournamentName;
+        String htmlContent = buildTournamentRescheduledHtml(username, tournamentName, previousStart, newStart);
+        sendHtmlEmail(to, subject, htmlContent);
+    }
+
     private void sendHtmlEmail(String to, String subject, String htmlContent) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
@@ -223,5 +239,44 @@ public class EmailService {
             </body>
             </html>
             """.formatted(username, resetUrl, resetUrl);
+    }
+
+    private String buildTournamentRescheduledHtml(String username, String tournamentName,
+            String previousStart, String newStart) {
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+                    .header h1 { margin: 0; font-size: 28px; }
+                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+                    .slot { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #667eea; }
+                    .footer { text-align: center; color: #888; font-size: 12px; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>&#9824; TruHoldem</h1>
+                    </div>
+                    <div class="content">
+                        <h2>Hello %s!</h2>
+                        <p>The tournament <strong>%s</strong> did not reach the required number of players in time,
+                           so its start has been postponed. Your registration is kept &mdash; no action is needed.</p>
+                        <div class="slot">Previous start: <strong>%s</strong></div>
+                        <div class="slot">New start: <strong>%s</strong></div>
+                        <p>We'll see you at the new time. Good luck at the tables!</p>
+                    </div>
+                    <div class="footer">
+                        <p>&copy; 2024 TruHoldem. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """.formatted(username, tournamentName, previousStart, newStart);
     }
 }

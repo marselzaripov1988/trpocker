@@ -18,10 +18,12 @@ import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.dto.ScheduleDailyTournamentRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
 import com.truholdem.dto.TournamentDetailResponse;
+import com.truholdem.dto.TournamentRescheduleResult;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
 import com.truholdem.model.TournamentType;
 import com.truholdem.service.TournamentService;
+import com.truholdem.service.notification.TournamentNotificationService;
 import com.truholdem.service.tournament.PyramidTournamentService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
 import com.truholdem.service.wallet.TournamentWalletService;
@@ -46,14 +48,17 @@ public class AdminTournamentController {
     private final TournamentService tournamentService;
     private final PyramidTournamentService pyramidTournamentService;
     private final TournamentWalletService tournamentWalletService;
+    private final TournamentNotificationService tournamentNotificationService;
 
     public AdminTournamentController(
             TournamentService tournamentService,
             PyramidTournamentService pyramidTournamentService,
-            TournamentWalletService tournamentWalletService) {
+            TournamentWalletService tournamentWalletService,
+            TournamentNotificationService tournamentNotificationService) {
         this.tournamentService = tournamentService;
         this.pyramidTournamentService = pyramidTournamentService;
         this.tournamentWalletService = tournamentWalletService;
+        this.tournamentNotificationService = tournamentNotificationService;
     }
 
     @PostMapping
@@ -93,6 +98,18 @@ public class AdminTournamentController {
             @Valid @RequestBody ScheduleDailyTournamentRequest body) {
         log.info("Admin pinning tournament {} to {} (requireFull={})", id, body.timeOfDay(), body.requireFull());
         tournamentService.scheduleAtTimeOfDay(id, body.timeOfDay(), body.requireFull());
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
+    }
+
+    @PostMapping("/{id}/reschedule")
+    @Operation(summary = "Postpone an under-filled tournament's start and e-mail its registrants; "
+            + "rejected if the required head-count is already reached or it has left REGISTERING")
+    public ResponseEntity<TournamentDetailResponse> reschedule(@PathVariable UUID id,
+            @Valid @RequestBody ScheduleTournamentRequest body) {
+        TournamentRescheduleResult result = tournamentService.rescheduleIfUnderfilled(id, body.startAt());
+        int notified = tournamentNotificationService.notifyRescheduled(result);
+        log.info("Admin rescheduled tournament {} from {} to {} — notified {} registrant(s)",
+                id, result.previousStart(), result.newStart(), notified);
         return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
