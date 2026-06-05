@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 5: final run → grand champion (engine lifecycle complete)
+- `FederatedPyramidService.runFinalToChampion` runs the FINAL_RUNNING final pyramid to its single winner via
+  `PyramidTournamentService.runToCompletion` (not wrapped in a transaction — same pattern as a shard run),
+  then `recordChampion` (self-proxy transaction, idempotent) sets `champion_player_id` and marks the
+  federation **COMPLETED**. This closes the full engine lifecycle: register → wave-fill shards → run each
+  shard to a winner → barrier → admin-scheduled final → final run → one grand champion. No schema change.
+- Verified by a new `FederatedPyramidFinalIT` end-to-end scenario (8-player / 4-shard federation, seats=2):
+  fill → drain → schedule → start → `runFinalToChampion` yields a non-null champion, the federation is
+  COMPLETED with that `champion_player_id`, and the champion is one of the four shard winners. Surefire suite
+  green (1090).
+
 ### 🔺 Federated pyramid — slice 4: finalists barrier + admin-scheduled final
 - With the federation at AWAITING_FINAL (all shard winners gathered), `FederatedPyramidService.scheduleFinal`
   lets an admin set the final's start time (any future instant) → FINAL_SCHEDULED, and e-mails every finalist

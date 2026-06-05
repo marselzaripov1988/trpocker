@@ -282,6 +282,33 @@ public class FederatedPyramidService {
         return federation;
     }
 
+    /**
+     * Run the final pyramid to the grand champion (reusing {@link PyramidTournamentService}, so — like a shard
+     * run — this is intentionally not wrapped in a transaction), then record the champion and complete the
+     * federation. Requires FINAL_RUNNING. Returns the final's pyramid run result.
+     */
+    public PyramidRunResult runFinalToChampion(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() != FederationStatus.FINAL_RUNNING) {
+            throw new IllegalStateException("Final is not running (status " + federation.getStatus() + ")");
+        }
+        PyramidRunResult result = pyramidTournamentService.runToCompletion(federation.getFinalTournamentId());
+        self.recordChampion(federationId, result.championId());
+        return result;
+    }
+
+    /** Record the grand champion and mark the federation COMPLETED (idempotent). */
+    @Transactional
+    public void recordChampion(UUID federationId, UUID championPlayerId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() == FederationStatus.COMPLETED) {
+            return;
+        }
+        federation.complete(championPlayerId);
+        federationRepository.save(federation);
+        log.info("Federation {} — COMPLETED, grand champion {}", federationId, championPlayerId);
+    }
+
     /** Winners of the completed shards (the finalists), ordered by shard index. */
     private List<UUID> finalistPlayerIds(UUID federationId) {
         return shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED).stream()

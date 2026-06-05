@@ -152,7 +152,9 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       sets time, e-mails finalists via `notifyFederationFinalScheduled` + `EmailService` template) + `startFinal`
       (create + seed the final pyramid from the shard winners, start, → FINAL_RUNNING). Verified by
       `FederatedPyramidFinalIT` (e-mail to real users, end-to-end seeding, guards).
-- [ ] **5. Final run → grand champion** — run the final pyramid; set `champion_player_id`; COMPLETED.
+- [x] **5. Final run → grand champion** — `runFinalToChampion` (runToCompletion, no big tx) + `recordChampion`
+      (self-proxy tx, idempotent): set `champion_player_id`, federation COMPLETED. Closes the engine lifecycle;
+      verified by an end-to-end `FederatedPyramidFinalIT` scenario.
 - [ ] **6. REST + admin/player UI** — create federation, browse shards/finalists, admin schedule-final;
       player sees their shard + standing.
 - [ ] **7. Real money** — buy-in per shard + prize pool split (shard payouts + final), via WalletService.

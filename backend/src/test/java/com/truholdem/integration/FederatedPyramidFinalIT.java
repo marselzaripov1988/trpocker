@@ -122,6 +122,29 @@ class FederatedPyramidFinalIT {
     }
 
     @Test
+    @DisplayName("full lifecycle: fill → shards → final → one grand champion (COMPLETED)")
+    void runsToGrandChampion() {
+        PyramidFederation fed = federatedService.createFederation("Fed " + System.currentTimeMillis(), 8, 2, null);
+        for (int i = 0; i < 8; i++) {
+            federatedService.register(fed.getId(), UUID.randomUUID(), "Bot_" + i);
+        }
+        federatedService.drainShards(fed.getId());
+        var winners = shardRepository.findByFederationIdOrderByShardIndexAsc(fed.getId()).stream()
+                .map(PyramidFederationShard::getWinnerPlayerId).toList();
+        federatedService.scheduleFinal(fed.getId(), Instant.now().plus(2, ChronoUnit.HOURS));
+        federatedService.startFinal(fed.getId());
+
+        var result = federatedService.runFinalToChampion(fed.getId());
+
+        assertThat(result.championId()).isNotNull();
+        PyramidFederation done = federationRepository.findById(fed.getId()).orElseThrow();
+        assertThat(done.getStatus()).isEqualTo(FederationStatus.COMPLETED);
+        assertThat(done.getChampionPlayerId()).isEqualTo(result.championId());
+        // The grand champion is one of the four shard winners.
+        assertThat(winners).contains(done.getChampionPlayerId());
+    }
+
+    @Test
     @DisplayName("scheduleFinal is rejected before all shards are done, and for a past time")
     void scheduleGuards() {
         PyramidFederation fed = federatedService.createFederation("Fed " + System.currentTimeMillis(), 8, 2, null);
