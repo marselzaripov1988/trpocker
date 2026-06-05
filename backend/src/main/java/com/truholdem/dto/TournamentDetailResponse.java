@@ -57,7 +57,9 @@ public record TournamentDetailResponse(
     /** Scheduled auto-start time (null = manual). */
     Instant scheduledStart,
     /** When true, a scheduled tournament only starts at its slot if the table is full (else postpones a day). */
-    boolean requireFullToStart
+    boolean requireFullToStart,
+    /** When true, this PYRAMID lets players buy guaranteed higher-level seats before start ("tickets"). */
+    boolean pyramidBuyUpEnabled
 ) {
     
   /** @deprecated Prefer {@link #fromSummary} for large fields to avoid loading all registrations. */
@@ -139,7 +141,8 @@ public record TournamentDetailResponse(
                 tournament.getStartTime(),
                 durationStr,
                 tournament.getScheduledStart(),
-                tournament.isRequireFullToStart());
+                tournament.isRequireFullToStart(),
+                tournament.isPyramidBuyUpEnabled());
     }
     
     

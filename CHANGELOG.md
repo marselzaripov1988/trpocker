@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 7: player REST + "tickets" UI (epic complete)
+- New player-facing `PyramidBuyoutController` (`/v1/tournaments/{id}/pyramid/...`): `GET …/tickets` lists the
+  buyable higher-level seats (level, seat index, price, asset) and `POST …/buy-seat` `{level, seatIndex}` buys
+  one for the authenticated user (charges the wallet at the seat price, which replaces the flat buy-in). DTOs:
+  `BuyoutTicketResponse`, `PyramidSeatPurchaseResponse`, `BuyPyramidSeatRequest`; the service `BuyoutTicket`
+  now also carries the paying asset. `TournamentDetailResponse` gained `pyramidBuyUpEnabled` so clients can
+  gate the UI.
+- Frontend: a `PyramidBuyUpPanelComponent` ("🎟️ Buy a higher-level seat") on the tournament lobby lists each
+  buyable seat with its computed price and a **Buy** button, shown only to a registered player while a buy-up
+  pyramid is REGISTERING. A purchase toasts the result and reloads the tournament. New
+  `TournamentPyramidService` wraps the two endpoints; `pyramidBuyUpEnabled`/`type` are mapped into the
+  tournament model.
+- Verified end-to-end by `PyramidBuyoutControllerIT` (HTTP → controller → service → wallet → DB: tickets
+  listed, seat bought, wallet charged the 200 price, buy-out persisted). ArchUnit green (the DTO maps in the
+  controller, not the `dto` package, to avoid a dto→service cycle). Backend surefire suite green (1086);
+  frontend `ng build` + eslint clean. **This closes the buy-up pyramid epic (slices 1–7).**
+
 ### 🛎️ Admin: postpone an under-filled tournament + e-mail its registrants
 - New admin action `POST /admin/tournaments/{id}/reschedule` (body `{ "startAt": Instant }`) moves an
   under-filled tournament's start to a later time. `TournamentService.rescheduleIfUnderfilled` guards it:

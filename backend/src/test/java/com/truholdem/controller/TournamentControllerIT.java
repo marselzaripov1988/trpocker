@@ -299,6 +299,7 @@ class TournamentControllerIT {
                     null,
                     null,
                     null,
+                    false,
                     false);
             when(tournamentService.getTournamentDetail(tournamentId)).thenReturn(detail);
 

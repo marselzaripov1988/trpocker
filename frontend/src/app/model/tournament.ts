@@ -97,6 +97,10 @@ export interface Tournament {
   name: string;
   status: TournamentStatus;
   config: TournamentConfig;
+  /** Tournament type (e.g. FREEZEOUT, PYRAMID). */
+  type?: string;
+  /** When true, this PYRAMID lets players buy guaranteed higher-level seats before start ("tickets"). */
+  pyramidBuyUpEnabled?: boolean;
   
   
   currentLevel: number;

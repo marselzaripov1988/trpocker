@@ -111,7 +111,10 @@ Slices:
 - [x] **6. Refund/edge** — `cancelAndRefund` is buy-up-aware: a buyer is refunded the seat price they paid
       (distinct `tbuyup-refund:` key), a plain registrant the flat buy-in. Covers "never fills" (under-filled
       buy-up pyramids cancel through the same path). Verified by a new `PyramidBuyoutServiceIT` scenario.
-- [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
+- [x] **7. UI + verify** — player REST (`PyramidBuyoutController`: `GET …/pyramid/tickets`,
+      `POST …/pyramid/buy-seat`) + a lobby "tickets" panel (`PyramidBuyUpPanelComponent`) showing each buyable
+      seat's price with a Buy button (gated on `pyramidBuyUpEnabled` + REGISTERING). Verified end-to-end by
+      `PyramidBuyoutControllerIT` (HTTP→wallet→DB). **Epic complete.**
 Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced) + total cap 10; the
 buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins); the player UI shows a
 "ticket" per buyable seat at each level with its computed price. Real-money only (needs `cryptoBuyInAmount`).

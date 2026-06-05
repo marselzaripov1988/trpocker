@@ -14,11 +14,12 @@ import { Subject } from 'rxjs';
 import { TournamentStore } from '../../store/tournament.store';
 import { PrizeStructure } from '../../model/tournament';
 import { AuthService } from '../../services/auth.service';
+import { PyramidBuyUpPanelComponent } from '../pyramid-buy-up-panel/pyramid-buy-up-panel.component';
 
 @Component({
   selector: 'app-tournament-lobby',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, PyramidBuyUpPanelComponent],
   providers: [TournamentStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -206,6 +207,12 @@ import { AuthService } from '../../services/auth.service';
                 </div>
               }
             </div>
+
+            @if (isRegistered() && tournament()!.pyramidBuyUpEnabled && tournament()!.status === 'REGISTERING') {
+              <app-pyramid-buy-up-panel
+                [tournamentId]="tournament()!.id"
+                (purchased)="onSeatPurchased()" />
+            }
           </section>
 
           <!-- Blind Structure Panel -->
@@ -676,6 +683,14 @@ export class TournamentLobbyComponent implements OnInit, OnDestroy {
     const tournament = this.tournament();
     if (tournament) {
       this.store.unregisterFromTournament(tournament.id);
+    }
+  }
+
+  /** Refresh the tournament after a pyramid seat is bought (the buy-in/price was charged to the wallet). */
+  onSeatPurchased(): void {
+    const tournament = this.tournament();
+    if (tournament) {
+      this.store.loadTournament(tournament.id);
     }
   }
 

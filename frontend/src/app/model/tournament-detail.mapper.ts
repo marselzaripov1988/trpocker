@@ -70,6 +70,8 @@ export interface TournamentDetailApi {
   scheduledStart?: string | null;
   /** Start only at the slot if the table is full (else postpone a day). */
   requireFullToStart?: boolean;
+  /** When true, this PYRAMID lets players buy guaranteed higher-level seats before start ("tickets"). */
+  pyramidBuyUpEnabled?: boolean;
 }
 
 export interface TournamentTableSummaryApi {
@@ -219,6 +221,8 @@ export function mapTournamentDetailFromApi(api: TournamentDetailApi): Tournament
     id: api.id,
     name: api.name,
     status: api.status,
+    type: api.type,
+    pyramidBuyUpEnabled: api.pyramidBuyUpEnabled ?? false,
     config,
     currentLevel: api.currentLevel,
     currentBlinds,

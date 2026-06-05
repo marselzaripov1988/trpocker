@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.truholdem.config.AppProperties;
+import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.PyramidBuyout;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentStatus;
@@ -50,8 +51,8 @@ public class PyramidBuyoutService {
         this.appProperties = appProperties;
     }
 
-    /** A buyable "ticket": one higher-level seat the player could buy, with its price. */
-    public record BuyoutTicket(int level, int seatIndex, BigDecimal price) {
+    /** A buyable "ticket": one higher-level seat the player could buy, with its price + paying asset. */
+    public record BuyoutTicket(int level, int seatIndex, BigDecimal price, CryptoAsset asset) {
     }
 
     /** All currently-buyable seats across all levels, with prices, for the player to choose ("tickets"). */
@@ -62,13 +63,14 @@ public class PyramidBuyoutService {
         long registered = registrationRepository.countByTournamentId(tournamentId);
         List<PyramidBuyout> existing = buyoutRepository.findByTournamentId(tournamentId);
 
+        CryptoAsset asset = tournament.getCryptoBuyInAsset();
         List<BuyoutTicket> tickets = new ArrayList<>();
         for (int level = 2; level <= bracket.levels(); level++) {
             BigDecimal price = bracket.buyoutPrice(level, tournament.getCryptoBuyInAmount());
             long seats = bracket.buyableSeatsAtLevel(level);
             for (int seat = 0; seat < seats; seat++) {
                 if (isBuyable(bracket, level, seat, registered, existing)) {
-                    tickets.add(new BuyoutTicket(level, seat, price));
+                    tickets.add(new BuyoutTicket(level, seat, price, asset));
                 }
             }
         }
