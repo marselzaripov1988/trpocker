@@ -129,6 +129,34 @@ class FederatedPyramidServiceIT {
     }
 
     @Test
+    @DisplayName("batch bot registration fills shards in order and keeps the single-open-shard invariant")
+    void batchFill() {
+        int placed = federatedService.registerBotsBatch(federationId, 5, "Bot_");
+        assertThat(placed).isEqualTo(5);
+
+        var shards = shardRepository.findByFederationIdOrderByShardIndexAsc(federationId);
+        assertThat(shards.get(0).getStatus()).isEqualTo(FederationShardStatus.READY);
+        assertThat(shards.get(1).getStatus()).isEqualTo(FederationShardStatus.READY);
+        assertThat(shards.get(2).getStatus()).isEqualTo(FederationShardStatus.REGISTERING);
+        assertThat(shards.get(2).getFilledCount()).isEqualTo(1);
+        assertThat(shards.get(3).getStatus()).isEqualTo(FederationShardStatus.PENDING);
+
+        // A single registration continues into the open shard, then opens the next when it fills.
+        federatedService.register(federationId, UUID.randomUUID(), "Solo");
+        var after = shardRepository.findByFederationIdOrderByShardIndexAsc(federationId);
+        assertThat(after.get(2).getStatus()).isEqualTo(FederationShardStatus.READY);
+        assertThat(after.get(3).getStatus()).isEqualTo(FederationShardStatus.REGISTERING);
+        assertThat(registrationRepository.countByFederationId(federationId)).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("a batch larger than capacity places only the remaining seats")
+    void batchCapsAtCapacity() {
+        assertThat(federatedService.registerBotsBatch(federationId, 1000, "Bot_")).isEqualTo(8);
+        assertThat(registrationRepository.countByFederationId(federationId)).isEqualTo(8);
+    }
+
+    @Test
     @DisplayName("registration is idempotent per player and rejected once every shard is full")
     void idempotentAndFull() {
         UUID player = UUID.randomUUID();

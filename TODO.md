@@ -170,7 +170,11 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       pays the pool — `federated-shard-prize-bps` split among shard winners (qualifier) + remainder to the
       champion (rounding absorbed into champion; sums to pool). Verified by `FederatedPyramidPrizeIT`
       (exact balances + pool conservation).
-- [ ] **8. Cluster/load verify** — physical node-group pinning under the cluster; scale test a wave of shards.
+- [x] **8. Cluster/load verify** — `registerBotsBatch` + admin `register-bots` endpoint (enables wave load);
+      node-group pinning balance verified (`FederatedPyramidNodeGroupIT`: 12 shards → 4/4/4 over 3 groups) +
+      batch-fill tests; documented manual wave load on the scale cluster (`load/k6/README.md`). **Epic complete.**
+      Follow-up: engine-level table affinity to a shard's node-group (today: balanced metadata + LB/ops hint;
+      shards already distribute via lease ownership).
 
 ## TODO — scale / load
 - [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`

@@ -152,6 +152,62 @@ public class FederatedPyramidService {
     }
 
     /**
+     * Bulk-register {@code count} synthetic bot players (play-money federations only) for load tests and
+     * simulations: fills shards in index order (flipping each full shard to READY and opening the next), in a
+     * single batched insert rather than per-player. Returns the number actually placed (fewer if the
+     * federation fills up first).
+     */
+    @Transactional
+    public int registerBotsBatch(UUID federationId, int count, String namePrefix) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() != FederationStatus.REGISTERING
+                && federation.getStatus() != FederationStatus.SHARDS_RUNNING) {
+            throw new IllegalStateException("Federation " + federationId + " is not accepting registrations");
+        }
+        if (federation.isRealMoney()) {
+            throw new IllegalStateException("Bot batch registration is only allowed for play-money federations");
+        }
+        String prefix = (namePrefix == null || namePrefix.isBlank()) ? "Bot_" : namePrefix;
+        long seq = registrationRepository.countByFederationId(federationId);
+        int remaining = count;
+        int placed = 0;
+        List<PyramidFederationRegistration> regs = new ArrayList<>();
+        List<PyramidFederationShard> touched = new ArrayList<>();
+        for (PyramidFederationShard shard : shardRepository.findByFederationIdOrderByShardIndexAsc(federationId)) {
+            if (remaining == 0) {
+                break;
+            }
+            if (shard.getStatus() != FederationShardStatus.PENDING
+                    && shard.getStatus() != FederationShardStatus.REGISTERING) {
+                continue;
+            }
+            if (shard.getStatus() == FederationShardStatus.PENDING) {
+                shard.markRegistering();
+            }
+            int take = Math.min(federation.getShardSize() - shard.getFilledCount(), remaining);
+            for (int j = 0; j < take; j++) {
+                regs.add(new PyramidFederationRegistration(
+                        federationId, shard.getShardIndex(), UUID.randomUUID(), prefix + (seq++)));
+            }
+            shard.setFilledCount(shard.getFilledCount() + take);
+            if (shard.getFilledCount() >= federation.getShardSize()) {
+                shard.markReady();
+            }
+            remaining -= take;
+            placed += take;
+            touched.add(shard);
+        }
+        registrationRepository.saveAll(regs);
+        shardRepository.saveAll(touched);
+        // Restore the single-open-shard invariant for any later single registrations.
+        if (openFillShard(federationId).isEmpty()) {
+            openNextPendingShard(federationId);
+        }
+        log.info("Federation {} — batch-registered {} bot(s)", federationId, placed);
+        return placed;
+    }
+
+    /**
      * Materialize READY shards into running child pyramid tournaments, up to the wave concurrency cap. Each
      * started shard gets a child PYRAMID tournament seeded with its players and started. Returns the number of
      * shards started in this call. Safe to call repeatedly (e.g. after a shard completes a slot frees up).

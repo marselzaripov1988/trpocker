@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 8: cluster/load verify (epic complete)
+- `FederatedPyramidService.registerBotsBatch` bulk-registers synthetic bot players (play-money only) in a
+  single batched insert, filling shards in order (flipping each full shard to READY, opening the next) while
+  preserving the single-open-shard invariant — enabling wave-of-shards load runs. Admin endpoint
+  `POST /admin/pyramid-federations/{id}/register-bots?count=N`.
+- Verified shard **node-group pinning is balanced**: `FederatedPyramidNodeGroupIT` (node-group-count=3, 12
+  shards) asserts a clean 4/4/4 round-robin spread (`ng-0`/`ng-1`/`ng-2`), and `FederatedPyramidServiceIT`
+  gains batch-fill tests (in-order fill + invariant + capacity cap). A documented manual wave-of-shards load
+  procedure on the scale cluster is added to `load/k6/README.md`.
+- **Honest scope:** node-group is balanced placement metadata + an LB/ops hint today; because each shard is an
+  independent tournament, the existing lease-based cluster already spreads a federation's tables across nodes.
+  Pinning a shard's tables to its node-group at the engine level (vs. any-node lease ownership) is a documented
+  follow-up. Surefire suite green (1090). **This closes the federated pyramid epic (slices 1–8, play + real
+  money, engine + REST + admin/player UI + cluster/load).**
+
 ### 🔺 Federated pyramid — slice 7: real money (buy-in + prize distribution)
 - A federation can carry a crypto buy-in (`crypto_buy_in_amount` / `crypto_buy_in_asset`, changeset 18;
   null/zero = play-money). `register` charges the buy-in via `WalletService.chargeBuyIn` (idempotent key

@@ -211,3 +211,32 @@ Takeaways from the numbers:
 - **Not yet run at a true 10k on production-sized infra** — the scenario is the instrument; an actual 10k
   sustained run needs a sized cluster (≥ 4–8 nodes), PgBouncer, and a multi-host load generator. That is the
   remaining ops exercise, distinct from the code being ready.
+
+---
+
+# Federated pyramid — wave-of-shards load (manual, scale cluster)
+
+A federated pyramid is a very large field split into shards of `shardSize`, each an independent pyramid run
+to one winner; the winners meet in an admin-scheduled final. Each shard is round-robin pinned to a
+node-group (`app.tournament.federated-node-group-count`) — and because each shard is an ordinary tournament,
+the lease-based cluster already spreads a federation's tables across nodes. To exercise a wave on the
+2-node scale cluster (`docker-compose.scale.yml`, all Phase 5 flags on, auth disabled):
+
+```bash
+docker compose -f docker-compose.scale.yml up -d backend1 backend2 nginx
+LB=http://localhost:8092
+# create a federation (seats come from config; set federated-pyramid-enabled=true on the nodes)
+FID=$(curl -s -X POST "$LB/api/v1/admin/pyramid-federations" -H 'Content-Type: application/json' \
+  -d '{"name":"Wave","startingPlayers":1000,"shardSize":100}' | sed -n 's/.*"id":"\([0-9a-f-]\{36\}\)".*/\1/p')
+# bulk-fill with bots (batched insert), then promote waves and drain shards to winners
+curl -s -X POST "$LB/api/v1/admin/pyramid-federations/$FID/register-bots?count=1000" >/dev/null
+curl -s -X POST "$LB/api/v1/admin/pyramid-federations/$FID/promote" >/dev/null
+curl -s -X POST "$LB/api/v1/admin/pyramid-federations/$FID/drain-shards" >/dev/null
+curl -s "$LB/api/v1/admin/pyramid-federations/$FID"   # watch shardsCompleted climb
+```
+
+Set `FEDERATED_PYRAMID_ENABLED=true` (and a smaller `app.tournament.pyramid-default-seats-per-table` for fast
+bot rounds) on the backend nodes. Observe per-node table spread the same way as the WS scenario
+(`websocket_sessions_local` / `docker stats`). **Honest scope:** node-group is balanced placement metadata +
+an LB/ops hint today; pinning a shard's tables to its node-group at the engine level (vs. the existing
+any-node lease ownership) is a documented follow-up.

@@ -71,6 +71,16 @@ public class AdminPyramidFederationController {
         return ResponseEntity.ok(federatedService.getFederationDetail(id));
     }
 
+    @PostMapping("/{id}/register-bots")
+    @Operation(summary = "Bulk-register synthetic bot players (play-money load tests / simulation)")
+    public ResponseEntity<FederationDetailResponse> registerBots(@PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int count) {
+        assertEnabled();
+        int placed = federatedService.registerBotsBatch(id, count, "Bot_");
+        log.info("Admin batch-registered {} bot(s) for federation {}", placed, id);
+        return ResponseEntity.ok(federatedService.getFederationDetail(id));
+    }
+
     @PostMapping("/{id}/promote")
     @Operation(summary = "Materialize READY shards into running child pyramids (up to the wave cap)")
     public ResponseEntity<FederationDetailResponse> promote(@PathVariable UUID id) {
