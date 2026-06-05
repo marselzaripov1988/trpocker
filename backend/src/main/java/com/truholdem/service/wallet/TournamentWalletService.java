@@ -1,7 +1,9 @@
 package com.truholdem.service.wallet;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -12,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.truholdem.domain.event.TournamentCompleted;
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.model.PyramidBuyout;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentRegistration;
+import com.truholdem.repository.PyramidBuyoutRepository;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.service.TournamentService;
@@ -34,13 +38,16 @@ public class TournamentWalletService {
     private final TournamentService tournamentService;
     private final TournamentRegistrationRepository registrationRepository;
     private final TournamentRepository tournamentRepository;
+    private final PyramidBuyoutRepository buyoutRepository;
 
     public TournamentWalletService(WalletService walletService, TournamentService tournamentService,
-            TournamentRegistrationRepository registrationRepository, TournamentRepository tournamentRepository) {
+            TournamentRegistrationRepository registrationRepository, TournamentRepository tournamentRepository,
+            PyramidBuyoutRepository buyoutRepository) {
         this.walletService = walletService;
         this.tournamentService = tournamentService;
         this.registrationRepository = registrationRepository;
         this.tournamentRepository = tournamentRepository;
+        this.buyoutRepository = buyoutRepository;
     }
 
     /** Buy into a real-money tournament at its configured crypto fee (debit + register, atomically). */
@@ -71,9 +78,13 @@ public class TournamentWalletService {
     }
 
     /**
-     * Cancel a tournament and, for a real-money one, credit every registrant's buy-in back to their wallet.
-     * The refund is idempotent per (tournament, user), so a re-run does not double-refund. Returns the number
-     * of buy-ins refunded (0 for play-money tournaments). Refund + cancel run in one transaction.
+     * Cancel a tournament and, for a real-money one, credit every registrant's entry fee back to their wallet.
+     * A player who bought a higher-level pyramid seat paid the seat <i>price</i> (which replaced the flat
+     * buy-in), so they are refunded that price; everyone else is refunded the flat buy-in. Each refund is
+     * idempotent per (tournament, user) — and the buy-out vs. flat refunds use distinct keys, so a buyer is
+     * never refunded twice — so a re-run does not double-refund. Returns the number of entries refunded (0 for
+     * play-money tournaments). Refund + cancel run in one transaction. Covers the "tournament never fills"
+     * case, since an under-filled tournament is cancelled through this same path.
      */
     @Transactional
     public int cancelAndRefund(UUID tournamentId) {
@@ -82,16 +93,25 @@ public class TournamentWalletService {
         int refunded = 0;
         if (tournament.isRealMoney()) {
             CryptoAsset asset = tournament.getCryptoBuyInAsset();
-            BigDecimal amount = tournament.getCryptoBuyInAmount();
+            BigDecimal buyIn = tournament.getCryptoBuyInAmount();
+            Map<UUID, PyramidBuyout> buyouts = new HashMap<>();
+            for (PyramidBuyout b : buyoutRepository.findByTournamentId(tournamentId)) {
+                buyouts.put(b.getBuyerPlayerId(), b);
+            }
             for (TournamentRegistration reg : registrationRepository.findByTournamentId(tournamentId)) {
-                if (walletService.refundBuyIn(reg.getPlayerId(), asset, amount,
-                        refundKey(tournamentId, reg.getPlayerId()))) {
+                UUID playerId = reg.getPlayerId();
+                PyramidBuyout buyout = buyouts.get(playerId);
+                boolean credited = buyout != null
+                        ? walletService.refundBuyIn(playerId, buyout.getAsset(), buyout.getPriceAmount(),
+                                buyoutRefundKey(tournamentId, playerId))
+                        : walletService.refundBuyIn(playerId, asset, buyIn, refundKey(tournamentId, playerId));
+                if (credited) {
                     refunded++;
                 }
             }
         }
         tournamentService.cancelTournament(tournamentId);
-        log.info("Tournament {} cancelled — refunded {} buy-in(s)", tournamentId, refunded);
+        log.info("Tournament {} cancelled — refunded {} entry fee(s)", tournamentId, refunded);
         return refunded;
     }
 
@@ -136,5 +156,9 @@ public class TournamentWalletService {
 
     private static String refundKey(UUID tournamentId, UUID userId) {
         return "trefund:" + tournamentId + ":" + userId;
+    }
+
+    private static String buyoutRefundKey(UUID tournamentId, UUID userId) {
+        return "tbuyup-refund:" + tournamentId + ":" + userId;
     }
 }

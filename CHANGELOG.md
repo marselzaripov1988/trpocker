@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 6: refund buy-outs on cancellation
+- `TournamentWalletService.cancelAndRefund` is now buy-up-aware: a player who bought a higher-level seat paid
+  the seat **price** (which replaced the flat buy-in), so on cancellation they are made whole with that price,
+  while every other registrant gets the flat buy-in back. The buy-out refund uses a distinct idempotency key
+  (`tbuyup-refund:…` vs. `trefund:…`), so a buyer is never double-refunded and a re-run never double-pays.
+- This also covers the **"tournament never fills"** case: an under-filled buy-up pyramid is cancelled through
+  this same path (manual admin cancel or the scheduled-start under-fill sweep), so buyers get their seat price
+  back automatically. Verified by a new `PyramidBuyoutServiceIT` scenario (buyer refunded 200 = seat price, a
+  plain registrant refunded 20 = buy-in) + the unchanged `TournamentWalletServiceIT` / scheduled-start tests.
+  Full suite green (1086).
+
 ### 🔺 Buy-up pyramid — slice 5b: fixed-bracket engine advancement
 - `PyramidTournamentService.advanceToNextRound` now branches on `pyramidBuyUpEnabled` to a new
   `advanceBuyUpToNextRound`: when a round ends it closes the old tables, computes the next round's seats as the

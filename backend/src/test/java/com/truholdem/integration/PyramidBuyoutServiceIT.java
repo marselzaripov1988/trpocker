@@ -131,4 +131,22 @@ class PyramidBuyoutServiceIT {
         assertThatThrownBy(() -> buyoutService.buySeat(tournamentId, player, 2, 60))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    @DisplayName("cancelling refunds the buyer their seat price and a plain registrant their buy-in")
+    void cancelRefundsBuyoutPriceNotBuyIn() {
+        UUID buyer = registered("300", "Buyer"); // 300 − 20 buy-in = 280
+        UUID plain = registered("50", "Plain"); // 50 − 20 buy-in = 30
+
+        buyoutService.buySeat(tournamentId, buyer, 2, 50); // +20 refund − 200 price → 100
+        assertThat(walletService.balance(buyer, ASSET)).isEqualByComparingTo("100");
+
+        int refunded = bridge.cancelAndRefund(tournamentId);
+
+        assertThat(refunded).isEqualTo(2);
+        // Buyer gets the seat price (200) back, not the flat buy-in: 100 + 200 = 300 (whole-made).
+        assertThat(walletService.balance(buyer, ASSET)).isEqualByComparingTo("300");
+        // Plain registrant gets the flat buy-in (20) back: 30 + 20 = 50.
+        assertThat(walletService.balance(plain, ASSET)).isEqualByComparingTo("50");
+    }
 }

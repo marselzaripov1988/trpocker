@@ -108,7 +108,9 @@ Slices:
       tables, seats survivors + the buyers whose level == the new round (higher buyers stay deferred), skips
       empty levels, tags tables `bracketLevel`, marks the final table when none deferred. Flag-gated (normal
       pyramid unchanged); verified by `PyramidBuyUpRunIT` (run-to-champion) + regression `PyramidAdvanceRoundIT`.
-- [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
+- [x] **6. Refund/edge** — `cancelAndRefund` is buy-up-aware: a buyer is refunded the seat price they paid
+      (distinct `tbuyup-refund:` key), a plain registrant the flat buy-in. Covers "never fills" (under-filled
+      buy-up pyramids cancel through the same path). Verified by a new `PyramidBuyoutServiceIT` scenario.
 - [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
 Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced) + total cap 10; the
 buy-out price **replaces** the buy-in (= sum of the sub-tree's level-1 buy-ins); the player UI shows a
