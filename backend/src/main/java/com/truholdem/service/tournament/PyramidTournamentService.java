@@ -52,6 +52,7 @@ public class PyramidTournamentService {
     private final AppProperties.Tournament tournamentProperties;
     private final TransactionTemplate transactionTemplate;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.truholdem.repository.PyramidBuyoutRepository buyoutRepository;
 
     public PyramidTournamentService(
             TournamentRepository tournamentRepository,
@@ -63,7 +64,8 @@ public class PyramidTournamentService {
             TournamentStartService tournamentStartService,
             AppProperties appProperties,
             TransactionTemplate transactionTemplate,
-            org.springframework.context.ApplicationEventPublisher eventPublisher) {
+            org.springframework.context.ApplicationEventPublisher eventPublisher,
+            com.truholdem.repository.PyramidBuyoutRepository buyoutRepository) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
@@ -74,6 +76,7 @@ public class PyramidTournamentService {
         this.tournamentProperties = appProperties.getTournament();
         this.transactionTemplate = transactionTemplate;
         this.eventPublisher = eventPublisher;
+        this.buyoutRepository = buyoutRepository;
     }
 
     /**
@@ -273,6 +276,10 @@ public class PyramidTournamentService {
     @Transactional
     public void advanceToNextRound(UUID tournamentId) {
         Tournament tournament = loadTournament(tournamentId);
+        if (tournament.isPyramidBuyUpEnabled()) {
+            advanceBuyUpToNextRound(tournament);
+            return;
+        }
         int activeCount = registrationRepository.countActiveByTournamentId(tournamentId);
 
         if (activeCount <= 1) {
@@ -316,6 +323,80 @@ public class PyramidTournamentService {
 
         log.info("Advanced pyramid tournament {} to round {} with {} tables and {} survivors",
                 tournamentId, tournament.getPyramidRound(), tableCount, activeCount);
+    }
+
+    /**
+     * Fixed-bracket advance for a buy-up pyramid: seat the survivors of the just-played level plus the buyers
+     * entering at the new level; buyers of still-higher levels stay deferred (unseated) until their level's
+     * round. (Strict per-seat parent mapping is a future refinement — grouping survivors + entering buyers
+     * into tables is what the survival format needs.)
+     */
+    private void advanceBuyUpToNextRound(Tournament tournament) {
+        UUID tournamentId = tournament.getId();
+        if (registrationRepository.countActiveByTournamentId(tournamentId) <= 1) {
+            return;
+        }
+        List<TournamentTable> oldTables = tableRepository.findActiveTablesByTournament(tournamentId);
+        for (TournamentTable old : oldTables) {
+            old.close();
+        }
+        tableRepository.saveAll(oldTables);
+
+        List<com.truholdem.model.PyramidBuyout> buyouts = buyoutRepository.findByTournamentId(tournamentId);
+        int newRound = tournament.getPyramidRound() + 1;
+        List<UUID> toSeat = seatableForRound(tournamentId, buyouts, newRound);
+        // Skip a level with nobody (or one player) to play yet — only deferred buyers remain — until 2+ can play.
+        while (toSeat.size() <= 1 && hasDeferredAbove(buyouts, newRound)) {
+            newRound++;
+            toSeat = seatableForRound(tournamentId, buyouts, newRound);
+        }
+
+        int seats = tournament.getSeatsPerTable();
+        int tableCount = Math.max(1, (int) Math.ceil((double) toSeat.size() / seats));
+        boolean finalTable = toSeat.size() <= seats && !hasDeferredAbove(buyouts, newRound);
+        List<TournamentTable> newTables = new ArrayList<>(tableCount);
+        for (int n = 1; n <= tableCount; n++) {
+            TournamentTable table = finalTable && n == 1
+                    ? TournamentTable.createFinalTable(tournament)
+                    : new TournamentTable(tournament, n);
+            table.setBracketLevel(newRound);
+            newTables.add(table);
+        }
+        int tableIndex = 0;
+        for (UUID playerId : toSeat) {
+            TournamentTable table = newTables.get(tableIndex);
+            while (table.isFull() && tableIndex < newTables.size() - 1) {
+                tableIndex++;
+                table = newTables.get(tableIndex);
+            }
+            table.seatPlayer(playerId);
+            if (!table.isFull()) {
+                tableIndex = (tableIndex + 1) % newTables.size();
+            }
+        }
+        tableRepository.saveAll(newTables);
+        while (tournament.getPyramidRound() < newRound) {
+            tournament.incrementPyramidRound();
+        }
+        tournamentRepository.save(tournament);
+        log.info("Buy-up pyramid {} advanced to level {} ({} players, {} table(s))",
+                tournamentId, newRound, toSeat.size(), newTables.size());
+    }
+
+    /** Active players to seat at {@code round} = all active minus buyers who only enter above this round. */
+    private List<UUID> seatableForRound(UUID tournamentId,
+            List<com.truholdem.model.PyramidBuyout> buyouts, int round) {
+        java.util.Set<UUID> deferred = buyouts.stream()
+                .filter(b -> b.getLevel() > round)
+                .map(com.truholdem.model.PyramidBuyout::getBuyerPlayerId)
+                .collect(java.util.stream.Collectors.toSet());
+        return registrationRepository.findPlayerIdsForSeating(tournamentId).stream()
+                .filter(p -> !deferred.contains(p))
+                .toList();
+    }
+
+    private boolean hasDeferredAbove(List<com.truholdem.model.PyramidBuyout> buyouts, int round) {
+        return buyouts.stream().anyMatch(b -> b.getLevel() > round);
     }
 
     @Transactional

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 5b: fixed-bracket engine advancement
+- `PyramidTournamentService.advanceToNextRound` now branches on `pyramidBuyUpEnabled` to a new
+  `advanceBuyUpToNextRound`: when a round ends it closes the old tables, computes the next round's seats as the
+  active survivors **plus the buyers whose bought level equals the new round** (buyers above the new round stay
+  deferred until their level), skips levels that nobody reaches, creates the next level's tables (tagged
+  `bracketLevel = newRound`, the last one becomes the final table when no one is deferred above), round-robin
+  seats the players, and advances `pyramidRound` to the new level. **The branch is fully flag-gated — the normal
+  dynamic pyramid follows the existing path unchanged** (`PyramidAdvanceRoundIT` still green).
+- Verified end-to-end by a new H2 IT (`PyramidBuyUpRunIT`): 50 floor players play level 1, two level-2 buyers
+  enter at level 2, the bracket runs to a single champion, and a buyer is resolved (champion or eliminated).
+  Players are real-money (funded + bridge buy-in) **and** bot-named so the engine can auto-play them — closing
+  the buy-up-needs-wallet vs. pyramid-needs-bots tension. No schema change in this slice. Full suite green.
+
 ### 🔺 Buy-up pyramid — slice 5a: fixed-bracket seating wired into start
 - `TournamentStartService.completeStart` now branches on `pyramidBuyUpEnabled`: a buy-up pyramid seats the
   floor (registered non-buyers) on level-1 tables per `PyramidSeatingPlanner`, while buyers stay PLAYING but
