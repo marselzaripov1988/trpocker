@@ -159,8 +159,10 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       start-final/run-final/drain) + `PyramidFederationController` (player register + status), flag-gated, DTOs
       `CreateFederationRequest`/`FederationDetailResponse`/`FederationRegistrationResponse`. Verified by
       `FederatedPyramidControllerIT`.
-- [ ] **6b. Admin/player UI** — admin create form + federation detail (shard progress, finalists, schedule-final
-      button); player view of their shard + standing.
+- [x] **6b. Admin UI** — `/admin/federations` page (nav link 🔗 Pyramids): create form + live lifecycle panel
+      (status, per-shard-status chips, promote/run-shards/schedule-final/start-final/run-final/refresh).
+      `AdminFederationService` + models. eslint + `ng build` green.
+- [ ] **6c. Player UI** — player view of a federation: register button + their shard / standing.
 - [ ] **7. Real money** — buy-in per shard + prize pool split (shard payouts + final), via WalletService.
 - [ ] **8. Cluster/load verify** — physical node-group pinning under the cluster; scale test a wave of shards.
 

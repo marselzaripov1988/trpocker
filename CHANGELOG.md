@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 6b: admin UI
+- New admin page **🔗 Pyramids** (`/admin/federations`, behind the existing admin guard + nav link): a create
+  form (name, starting players, shard size, optional registration deadline = blank for indefinite) and, once
+  created, a live detail/lifecycle panel — status badge, shard/seat/registered stats, per-shard-status chips
+  (PENDING/REGISTERING/READY/RUNNING/COMPLETED), scheduled-final time, grand champion — with lifecycle
+  buttons: **Promote waves**, **Run shards**, **Schedule final + e-mail finalists** (datetime picker → ISO),
+  **Start final**, **Run final**, **Refresh**. New `AdminFederationService` (wraps the slice-6a endpoints) +
+  `admin-federation.models.ts` mirroring the backend DTOs; results/errors surface via the global toaster.
+- Verified: `eslint` clean and `ng build --configuration production` green. The player-facing register/standing
+  view is a small follow-up (slice 6c).
+
 ### 🔺 Federated pyramid — slice 6a: REST (admin + player)
 - `AdminPyramidFederationController` (`/v1/admin/pyramid-federations`, ADMIN): create a federation, read its
   detail (status + per-shard-status counts + champion), promote waves, schedule-final, start-final, run-final,
