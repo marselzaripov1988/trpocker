@@ -54,6 +54,8 @@ class TournamentStartServiceTest {
     @Mock
     private com.truholdem.service.cluster.TableOwnershipService ownership;
     @Mock
+    private com.truholdem.repository.PyramidBuyoutRepository buyoutRepository;
+    @Mock
     private ScheduledFuture<?> scheduledFuture;
 
     private TournamentStartService tournamentStartService;
@@ -76,7 +78,8 @@ class TournamentStartServiceTest {
                 taskScheduler,
                 appProperties,
                 timingService,
-                ownership);
+                ownership,
+                buyoutRepository);
     }
 
     @Test
@@ -120,7 +123,8 @@ class TournamentStartServiceTest {
                 taskScheduler,
                 appProperties,
                 timingService,
-                ownership);
+                ownership,
+                buyoutRepository);
         when(tournamentProperties.getAsyncStartThreshold()).thenReturn(100);
         assertThat(service.shouldStartAsynchronously(99)).isFalse();
         assertThat(service.shouldStartAsynchronously(100)).isTrue();

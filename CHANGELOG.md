@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 5a: fixed-bracket seating wired into start
+- `TournamentStartService.completeStart` now branches on `pyramidBuyUpEnabled`: a buy-up pyramid seats the
+  floor (registered non-buyers) on level-1 tables per `PyramidSeatingPlanner`, while buyers stay PLAYING but
+  unseated until their level's round (advancement = slice 5b). Only the level-1 tables holding a floor player
+  are created, each tagged `TournamentTable.bracketLevel = 1` (changeset 15, nullable column). **The branch is
+  fully flag-gated — every other tournament type and the normal pyramid follow the existing path byte-for-byte**
+  (the unchanged `PyramidAdvanceRoundIT` + start unit tests still pass).
+- Verified by an H2 IT (floor seated, buyer elevated/unseated, tables at bracket level 1) and changeset 15 on
+  a fresh Postgres (17 changesets, `bracket_level` added, `ddl-auto=validate` passes). Full suite green (1086).
+
 ### 🔺 Buy-up pyramid — slice 4: fixed-bracket start seating plan
 - `PyramidSeatingPlanner` computes the deterministic start seating for a buy-up pyramid: registered
   (non-buying) players fill the level-1 floor in registration order **skipping the seats inside closed

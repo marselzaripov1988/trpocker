@@ -67,7 +67,11 @@ public class TournamentTable {
     
     @Column(nullable = false)
     private boolean isActive = true;
-    
+
+    /** Fixed-bracket level for buy-up pyramids (1 = floor); null for dynamic/other formats. */
+    @Column(name = "bracket_level")
+    private Integer bracketLevel;
+
     private Instant createdAt;
     
     private Instant closedAt;
@@ -93,6 +97,14 @@ public class TournamentTable {
     
     
     
+    public Integer getBracketLevel() {
+        return bracketLevel;
+    }
+
+    public void setBracketLevel(Integer bracketLevel) {
+        this.bracketLevel = bracketLevel;
+    }
+
     public void seatPlayer(UUID playerId) {
         Objects.requireNonNull(playerId, "Player ID cannot be null");
         

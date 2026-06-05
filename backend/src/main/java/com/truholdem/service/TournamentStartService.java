@@ -46,6 +46,7 @@ public class TournamentStartService {
     private final TournamentTimingService timingService;
 
     private final TableOwnershipService ownership;
+    private final com.truholdem.repository.PyramidBuyoutRepository buyoutRepository;
     private final Map<UUID, ScheduledFuture<?>> scheduledLevelIncreases = new ConcurrentHashMap<>();
 
     public TournamentStartService(
@@ -56,7 +57,8 @@ public class TournamentStartService {
             TaskScheduler taskScheduler,
             AppProperties appProperties,
             TournamentTimingService timingService,
-            TableOwnershipService ownership) {
+            TableOwnershipService ownership,
+            com.truholdem.repository.PyramidBuyoutRepository buyoutRepository) {
         this.tournamentRepository = tournamentRepository;
         this.registrationRepository = registrationRepository;
         this.tableRepository = tableRepository;
@@ -65,6 +67,7 @@ public class TournamentStartService {
         this.tournamentProperties = appProperties.getTournament();
         this.timingService = timingService;
         this.ownership = ownership;
+        this.buyoutRepository = buyoutRepository;
     }
 
     public boolean shouldStartAsynchronously(int registeredPlayerCount) {
@@ -123,6 +126,17 @@ public class TournamentStartService {
 
         tournament.markRunningAtStart();
         tournament = tournamentRepository.save(tournament);
+
+        if (tournament.isPyramidBuyUpEnabled()) {
+            // Fixed-bracket seating: floor (non-buyers) on level 1 skipping closed sub-trees; buyers wait for
+            // their level (seated when their round arrives — engine advancement is a later slice).
+            List<TournamentTable> tables = seatBuyUpPyramidStart(tournament);
+            persistTablesInBatches(tables);
+            publishStartEvents(tournamentId, tournament, playerCount, tables);
+            log.info("Buy-up pyramid {} started: {} floor table(s), {} buy-out(s)",
+                    tournamentId, tables.size(), buyoutRepository.countByTournamentId(tournamentId));
+            return new TournamentStartResult(tournament, playerCount, tables.size(), tables);
+        }
 
         List<UUID> playerIds = registrationRepository.findPlayerIdsForSeating(tournamentId);
         int tableCount = calculateTableCount(tournament, playerCount);
@@ -249,6 +263,48 @@ public class TournamentStartService {
             return 1;
         }
         return (int) Math.ceil((double) playerCount / IDEAL_PLAYERS_PER_TABLE);
+    }
+
+    /**
+     * Fixed-bracket level-1 seating for a buy-up pyramid. Floor players (registered non-buyers) are placed
+     * per {@link com.truholdem.service.tournament.PyramidSeatingPlanner}, skipping the seats inside closed
+     * (bought) sub-trees; only the level-1 tables that hold a floor player are created. Buyers stay PLAYING
+     * but unseated until their level's round (advancement is wired in a later slice).
+     */
+    private List<TournamentTable> seatBuyUpPyramidStart(Tournament tournament) {
+        UUID tournamentId = tournament.getId();
+        com.truholdem.service.tournament.PyramidBracket bracket =
+                new com.truholdem.service.tournament.PyramidBracket(
+                        tournament.getMaxPlayers(), tournament.getSeatsPerTable());
+
+        List<com.truholdem.model.PyramidBuyout> buyouts = buyoutRepository.findByTournamentId(tournamentId);
+        java.util.Set<UUID> buyers = buyouts.stream()
+                .map(com.truholdem.model.PyramidBuyout::getBuyerPlayerId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<UUID> floor = registrationRepository.findPlayerIdsForSeating(tournamentId).stream()
+                .filter(id -> !buyers.contains(id))
+                .toList();
+
+        List<com.truholdem.service.tournament.PyramidSeatingPlanner.Buyout> plannerBuyouts = buyouts.stream()
+                .map(b -> new com.truholdem.service.tournament.PyramidSeatingPlanner.Buyout(
+                        b.getBuyerPlayerId(), b.getLevel(), b.getSeatIndex()))
+                .toList();
+
+        var plan = com.truholdem.service.tournament.PyramidSeatingPlanner.plan(bracket, floor, plannerBuyouts);
+
+        int seatsPerTable = bracket.seatsPerTable();
+        java.util.Map<Integer, TournamentTable> byTableIndex = new java.util.TreeMap<>();
+        for (var floorSeat : plan.floor()) {
+            int tableIndex = floorSeat.seatIndex() / seatsPerTable;
+            TournamentTable table = byTableIndex.computeIfAbsent(tableIndex, idx -> {
+                TournamentTable t = new TournamentTable(tournament, idx + 1);
+                t.setBracketLevel(1);
+                return t;
+            });
+            table.seatPlayer(floorSeat.playerId());
+        }
+        return new ArrayList<>(byTableIndex.values());
     }
 
     private void seatPlayersForStart(Tournament tournament, List<TournamentTable> tables, List<UUID> playerIds) {

@@ -101,8 +101,11 @@ Slices:
 - [x] **4. Fixed-bracket seating plan** — `PyramidSeatingPlanner`: floor players fill level-1 in order
       skipping closed (bought) sub-trees; buyers placed at their level; over-capacity rejected. Pure +
       unit-tested. (Wiring this plan into the live start/advance engine = slice 5.)
-- [ ] **5. Engine integration** — advancement through the fixed bracket; bought players already in place;
-      reconcile with the existing `PyramidTournamentService` round/advance logic + cluster ownership.
+- [x] **5a. Seating at start wired** — `completeStart` branches on the flag: seats the floor per the planner,
+      tags level-1 tables `bracketLevel=1`, buyers stay unseated; existing pyramid/other types unchanged
+      (changeset 15). Verified H2 + fresh Postgres + regression (PyramidAdvanceRoundIT).
+- [ ] **5b. Engine advancement** — advance through the fixed bracket; seat each bought player at their level's
+      round; reconcile with `PyramidTournamentService` round/advance logic + cluster ownership.
 - [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
 - [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
 Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced) + total cap 10; the

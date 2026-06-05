@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Fixed-bracket level for buy-up pyramid tables (1 = floor). Nullable — dynamic/other-format tables leave
+      it null. Postgres-only; H2 regenerates from the entity. Idempotent via columnExists.
+    -->
+    <changeSet id="tournament-004-table-bracket-level" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="tournament_tables" columnName="bracket_level"/></not>
+        </preConditions>
+        <addColumn tableName="tournament_tables">
+            <column name="bracket_level" type="integer"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>
