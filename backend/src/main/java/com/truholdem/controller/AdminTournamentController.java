@@ -24,6 +24,7 @@ import com.truholdem.model.TournamentType;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.tournament.PyramidTournamentService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
+import com.truholdem.service.wallet.TournamentWalletService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -44,12 +45,15 @@ public class AdminTournamentController {
 
     private final TournamentService tournamentService;
     private final PyramidTournamentService pyramidTournamentService;
+    private final TournamentWalletService tournamentWalletService;
 
     public AdminTournamentController(
             TournamentService tournamentService,
-            PyramidTournamentService pyramidTournamentService) {
+            PyramidTournamentService pyramidTournamentService,
+            TournamentWalletService tournamentWalletService) {
         this.tournamentService = tournamentService;
         this.pyramidTournamentService = pyramidTournamentService;
+        this.tournamentWalletService = tournamentWalletService;
     }
 
     @PostMapping
@@ -114,9 +118,10 @@ public class AdminTournamentController {
     }
 
     @PostMapping("/{id}/cancel")
-    @Operation(summary = "Cancel tournament")
+    @Operation(summary = "Cancel tournament (real-money buy-ins are refunded to registrants)")
     public ResponseEntity<TournamentDetailResponse> cancelTournament(@PathVariable UUID id) {
-        tournamentService.cancelTournament(id);
+        int refunded = tournamentWalletService.cancelAndRefund(id);
+        log.info("Admin cancelled tournament {} — refunded {} buy-in(s)", id, refunded);
         return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 

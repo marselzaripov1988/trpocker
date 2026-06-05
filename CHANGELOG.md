@@ -18,7 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verified: scheduler unit tests (cancel+refund when under min / leave open when disabled), an H2 IT (two
   buy-ins refunded, balances restored, status CANCELLED; refund idempotency), and changeset 13 on a fresh
   Postgres (14 changesets, the CHECK now lists `TOURNAMENT_REFUND`, `ddl-auto=validate` passes). Full suite
-  green (1076). (Refund on a manual admin cancel reuses the same primitive — a small follow-up to wire.)
+  green (1076).
+- **Manual admin cancel refunds too**: `POST /v1/admin/tournaments/{id}/cancel` now goes through
+  `cancelAndRefund`, so cancelling a real-money tournament from the admin UI returns every registrant's buy-in
+  (same idempotent primitive). Full suite green (1076).
 
 ### ⏰ Time-of-day tournaments that start when full (or postpone a day)
 - A tournament can be pinned to a **time-of-day slot** that starts only if the table is **full** at that time;
