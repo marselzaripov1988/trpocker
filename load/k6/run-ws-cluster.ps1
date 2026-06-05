@@ -37,15 +37,16 @@ function Wait-Health($url) {
   }
 }
 
-function Report-Node($name, $url) {
-  $prom = ''
-  try { $prom = (Invoke-WebRequest -UseBasicParsing -Uri "$url/api/actuator/prometheus").Content } catch {}
-  $sessions = ($prom -split "`n" | Where-Object { $_ -match '^websocket_sessions_local' } |
-    ForEach-Object { [double]($_ -split '\s+')[-1] } | Measure-Object -Sum).Sum
-  $heapBytes = ($prom -split "`n" | Where-Object { $_ -match '^jvm_memory_used_bytes\{area="heap"' } |
-    ForEach-Object { [double]($_ -split '\s+')[-1] } | Measure-Object -Sum).Sum
-  $heap = if ($heapBytes) { [math]::Round($heapBytes / 1MB) } else { '?' }
-  "{0,-8} ws_sessions={1,-7} heap={2}MB" -f $name, [int]$sessions, $heap | Write-Host
+# Per-node live-connection count via /proc/net/tcp inside the container (ESTABLISHED to :8080 = 0x1F90).
+# The app gauge websocket_sessions_local stays 0 for anonymous topic-only subscribers, so the TCP count is
+# the truthful metric. Memory from docker stats.
+function Report-Node($name, $container) {
+  $awk = "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '`$2 ~ /:1F90`$/ && `$4==\""+'01'+"\"' | wc -l"
+  $est = ''
+  try { $est = (docker exec $container sh -c $awk).Trim() } catch {}
+  $mem = ''
+  try { $mem = (docker stats --no-stream --format '{{.MemUsage}}' $container) -split '\s+' | Select-Object -First 1 } catch {}
+  "{0,-8} established={1,-7} mem={2}" -f $name, $est, $mem | Write-Host
 }
 
 try {
@@ -83,9 +84,9 @@ try {
     @tournamentEnv load/k6/websocket-cluster.js
 
   Write-Host ''
-  Write-Host '=== per-node distribution (at end of run) ==='
-  Report-Node 'node-1' 'http://localhost:8081'
-  Report-Node 'node-2' 'http://localhost:8082'
+  Write-Host '=== per-node distribution ==='
+  Report-Node 'node-1' 'truholdem-scale-node-1'
+  Report-Node 'node-2' 'truholdem-scale-node-2'
 } finally {
   if ($KEEP -eq '1') {
     Write-Host "KEEP=1 — leaving the stack up ($LB). Tear down with: docker compose -f docker-compose.scale.yml down -v"

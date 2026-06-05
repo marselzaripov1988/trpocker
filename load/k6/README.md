@@ -176,8 +176,30 @@ and prints the split:
 - **`ws_connect_success` / `ws_stomp_connected`** — handshake + STOMP CONNECT success rates (threshold > 95%).
 - **`ws_connect_time`** — time from socket open to STOMP `CONNECTED`.
 - **`ws_messages_received`** — broadcast frames delivered (meaningful only with `SEED=1` / `TOURNAMENT_ID`).
-- **Per-node `websocket_sessions_local`** — a balanced round-robin split confirms the LB spread the fleet;
-  the sum ≈ live connections held.
+- **Per-node split** — the runner counts ESTABLISHED sockets to each node's `:8080` via `/proc/net/tcp`
+  (`docker exec`). Note the app gauge `websocket_sessions_local` stays **0** for anonymous topic-only
+  subscribers (it's incremented by `ClusterSessionRegistry.registerSession`, which fires for seated players,
+  not bare spectators) — so the TCP count is the truthful live-connection metric here.
+
+### Measured results (real run — 2-node round-robin stack on a 12-core / 25 GB dev box)
+
+| Scenario | Per-node split | Connect success / errors | `ws_connect_time` | Mem/node (container) | CPU/node |
+|---|---|---:|---|---:|---:|
+| 1 500 connections | **750 / 750** | 100% (2999/2999) / 0 | avg 7 ms, p95 9 ms | 0.97 / 0.84 GiB | ~0.2% |
+| 4 000 connections | **2000 / 2000** | 100% (7999/7999) / 0 | avg 6.7 ms, p95 8 ms | 1.11 / 1.02 GiB | ~0.25% |
+| broadcast (1 000 subs, pyramid+bots) | — | 100% (1999/1999) / 0 | — | **195 634 msgs delivered, 1.3 GB egress / 70 s** |
+
+Takeaways from the numbers:
+
+- **Holding connections is cheap.** Going 1 500 → 4 000 added only ~150 MB/node → **~0.06 MB per bare
+  subscriber** at the socket/STOMP layer; the ~0.8 GiB idle baseline dominates. One node holds tens of
+  thousands of bare subscribers. CPU stays ~0 — confirming real (rarely-acting) players are light.
+- **The LB spreads the fleet perfectly** (50/50 at both 1 500 and 4 000).
+- **Broadcast fan-out is the real ceiling at scale.** 1 000 subscribers on one tournament-wide topic took
+  **1.3 GB egress in 70 s** — linear to ~13 GB at 10 000. That's why per-table / `shard-count` topics exist:
+  to send each event to one table's subscribers, not the whole field. The bare-connection memory figure
+  (~0.06 MB) is *not* the 1–2 MB planning figure — the latter is for a **seated player** (game state + send
+  buffers + game-topic payloads), which is the right number for sizing active players.
 
 ### Honest scope
 
