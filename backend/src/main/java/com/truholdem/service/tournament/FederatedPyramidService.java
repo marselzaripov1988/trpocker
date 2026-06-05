@@ -1,5 +1,7 @@
 package com.truholdem.service.tournament;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.truholdem.config.AppProperties;
 import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.dto.FederationDetailResponse;
+import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.FederationShardStatus;
 import com.truholdem.model.FederationStatus;
 import com.truholdem.model.PyramidFederation;
@@ -27,6 +30,7 @@ import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.notification.TournamentNotificationService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
+import com.truholdem.service.wallet.WalletService;
 
 /**
  * Orchestrates the registration + wave-fill phase of a federated pyramid. Players register into the
@@ -49,6 +53,7 @@ public class FederatedPyramidService {
     private final TournamentService tournamentService;
     private final PyramidTournamentService pyramidTournamentService;
     private final TournamentNotificationService notificationService;
+    private final WalletService walletService;
     private final AppProperties.Tournament tournamentProperties;
     /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
     private final FederatedPyramidService self;
@@ -57,7 +62,7 @@ public class FederatedPyramidService {
             PyramidFederationShardRepository shardRepository,
             PyramidFederationRegistrationRepository registrationRepository,
             TournamentService tournamentService, PyramidTournamentService pyramidTournamentService,
-            TournamentNotificationService notificationService,
+            TournamentNotificationService notificationService, WalletService walletService,
             AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
@@ -65,6 +70,7 @@ public class FederatedPyramidService {
         this.tournamentService = tournamentService;
         this.pyramidTournamentService = pyramidTournamentService;
         this.notificationService = notificationService;
+        this.walletService = walletService;
         this.tournamentProperties = appProperties.getTournament();
         this.self = self;
     }
@@ -77,12 +83,24 @@ public class FederatedPyramidService {
     @Transactional
     public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
             Instant registrationDeadline) {
+        return createFederation(name, startingPlayers, shardSize, registrationDeadline, null, null);
+    }
+
+    /** As above, with an optional real-money buy-in charged on registration (null/zero asset = play-money). */
+    @Transactional
+    public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
+            Instant registrationDeadline, BigDecimal buyInAmount, CryptoAsset buyInAsset) {
         int seats = tournamentProperties.getPyramidDefaultSeatsPerTable();
         int hands = tournamentProperties.getPyramidDefaultHandsPerRound();
         FederatedPyramidPlan plan = new FederatedPyramidPlan(startingPlayers, shardSize, seats);
 
-        PyramidFederation federation = federationRepository.save(new PyramidFederation(
-                name, shardSize, plan.shardCount(), seats, hands, registrationDeadline));
+        PyramidFederation federation = new PyramidFederation(
+                name, shardSize, plan.shardCount(), seats, hands, registrationDeadline);
+        if (buyInAmount != null && buyInAmount.signum() > 0 && buyInAsset != null) {
+            federation.setCryptoBuyInAmount(buyInAmount);
+            federation.setCryptoBuyInAsset(buyInAsset);
+        }
+        federation = federationRepository.save(federation);
 
         int nodeGroups = Math.max(1, tournamentProperties.getFederatedNodeGroupCount());
         List<PyramidFederationShard> shards = new ArrayList<>(plan.shardCount());
@@ -118,6 +136,11 @@ public class FederatedPyramidService {
         PyramidFederationShard shard = openFillShard(federationId)
                 .orElseThrow(() -> new IllegalStateException("Federation is full — all shards are filled"));
 
+        if (federation.isRealMoney()) {
+            // Charges the wallet; throws InsufficientFundsException (rolling back the registration) if too low.
+            walletService.chargeBuyIn(playerId, federation.getCryptoBuyInAsset(),
+                    federation.getCryptoBuyInAmount(), "fedbuyin:" + federationId + ":" + playerId);
+        }
         registrationRepository.save(
                 new PyramidFederationRegistration(federationId, shard.getShardIndex(), playerId, playerName));
         shard.incrementFilled();
@@ -308,6 +331,45 @@ public class FederatedPyramidService {
         federation.complete(championPlayerId);
         federationRepository.save(federation);
         log.info("Federation {} — COMPLETED, grand champion {}", federationId, championPlayerId);
+        if (federation.isRealMoney()) {
+            distributePrizes(federation, championPlayerId);
+        }
+    }
+
+    /**
+     * Pay out the prize pool ({@code registered × buyIn}): {@code federatedShardPrizeBps} of it is split
+     * equally among the shard winners (a qualifier prize), and the remainder goes to the grand champion (who,
+     * being a shard winner, also collects a qualifier). Rounding is absorbed into the champion's share so the
+     * payouts sum exactly to the pool. Idempotent via per-recipient award keys.
+     */
+    private void distributePrizes(PyramidFederation federation, UUID championId) {
+        UUID federationId = federation.getId();
+        CryptoAsset asset = federation.getCryptoBuyInAsset();
+        long registered = registrationRepository.countByFederationId(federationId);
+        BigDecimal pool = federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(registered));
+
+        int bps = tournamentProperties.getFederatedShardPrizeBps();
+        BigDecimal shardPool = pool.multiply(BigDecimal.valueOf(bps)).divide(BigDecimal.valueOf(10_000));
+        List<PyramidFederationShard> completed =
+                shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED);
+        BigDecimal qualifier = completed.isEmpty() ? BigDecimal.ZERO
+                : shardPool.divide(BigDecimal.valueOf(completed.size()), 18, RoundingMode.DOWN);
+
+        BigDecimal paidToShards = BigDecimal.ZERO;
+        for (PyramidFederationShard shard : completed) {
+            UUID winner = shard.getWinnerPlayerId();
+            if (winner == null || qualifier.signum() <= 0) {
+                continue;
+            }
+            walletService.awardPayout(winner, asset, qualifier, "fedqual:" + federationId + ":" + shard.getShardIndex());
+            paidToShards = paidToShards.add(qualifier);
+        }
+        BigDecimal championPrize = pool.subtract(paidToShards);
+        if (championId != null && championPrize.signum() > 0) {
+            walletService.awardPayout(championId, asset, championPrize, "fedchamp:" + federationId);
+        }
+        log.info("Federation {} — paid out pool {} {} ({} to shard winners, {} to champion)",
+                federationId, pool, asset, paidToShards, championPrize);
     }
 
     /** Read view of a federation: config, status, per-shard-status counts, champion. */

@@ -1,5 +1,6 @@
 package com.truholdem.model;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -63,6 +64,14 @@ public class PyramidFederation {
     /** The grand champion (set on completion). */
     @Column(name = "champion_player_id")
     private UUID championPlayerId;
+
+    /** Real-money buy-in charged on registration; null/zero = play-money. */
+    @Column(name = "crypto_buy_in_amount", precision = 38, scale = 18)
+    private BigDecimal cryptoBuyInAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "crypto_buy_in_asset", length = 32)
+    private CryptoAsset cryptoBuyInAsset;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -164,6 +173,26 @@ public class PyramidFederation {
 
     public UUID getChampionPlayerId() {
         return championPlayerId;
+    }
+
+    public BigDecimal getCryptoBuyInAmount() {
+        return cryptoBuyInAmount;
+    }
+
+    public void setCryptoBuyInAmount(BigDecimal cryptoBuyInAmount) {
+        this.cryptoBuyInAmount = cryptoBuyInAmount;
+    }
+
+    public CryptoAsset getCryptoBuyInAsset() {
+        return cryptoBuyInAsset;
+    }
+
+    public void setCryptoBuyInAsset(CryptoAsset cryptoBuyInAsset) {
+        this.cryptoBuyInAsset = cryptoBuyInAsset;
+    }
+
+    public boolean isRealMoney() {
+        return cryptoBuyInAmount != null && cryptoBuyInAmount.signum() > 0 && cryptoBuyInAsset != null;
     }
 
     public Instant getCreatedAt() {

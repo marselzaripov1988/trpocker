@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Federated pyramid — slice 7: real money (buy-in + prize distribution)
+- A federation can carry a crypto buy-in (`crypto_buy_in_amount` / `crypto_buy_in_asset`, changeset 18;
+  null/zero = play-money). `register` charges the buy-in via `WalletService.chargeBuyIn` (idempotent key
+  `fedbuyin:…`; an under-funded wallet throws and rolls the registration back). On completion,
+  `distributePrizes` pays the pool (`registered × buyIn`): `app.tournament.federated-shard-prize-bps`
+  (default 30%) is split equally among the shard winners as a qualifier prize and the remainder goes to the
+  grand champion (who, as a shard winner, also collects a qualifier); rounding is absorbed into the champion's
+  share so payouts sum exactly to the pool. Idempotent per-recipient award keys (`fedqual:…`, `fedchamp:…`).
+  `createFederation` gained a buy-in overload; `CreateFederationRequest` gained optional `buyInAmount` /
+  `buyInAsset`.
+- Verified by `FederatedPyramidPrizeIT` (8 funded players, buyIn 20, bps 3000 → pool 160): each registration
+  charges the buy-in (balance 80), and after the full run the champion holds exactly 204 (100 − 20 + 12 + 112),
+  other shard winners 92, non-winners 80, and the total across players is conserved at 800 (the pool is fully
+  redistributed). Changeset 18 runs clean on a fresh Postgres (`ddl-auto=validate`); surefire suite green (1090).
+
 ### 🔺 Federated pyramid — slice 6c: player UI (+ admin route fix)
 - New player view `FederationViewComponent` at `/federations/:id` (auth-guarded): shows the field's status,
   shard progress (registered / running / done-of-total), the scheduled final and grand champion, and a

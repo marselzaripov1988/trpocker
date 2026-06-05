@@ -1168,6 +1168,19 @@ public class AppProperties {
         @Min(1)
         private int federatedNodeGroupCount = 1;
 
+        /** Federated pyramid (real money): basis points of the prize pool split equally among shard winners
+         * (the rest goes to the grand champion). 3000 = 30%. */
+        @Min(0)
+        private int federatedShardPrizeBps = 3000;
+
+        public int getFederatedShardPrizeBps() {
+            return federatedShardPrizeBps;
+        }
+
+        public void setFederatedShardPrizeBps(int federatedShardPrizeBps) {
+            this.federatedShardPrizeBps = federatedShardPrizeBps;
+        }
+
         public int getFederatedMaxConcurrentShards() {
             return federatedMaxConcurrentShards;
         }

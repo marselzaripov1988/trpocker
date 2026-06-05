@@ -27,5 +27,6 @@
     <include file="db/changelog/15-tournament-table-bracket-level.xml"/>
     <include file="db/changelog/16-federated-pyramid.xml"/>
     <include file="db/changelog/17-federated-pyramid-registrations.xml"/>
+    <include file="db/changelog/18-federated-pyramid-buyin.xml"/>
 
 </databaseChangeLog>

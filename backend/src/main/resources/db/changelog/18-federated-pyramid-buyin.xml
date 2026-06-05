@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Federated pyramid slice 7: real-money buy-in columns on the federation. Postgres-only; H2 from entities. -->
+    <changeSet id="federated-004-buyin" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="pyramid_federations" columnName="crypto_buy_in_amount"/></not>
+        </preConditions>
+        <addColumn tableName="pyramid_federations">
+            <column name="crypto_buy_in_amount" type="numeric(38, 18)"/>
+            <column name="crypto_buy_in_asset" type="varchar(32)"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

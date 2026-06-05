@@ -165,7 +165,11 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
 - [x] **6c. Player UI** — `FederationViewComponent` at `/federations/:id` (auth-guarded): status + shard
       progress + Register button + "your shard". Player `FederationService` + models. Also fixed the 6b admin
       route (moved to a top-level `/admin/federations` so the nav link resolves). eslint + `ng build` green.
-- [ ] **7. Real money** — buy-in per shard + prize pool split (shard payouts + final), via WalletService.
+- [x] **7. Real money** — federation buy-in (`crypto_buy_in_amount`/`asset`, changeset 18); `register` charges
+      via `WalletService.chargeBuyIn` (idempotent, rolls back if under-funded); `distributePrizes` on completion
+      pays the pool — `federated-shard-prize-bps` split among shard winners (qualifier) + remainder to the
+      champion (rounding absorbed into champion; sums to pool). Verified by `FederatedPyramidPrizeIT`
+      (exact balances + pool conservation).
 - [ ] **8. Cluster/load verify** — physical node-group pinning under the cluster; scale test a wave of shards.
 
 ## TODO — scale / load

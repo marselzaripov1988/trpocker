@@ -57,7 +57,8 @@ public class AdminPyramidFederationController {
     public ResponseEntity<FederationDetailResponse> create(@Valid @RequestBody CreateFederationRequest request) {
         assertEnabled();
         PyramidFederation fed = federatedService.createFederation(
-                request.name(), request.startingPlayers(), request.shardSize(), request.registrationDeadline());
+                request.name(), request.startingPlayers(), request.shardSize(),
+                request.registrationDeadline(), request.buyInAmount(), request.buyInAsset());
         log.info("Admin created federated pyramid {} ({} players / shard {})",
                 fed.getId(), request.startingPlayers(), request.shardSize());
         return ResponseEntity.status(HttpStatus.CREATED).body(federatedService.getFederationDetail(fed.getId()));
