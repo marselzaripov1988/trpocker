@@ -91,8 +91,9 @@ seats=10): each level-L seat is fed by one level-(L-1) table. Rules (clarified):
 Slices:
 - [x] **1. Bracket + pricing core** — `PyramidBracket` (levels, table counts, sub-tree seats, buy-out price,
       buyable seats) + unit tests vs the 1000/10 example.
-- [ ] **2. Model + flag** — `pyramidBuyUpEnabled` flag (or new type) on Tournament + a `PyramidBuyout` record
-      (tournament, level, seat/feeder index, buyer, price, asset) + repository + Liquibase changeset.
+- [x] **2. Model + flag** — `pyramidBuyUpEnabled` flag on Tournament + `PyramidBuyout` entity/repository
+      (tournament, buyer, level, seat index, price, asset) + Liquibase changeset 14 (unique: one per player,
+      one per seat). Verified H2 + fresh Postgres.
 - [ ] **3. Buy-seat API + charge** — pre-start endpoint: validate empty sub-tree + cap + level range, charge
       the wallet `buyoutPrice`, persist the buyout. Idempotent per (tournament, seat).
 - [ ] **4. Fixed-bracket seating at start** — switch this variant from the dynamic pyramid to the fixed
@@ -102,8 +103,10 @@ Slices:
       reconcile with the existing `PyramidTournamentService` round/advance logic + cluster ownership.
 - [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
 - [ ] **7. UI + verify** — admin/player buy-seat UI; end-to-end IT.
-Open: is the buyer a registered player or any user? exact cap semantics (per-buyer vs total)? does a bought
-player still pay the normal buy-in too, or only the buy-out price? real-money only (needs `cryptoBuyInAmount`).
+Decided: buyer is a **registered player**; **max 1 buy-out per player** (DB-enforced); player pays the
+**buy-out price**; the player UI shows a "ticket" per buyable seat at each level with its computed price.
+Still open: does the buy-out price replace or add to the normal buy-in (slice 3 economics)? real-money only
+(needs `cryptoBuyInAmount`).
 
 ## TODO — cross-cutting / production-readiness
 - [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**

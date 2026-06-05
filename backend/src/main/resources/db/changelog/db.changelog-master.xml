@@ -23,5 +23,6 @@
     <include file="db/changelog/11-tournament-scheduled-start.xml"/>
     <include file="db/changelog/12-tournament-require-full.xml"/>
     <include file="db/changelog/13-wallet-refund-type.xml"/>
+    <include file="db/changelog/14-pyramid-buyup.xml"/>
 
 </databaseChangeLog>

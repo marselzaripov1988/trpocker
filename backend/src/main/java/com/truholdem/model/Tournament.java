@@ -125,6 +125,11 @@ public class Tournament {
     @Column(name = "require_full_to_start", nullable = false)
     private boolean requireFullToStart = false;
 
+    /** PYRAMID buy-up variant: before start, a registered player may buy a guaranteed seat at a higher level
+     *  (priced from the sub-pyramid buy-ins), closing the fight below it. Real-money only. */
+    @Column(name = "pyramid_buy_up_enabled", nullable = false)
+    private boolean pyramidBuyUpEnabled = false;
+
     /** Pyramid format: current survival round (1-based). */
     @Column(name = "pyramid_round", nullable = false)
     private int pyramidRound = 1;
@@ -268,6 +273,14 @@ public class Tournament {
 
     public boolean isRequireFullToStart() {
         return requireFullToStart;
+    }
+
+    public boolean isPyramidBuyUpEnabled() {
+        return pyramidBuyUpEnabled;
+    }
+
+    public void setPyramidBuyUpEnabled(boolean pyramidBuyUpEnabled) {
+        this.pyramidBuyUpEnabled = pyramidBuyUpEnabled;
     }
 
     public void start() {

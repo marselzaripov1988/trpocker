@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Buy-up pyramid: a flag on tournaments + a pyramid_buyouts table recording each pre-start higher-level
+      seat purchase. Postgres-only; H2 tests regenerate from the entities. Idempotent.
+    -->
+    <changeSet id="pyramid-001-buyup-flag" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="tournaments" columnName="pyramid_buy_up_enabled"/></not>
+        </preConditions>
+        <addColumn tableName="tournaments">
+            <column name="pyramid_buy_up_enabled" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="pyramid-002-buyouts-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="pyramid_buyouts"/></not>
+        </preConditions>
+        <createTable tableName="pyramid_buyouts">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="tournament_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="buyer_player_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="level" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="seat_index" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="price_amount" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="pyramid_buyouts"
+                constraintName="uq_pyramid_buyout_player"
+                columnNames="tournament_id, buyer_player_id"/>
+        <addUniqueConstraint tableName="pyramid_buyouts"
+                constraintName="uq_pyramid_buyout_seat"
+                columnNames="tournament_id, level, seat_index"/>
+    </changeSet>
+
+</databaseChangeLog>

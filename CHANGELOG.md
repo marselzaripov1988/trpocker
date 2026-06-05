@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slices 1–2: bracket pricing core + persistence model
+- `PyramidBracket` (slice 1) models the fixed buy-up pyramid tree — tables per level (1000→100→10→1 at 10
+  seats/table), buyable seats per level (= feeder tables), sub-tree level-1 seats, and the buy-out price
+  (`seatsPerTable^(L-1) × buyIn`). Pure + unit-tested vs the spec example.
+- Persistence (slice 2): a `pyramidBuyUpEnabled` flag on tournaments + a `PyramidBuyout` entity/repository
+  (tournament, buyer, level, seat index, price, asset) with DB uniqueness enforcing the rules — **one buy-out
+  per player** and **one buyer per seat** (changeset 14). Verified on H2 (persistence + both uniqueness
+  violations) and a fresh Postgres (16 changesets, the table + 2 unique constraints, `ddl-auto=validate`
+  passes). Full suite green (1082). The buy-seat API, fixed-bracket seating, engine wiring and the player
+  "tickets" UI are the next slices (TODO).
+
 ### 💸 Auto-cancel under-filled scheduled tournaments with buy-in refund
 - A scheduled (non-full-required) tournament that is still below `minPlayers` at its slot is now **cancelled
   and its real-money buy-ins refunded**, instead of being left REGISTERING. `TournamentWalletService
