@@ -216,6 +216,43 @@ public class TournamentService {
         return tournamentRepository.save(tournament);
     }
 
+    /**
+     * Pin a tournament to a daily time-of-day slot. The first slot leaves at least the configured runway of
+     * registration time (else the next day's slot is used). When {@code requireFull}, the tournament only
+     * starts at its slot if the table is full; otherwise the slot postpones a day (handled by the poller).
+     */
+    public Tournament scheduleAtTimeOfDay(UUID tournamentId, java.time.LocalTime timeOfDay, boolean requireFull) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        AppProperties.Tournament cfg = tournamentProperties;
+        java.time.Instant slot = TournamentSlotPlanner.nextSlotAtLeastRunwayAway(
+                timeOfDay, java.time.ZoneId.of(cfg.getScheduledStartZone()),
+                java.time.Duration.ofHours(cfg.getScheduledStartRunwayHours()), java.time.Instant.now());
+        tournament.scheduleStartAt(slot, requireFull);
+        log.info("Tournament {} pinned to {} (requireFull={}) → first slot {}",
+                tournamentId, timeOfDay, requireFull, slot);
+        return tournamentRepository.save(tournament);
+    }
+
+    /** True if the tournament only starts at its slot when the table is full. */
+    @Transactional(readOnly = true)
+    public boolean requiresFullToStart(UUID tournamentId) {
+        return findTournamentOrThrow(tournamentId).isRequireFullToStart();
+    }
+
+    @Transactional(readOnly = true)
+    public int maxPlayers(UUID tournamentId) {
+        return findTournamentOrThrow(tournamentId).getMaxPlayers();
+    }
+
+    /** Move a full-required tournament's slot to the next day (under-filled at its slot). REGISTERING only. */
+    public void postponeToNextDay(UUID tournamentId) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        tournament.postponeOneDay();
+        log.info("Tournament {} under-filled at its slot — postponed to {}",
+                tournamentId, tournament.getScheduledStart());
+        tournamentRepository.save(tournament);
+    }
+
     /** IDs of tournaments due for scheduled auto-start (still REGISTERING, scheduled time reached). */
     @Transactional(readOnly = true)
     public List<UUID> dueForScheduledStart(java.time.Instant now) {

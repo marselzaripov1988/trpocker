@@ -120,6 +120,11 @@ public class Tournament {
      *  this time has passed (if {@code minPlayers} is met). Null = manual start only. */
     private Instant scheduledStart;
 
+    /** When true, the tournament only starts at its {@code scheduledStart} if the table is full (registered
+     *  &gt;= maxPlayers); otherwise the slot is postponed by a day. False = the usual minPlayers gate. */
+    @Column(name = "require_full_to_start", nullable = false)
+    private boolean requireFullToStart = false;
+
     /** Pyramid format: current survival round (1-based). */
     @Column(name = "pyramid_round", nullable = false)
     private int pyramidRound = 1;
@@ -234,14 +239,35 @@ public class Tournament {
 
     /** Schedule an automatic start; only meaningful while still REGISTERING. */
     public void scheduleStartAt(Instant when) {
+        scheduleStartAt(when, false);
+    }
+
+    /** Schedule an automatic start, optionally requiring a full table (else the slot postpones by a day). */
+    public void scheduleStartAt(Instant when, boolean requireFull) {
         if (status != TournamentStatus.REGISTERING) {
             throw new IllegalStateException("Can only schedule a tournament that is still REGISTERING");
         }
         this.scheduledStart = when;
+        this.requireFullToStart = requireFull;
+    }
+
+    /** Move the scheduled slot to the next day (used when a full-required tournament is under-filled at its
+     *  slot). REGISTERING only; no-op if no scheduled start. */
+    public void postponeOneDay() {
+        if (status != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException("Can only postpone a REGISTERING tournament");
+        }
+        if (scheduledStart != null) {
+            this.scheduledStart = scheduledStart.plus(Duration.ofHours(24));
+        }
     }
 
     public Instant getScheduledStart() {
         return scheduledStart;
+    }
+
+    public boolean isRequireFullToStart() {
+        return requireFullToStart;
     }
 
     public void start() {

@@ -75,6 +75,36 @@ class TournamentScheduledStartServiceTest {
     }
 
     @Test
+    @DisplayName("full-required: starts when the table is full")
+    void fullRequiredStartsWhenFull() {
+        UUID id = UUID.randomUUID();
+        when(tournamentService.dueForScheduledStart(any())).thenReturn(List.of(id));
+        when(tournamentService.requiresFullToStart(id)).thenReturn(true);
+        when(tournamentService.registeredCount(id)).thenReturn(9);
+        when(tournamentService.maxPlayers(id)).thenReturn(9);
+
+        service(props(true)).startDueTournaments();
+
+        verify(tournamentService).startTournament(id);
+        verify(tournamentService, never()).postponeToNextDay(id);
+    }
+
+    @Test
+    @DisplayName("full-required: postpones to next day when under-filled")
+    void fullRequiredPostponesWhenNotFull() {
+        UUID id = UUID.randomUUID();
+        when(tournamentService.dueForScheduledStart(any())).thenReturn(List.of(id));
+        when(tournamentService.requiresFullToStart(id)).thenReturn(true);
+        when(tournamentService.registeredCount(id)).thenReturn(5);
+        when(tournamentService.maxPlayers(id)).thenReturn(9);
+
+        service(props(true)).startDueTournaments();
+
+        verify(tournamentService).postponeToNextDay(id);
+        verify(tournamentService, never()).startTournament(id);
+    }
+
+    @Test
     @DisplayName("passes a sensible now to the due-query")
     void queriesWithNow() {
         when(tournamentService.dueForScheduledStart(any())).thenReturn(List.of());

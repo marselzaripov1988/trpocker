@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⏰ Time-of-day tournaments that start when full (or postpone a day)
+- A tournament can be pinned to a **time-of-day slot** that starts only if the table is **full** at that time;
+  if under-filled, the slot **postpones to the next day**. `POST /v1/admin/tournaments/{id}/schedule-daily
+  {timeOfDay, requireFull}` computes the first slot via `TournamentSlotPlanner`, leaving at least the
+  configured **registration runway** (`app.tournament.scheduled-start-runway-hours`, default 3) — if today's
+  slot is closer than the runway, the next day's slot is used. The slot's time-of-day is interpreted in
+  `app.tournament.scheduled-start-zone` (default UTC).
+- `Tournament.requireFullToStart` (changeset 12) drives the poller: at a due slot a full table starts
+  (`registered >= maxPlayers`), otherwise the slot moves +24h and the tournament stays REGISTERING. Verified
+  with a pure planner unit test (runway boundary, passed-slot, zone offset), scheduler unit tests (start when
+  full / postpone when not), an H2 IT (time-of-day round-trip + postpone), and changeset 12 on a fresh
+  Postgres (13 changesets, `ddl-auto=validate` passes). Full suite green (1075).
+
 ### ⏰ Scheduled tournament auto-start
 - Tournaments can now start at a **scheduled time**, not just manually or (for Sit & Go) on a full table.
   `Tournament.scheduledStart` (changeset 11, nullable) + `POST /v1/admin/tournaments/{id}/schedule {startAt}`

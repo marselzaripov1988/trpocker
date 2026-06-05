@@ -1137,12 +1137,36 @@ public class AppProperties {
          *  Cluster-safe via the tournament's status guard + optimistic lock. Off by default. */
         private boolean scheduledStartEnabled = false;
 
+        /** Minimum registration runway when pinning a tournament to a time of day: if today's slot is closer
+         *  than this, the next day's slot is used. */
+        @Min(0)
+        private int scheduledStartRunwayHours = 3;
+
+        /** Zone in which a time-of-day slot is interpreted. */
+        private String scheduledStartZone = "UTC";
+
         public boolean isScheduledStartEnabled() {
             return scheduledStartEnabled;
         }
 
         public void setScheduledStartEnabled(boolean scheduledStartEnabled) {
             this.scheduledStartEnabled = scheduledStartEnabled;
+        }
+
+        public int getScheduledStartRunwayHours() {
+            return scheduledStartRunwayHours;
+        }
+
+        public void setScheduledStartRunwayHours(int scheduledStartRunwayHours) {
+            this.scheduledStartRunwayHours = scheduledStartRunwayHours;
+        }
+
+        public String getScheduledStartZone() {
+            return scheduledStartZone;
+        }
+
+        public void setScheduledStartZone(String scheduledStartZone) {
+            this.scheduledStartZone = scheduledStartZone;
         }
 
         public int getMaxPlayersLimit() {

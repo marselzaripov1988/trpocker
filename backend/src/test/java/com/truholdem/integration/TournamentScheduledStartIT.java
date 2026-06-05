@@ -50,4 +50,22 @@ class TournamentScheduledStartIT {
         assertThat(tournamentService.getTournament(due.getId()).getScheduledStart()).isNotNull();
         assertThat(tournamentService.getTournament(manual.getId()).getScheduledStart()).isNull();
     }
+
+    @Test
+    @DisplayName("time-of-day scheduling sets requireFull + a future slot; postpone advances it by a day")
+    void timeOfDayAndPostpone() {
+        Tournament t = tournamentService.createTournament(
+                CreateTournamentRequest.freezeout("Daily slot", 0, 9));
+
+        tournamentService.scheduleAtTimeOfDay(t.getId(), java.time.LocalTime.of(20, 0), true);
+
+        Tournament scheduled = tournamentService.getTournament(t.getId());
+        assertThat(scheduled.isRequireFullToStart()).isTrue();
+        assertThat(scheduled.getScheduledStart()).isAfter(Instant.now()); // at least the runway away
+
+        Instant before = scheduled.getScheduledStart();
+        tournamentService.postponeToNextDay(t.getId());
+        assertThat(tournamentService.getTournament(t.getId()).getScheduledStart())
+                .isEqualTo(before.plus(java.time.Duration.ofHours(24)));
+    }
 }

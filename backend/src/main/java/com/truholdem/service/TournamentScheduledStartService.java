@@ -38,18 +38,32 @@ public class TournamentScheduledStartService {
         }
         for (UUID id : tournamentService.dueForScheduledStart(Instant.now())) {
             try {
-                int registered = tournamentService.registeredCount(id);
-                int minPlayers = tournamentService.minPlayers(id);
-                if (registered >= minPlayers) {
-                    tournamentService.startTournament(id);
-                    log.info("Auto-started scheduled tournament {} ({} players)", id, registered);
-                } else {
-                    log.warn("Scheduled tournament {} is due but has {}/{} players — leaving REGISTERING",
-                            id, registered, minPlayers);
-                }
+                processDue(id);
             } catch (RuntimeException e) {
                 log.warn("Scheduled start of tournament {} failed (will retry next tick)", id, e);
             }
+        }
+    }
+
+    private void processDue(UUID id) {
+        int registered = tournamentService.registeredCount(id);
+        if (tournamentService.requiresFullToStart(id)) {
+            int seats = tournamentService.maxPlayers(id);
+            if (registered >= seats) {
+                tournamentService.startTournament(id);
+                log.info("Auto-started full scheduled tournament {} ({}/{} seats)", id, registered, seats);
+            } else {
+                tournamentService.postponeToNextDay(id); // under-filled at its slot → next day's slot
+            }
+            return;
+        }
+        int minPlayers = tournamentService.minPlayers(id);
+        if (registered >= minPlayers) {
+            tournamentService.startTournament(id);
+            log.info("Auto-started scheduled tournament {} ({} players)", id, registered);
+        } else {
+            log.warn("Scheduled tournament {} is due but has {}/{} players — leaving REGISTERING",
+                    id, registered, minPlayers);
         }
     }
 }

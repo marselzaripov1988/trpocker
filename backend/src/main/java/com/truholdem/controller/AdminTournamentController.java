@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateTournamentRequest;
+import com.truholdem.dto.ScheduleDailyTournamentRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
 import com.truholdem.dto.TournamentDetailResponse;
 import com.truholdem.model.Tournament;
@@ -79,6 +80,15 @@ public class AdminTournamentController {
             @Valid @RequestBody ScheduleTournamentRequest body) {
         log.info("Admin scheduling tournament {} to auto-start at {}", id, body.startAt());
         tournamentService.scheduleStart(id, body.startAt());
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
+    }
+
+    @PostMapping("/{id}/schedule-daily")
+    @Operation(summary = "Pin a tournament to a time-of-day slot (full-or-postpone); REGISTERING only")
+    public ResponseEntity<TournamentDetailResponse> scheduleDaily(@PathVariable UUID id,
+            @Valid @RequestBody ScheduleDailyTournamentRequest body) {
+        log.info("Admin pinning tournament {} to {} (requireFull={})", id, body.timeOfDay(), body.requireFull());
+        tournamentService.scheduleAtTimeOfDay(id, body.timeOfDay(), body.requireFull());
         return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Fill-or-postpone flag: a scheduled tournament that only starts at its slot if the table is full (else the
+      slot moves to the next day). Postgres-only; H2 regenerates from the entity. Idempotent via columnExists.
+    -->
+    <changeSet id="tournament-003-require-full" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="tournaments" columnName="require_full_to_start"/></not>
+        </preConditions>
+        <addColumn tableName="tournaments">
+            <column name="require_full_to_start" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>
