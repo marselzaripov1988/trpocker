@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up pyramid — slice 4: fixed-bracket start seating plan
+- `PyramidSeatingPlanner` computes the deterministic start seating for a buy-up pyramid: registered
+  (non-buying) players fill the level-1 floor in registration order **skipping the seats inside closed
+  (bought) sub-pyramids**, and each buyer is placed directly at the level/seat they bought (entering above the
+  floor). Over-capacity (more registered than open floor seats) is rejected. Pure + unit-tested (no buy-outs,
+  a level-2 buy-out skipping [0,10), multiple buy-outs, over-capacity). This is the seating "brain" that the
+  next slice wires into the live start/advance engine (switching the buy-up variant from the dynamic pyramid
+  to the fixed bracket). Full suite green (1086).
+
 ### 🔺 Buy-up pyramid — slice 3: seat purchase (price replaces buy-in)
 - `PyramidBuyoutService` lets a registered player buy a higher-level seat before start. `availableTickets`
   lists the buyable seats per level with their price (the "tickets" the player UI will show); `buySeat`

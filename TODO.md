@@ -98,9 +98,9 @@ Slices:
       sub-tree (above the registration frontier) + no overlap + cap + range + registered + REGISTERING; the
       price **replaces** the buy-in (refund base + charge sub-tree price). Verified by H2 IT. (REST endpoint
       moves to the UI slice.)
-- [ ] **4. Fixed-bracket seating at start** — switch this variant from the dynamic pyramid to the fixed
-      bracket; at start, seat registered players at level 1 and bought players directly at their level
-      (skipping the closed sub-trees).
+- [x] **4. Fixed-bracket seating plan** — `PyramidSeatingPlanner`: floor players fill level-1 in order
+      skipping closed (bought) sub-trees; buyers placed at their level; over-capacity rejected. Pure +
+      unit-tested. (Wiring this plan into the live start/advance engine = slice 5.)
 - [ ] **5. Engine integration** — advancement through the fixed bracket; bought players already in place;
       reconcile with the existing `PyramidTournamentService` round/advance logic + cluster ownership.
 - [ ] **6. Refund/edge** — if the tournament is cancelled, refund buy-outs too; what if it never fills.
