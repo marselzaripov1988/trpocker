@@ -52,7 +52,12 @@ public record TournamentDetailResponse(
     
     Instant createdAt,
     Instant startTime,
-    String duration
+    String duration,
+
+    /** Scheduled auto-start time (null = manual). */
+    Instant scheduledStart,
+    /** When true, a scheduled tournament only starts at its slot if the table is full (else postpones a day). */
+    boolean requireFullToStart
 ) {
     
   /** @deprecated Prefer {@link #fromSummary} for large fields to avoid loading all registrations. */
@@ -132,7 +137,9 @@ public record TournamentDetailResponse(
                 players != null ? players : List.of(),
                 tournament.getCreatedAt(),
                 tournament.getStartTime(),
-                durationStr);
+                durationStr,
+                tournament.getScheduledStart(),
+                tournament.isRequireFullToStart());
     }
     
     

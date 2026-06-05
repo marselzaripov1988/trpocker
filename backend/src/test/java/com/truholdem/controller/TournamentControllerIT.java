@@ -297,7 +297,9 @@ class TournamentControllerIT {
                             null, null, 0, 0, 0)),
                     Instant.now(),
                     null,
-                    null);
+                    null,
+                    null,
+                    false);
             when(tournamentService.getTournamentDetail(tournamentId)).thenReturn(detail);
 
             mockMvc.perform(get(BASE_URL + "/{id}", tournamentId))

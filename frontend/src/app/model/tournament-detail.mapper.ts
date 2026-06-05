@@ -66,6 +66,10 @@ export interface TournamentDetailApi {
   players?: TournamentPlayerEntryApi[];
   createdAt?: string;
   startTime?: string | null;
+  /** Scheduled auto-start time (null = manual). */
+  scheduledStart?: string | null;
+  /** Start only at the slot if the table is full (else postpone a day). */
+  requireFullToStart?: boolean;
 }
 
 export interface TournamentTableSummaryApi {

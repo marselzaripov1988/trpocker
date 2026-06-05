@@ -44,6 +44,19 @@ export class AdminTournamentService {
     return this.http.post<TournamentDetailApi>(`${this.adminUrl}/${id}/cancel`, {});
   }
 
+  /** Schedule an absolute auto-start time (ISO instant). REGISTERING only. */
+  scheduleStart(id: string, startAt: string): Observable<TournamentDetailApi> {
+    return this.http.post<TournamentDetailApi>(`${this.adminUrl}/${id}/schedule`, { startAt });
+  }
+
+  /** Pin to a time-of-day slot; requireFull = start only if the table is full (else postpone a day). */
+  scheduleDaily(id: string, timeOfDay: string, requireFull: boolean): Observable<TournamentDetailApi> {
+    return this.http.post<TournamentDetailApi>(`${this.adminUrl}/${id}/schedule-daily`, {
+      timeOfDay,
+      requireFull
+    });
+  }
+
   eliminatePlayer(tournamentId: string, playerId: string): Observable<TournamentDetailApi> {
     return this.http.post<TournamentDetailApi>(
       `${this.adminUrl}/${tournamentId}/eliminate/${playerId}`,

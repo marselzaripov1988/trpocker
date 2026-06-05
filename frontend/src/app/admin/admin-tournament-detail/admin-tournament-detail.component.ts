@@ -65,6 +65,41 @@ import { TournamentDetailApi } from '../../model/tournament-detail.mapper';
             </a>
           </section>
 
+          @if (d.status === 'REGISTERING') {
+            <section class="card">
+              <h2>⏰ Schedule auto-start</h2>
+              @if (d.scheduledStart) {
+                <p class="muted">
+                  Scheduled: <strong>{{ d.scheduledStart | date:'medium' }}</strong>
+                  @if (d.requireFullToStart) { <span class="badge">requires full table</span> }
+                </p>
+              } @else {
+                <p class="muted">Not scheduled (manual start).</p>
+              }
+              <div class="row-inline">
+                <select [(ngModel)]="scheduleMode">
+                  <option value="datetime">Exact date &amp; time</option>
+                  <option value="timeofday">Daily time-of-day</option>
+                </select>
+                @if (scheduleMode === 'datetime') {
+                  <input type="datetime-local" [(ngModel)]="scheduleAt" />
+                } @else {
+                  <input type="time" [(ngModel)]="scheduleTime" />
+                  <label class="chk">
+                    <input type="checkbox" [(ngModel)]="requireFull" /> start only if full (else next day)
+                  </label>
+                }
+                <button class="btn-primary" (click)="schedule()" [disabled]="busy() || !scheduleValid()">
+                  Schedule
+                </button>
+              </div>
+              <p class="hint">
+                Time-of-day uses the server zone; the first slot leaves a registration runway (else next day).
+                Auto-start fires only when the scheduled-start poller is enabled on the server.
+              </p>
+            </section>
+          }
+
           @if (isPyramid()) {
             <section class="card">
               <h2>Pyramid controls</h2>
@@ -190,6 +225,11 @@ export class AdminTournamentDetailComponent implements OnInit {
   botPrefix = 'Bot_';
   eliminatePlayerId = '';
 
+  scheduleMode: 'datetime' | 'timeofday' = 'datetime';
+  scheduleAt = '';   // datetime-local value (local time)
+  scheduleTime = ''; // HH:mm
+  requireFull = false;
+
   readonly isPyramid = computed(() => this.detail()?.type === 'PYRAMID');
 
   readonly activePlayers = computed(() => {
@@ -219,6 +259,32 @@ export class AdminTournamentDetailComponent implements OnInit {
   canPyramidAct(): boolean {
     const s = this.detail()?.status;
     return s === 'RUNNING' || s === 'PAUSED' || s === 'REGISTERING';
+  }
+
+  scheduleValid(): boolean {
+    return this.scheduleMode === 'datetime' ? !!this.scheduleAt : !!this.scheduleTime;
+  }
+
+  schedule(): void {
+    if (!this.scheduleValid()) {
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    this.message.set(null);
+    const done = (msg: string) => { this.message.set(msg); this.busy.set(false); this.reload(); };
+    const fail = (err: { error?: { message?: string } }) => {
+      this.error.set(err?.error?.message ?? 'Schedule failed');
+      this.busy.set(false);
+    };
+    if (this.scheduleMode === 'datetime') {
+      const iso = new Date(this.scheduleAt).toISOString(); // local datetime-local → UTC instant
+      this.adminService.scheduleStart(this.tournamentId, iso)
+        .subscribe({ next: () => done('Scheduled'), error: fail });
+    } else {
+      this.adminService.scheduleDaily(this.tournamentId, this.scheduleTime, this.requireFull)
+        .subscribe({ next: () => done('Scheduled (time-of-day)'), error: fail });
+    }
   }
 
   act(action: string): void {

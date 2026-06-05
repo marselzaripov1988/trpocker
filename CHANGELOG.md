@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a pure planner unit test (runway boundary, passed-slot, zone offset), scheduler unit tests (start when
   full / postpone when not), an H2 IT (time-of-day round-trip + postpone), and changeset 12 on a fresh
   Postgres (13 changesets, `ddl-auto=validate` passes). Full suite green (1075).
+- **Admin UI**: `/admin/tournaments/{id}` now has a Schedule panel (REGISTERING only) — pick an exact
+  date/time or a daily time-of-day with a *start only if full* toggle — wired to the new endpoints. The
+  tournament detail response now carries `scheduledStart` + `requireFullToStart` so the current schedule is
+  shown. Frontend builds clean.
 
 ### ⏰ Scheduled tournament auto-start
 - Tournaments can now start at a **scheduled time**, not just manually or (for Sit & Go) on a full table.
