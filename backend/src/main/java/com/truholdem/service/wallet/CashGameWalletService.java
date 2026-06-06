@@ -76,6 +76,49 @@ public class CashGameWalletService {
         return seat;
     }
 
+    /**
+     * Request to stand up: mark the seat {@code LEAVING} so the engine deals the player out and cashes them
+     * out once the current hand finishes (see {@link #cashOut}). Between hands this is immediately followed by a
+     * cash-out. No-op-safe: returns the seat in its (possibly already-leaving) state.
+     *
+     * @throws NoSuchElementException the player holds no live seat at the table
+     */
+    @Transactional
+    public CashSeat requestLeave(UUID userId, UUID tableId) {
+        CashSeat seat = liveSeat(userId, tableId)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "Player " + userId + " holds no seat at table " + tableId));
+        seat.requestLeave();
+        return cashSeatRepository.save(seat);
+    }
+
+    /**
+     * Stand up and cash out: credit the seat's remaining stack back to the wallet and free the seat. Idempotent
+     * — the credit is keyed on the seat id (so a re-run does not double-credit) and a player with no live seat
+     * (already cashed out / never seated) is a no-op returning zero. A busted (zero) stack frees the seat
+     * without a wallet credit. Returns the amount credited.
+     */
+    @Transactional
+    public BigDecimal cashOut(UUID userId, UUID tableId) {
+        CashSeat seat = liveSeat(userId, tableId).orElse(null);
+        if (seat == null) {
+            return BigDecimal.ZERO;
+        }
+        CashTable table = cashTableRepository.findById(tableId)
+                .orElseThrow(() -> new NoSuchElementException("Cash table not found: " + tableId));
+        BigDecimal stack = seat.getStack();
+        walletService.creditCashOut(userId, table.getAsset(), stack, cashOutKey(seat.getId()));
+        seat.markLeft();
+        cashSeatRepository.save(seat);
+        log.info("User {} stood up from cash table {} seat {} — cashed out {} {}",
+                userId, tableId, seat.getSeatNumber(), stack, table.getAsset());
+        return stack;
+    }
+
+    private java.util.Optional<CashSeat> liveSeat(UUID userId, UUID tableId) {
+        return cashSeatRepository.findByCashTableIdAndPlayerIdAndStatusNot(tableId, userId, CashSeatStatus.LEFT);
+    }
+
     private int firstFreeSeat(CashTable table) {
         Set<Integer> taken = cashSeatRepository.findByCashTableId(table.getId()).stream()
                 .filter(CashSeat::isSeated)
@@ -91,5 +134,9 @@ public class CashGameWalletService {
 
     private static String buyInKey(UUID seatId) {
         return "cashbuyin:" + seatId;
+    }
+
+    private static String cashOutKey(UUID seatId) {
+        return "cashout:" + seatId;
     }
 }

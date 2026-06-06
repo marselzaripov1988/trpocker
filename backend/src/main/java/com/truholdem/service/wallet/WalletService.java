@@ -441,6 +441,32 @@ public class WalletService {
     }
 
     /**
+     * Credit the wallet with the remaining stack when standing up from a cash table. Idempotent by
+     * {@code idempotencyKey} (the seat id). A zero stack (busted) is a no-op returning false (nothing to credit).
+     */
+    @Transactional
+    public boolean creditCashOut(UUID userId, CryptoAsset asset, BigDecimal amount, String idempotencyKey) {
+        requireEnabled();
+        if (amount == null || amount.signum() < 0) {
+            throw new IllegalArgumentException("Cash-out amount cannot be negative");
+        }
+        if (amount.signum() == 0) {
+            return false;
+        }
+        if (ledgerRepository.existsByExternalTxId(idempotencyKey)) {
+            return false;
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
+                .orElseGet(() -> accountRepository.save(new WalletAccount(userId, asset)));
+        account.credit(amount);
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.cashCashOut(userId, asset, amount, account.getBalance(),
+                idempotencyKey));
+        log.info("Cash-out: credited {} {} to user {} ({})", amount, asset, userId, idempotencyKey);
+        return true;
+    }
+
+    /**
      * Credit the wallet with a real-money tournament payout/prize. Idempotent by {@code idempotencyKey}.
      */
     @Transactional

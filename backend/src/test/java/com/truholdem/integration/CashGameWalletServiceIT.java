@@ -157,4 +157,55 @@ class CashGameWalletServiceIT {
         assertThat(second.getSeatNumber()).isEqualTo(0); // seat 0 freed when first left
         assertThat(walletService.balance(user, ASSET)).as("charged twice").isEqualByComparingTo("30.00");
     }
+
+    @Test
+    @DisplayName("cash-out credits the remaining stack, frees the seat, and is idempotent")
+    void cashOutCreditsAndFreesSeat() {
+        UUID user = fundedUser("50");
+        CashSeat seat = bridge.buyIn(user, tableId, "Alice", new BigDecimal("10.00")); // 50 -> 40
+
+        // Simulate a winning session: the engine raised the stack (slice 6 will do this for real).
+        seat.setStack(new BigDecimal("17.50"));
+        cashSeatRepository.save(seat);
+
+        BigDecimal credited = bridge.cashOut(user, tableId);
+
+        assertThat(credited).isEqualByComparingTo("17.50");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("57.50"); // 40 + 17.50
+        assertThat(cashSeatRepository.findById(seat.getId()).orElseThrow().getStatus())
+                .isEqualTo(CashSeatStatus.LEFT);
+        assertThat(cashSeatRepository.findByCashTableIdAndPlayerIdAndStatusNot(tableId, user, CashSeatStatus.LEFT))
+                .isEmpty();
+
+        // Idempotent: a second cash-out (no live seat) is a no-op returning zero, balance unchanged.
+        assertThat(bridge.cashOut(user, tableId)).isEqualByComparingTo("0");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("57.50");
+    }
+
+    @Test
+    @DisplayName("requestLeave marks the seat LEAVING; a later cash-out still settles it")
+    void requestLeaveThenCashOut() {
+        UUID user = fundedUser("50");
+        bridge.buyIn(user, tableId, "Alice", new BigDecimal("10.00"));
+
+        CashSeat leaving = bridge.requestLeave(user, tableId);
+        assertThat(leaving.getStatus()).isEqualTo(CashSeatStatus.LEAVING);
+
+        assertThat(bridge.cashOut(user, tableId)).isEqualByComparingTo("10.00");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("50.00");
+    }
+
+    @Test
+    @DisplayName("a busted (zero) stack frees the seat with no wallet credit")
+    void cashOutBustedStack() {
+        UUID user = fundedUser("50");
+        CashSeat seat = bridge.buyIn(user, tableId, "Alice", new BigDecimal("10.00")); // 50 -> 40
+        seat.setStack(BigDecimal.ZERO);
+        cashSeatRepository.save(seat);
+
+        assertThat(bridge.cashOut(user, tableId)).isEqualByComparingTo("0");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("40.00"); // no credit back
+        assertThat(cashSeatRepository.findById(seat.getId()).orElseThrow().getStatus())
+                .isEqualTo(CashSeatStatus.LEFT);
+    }
 }

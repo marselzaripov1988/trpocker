@@ -73,8 +73,11 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       ledger type via `WalletService.chargeCashBuyIn`, idempotent on the seat id). Liquibase changeset 23 widens
       the ledger-type CHECK. Verified by `CashGameWalletServiceIT` (7 cases) + fresh-Postgres CHECK insert proof.
       Concurrency-safe seat assignment (DB constraint / per-table writer) deferred to the engine/API slices.
-- [ ] **4. Stand-up (cash-out)** — credit the remaining stack back to the wallet on leave; ledger entry;
-      handle leaving mid-hand (fold + cash out after hand).
+- [x] **4. Stand-up (cash-out)** — `CashGameWalletService.cashOut`: credit the seat's remaining stack back
+      (new `CASH_CASHOUT` ledger type, idempotent on the seat id; busted/zero stack = free seat, no credit) and
+      mark `CashSeat` LEFT; `requestLeave` marks LEAVING for a mid-hand stand-up. Liquibase changeset 24 widens
+      the ledger-type CHECK. Verified by `CashGameWalletServiceIT` (10 cases) + fresh-Postgres CHECK insert proof.
+      Deferred cash-out *after the hand* on a mid-hand leave is wired in slice 6 (engine).
 - [ ] **5. Rake** — take a % (with cap) from each contested pot on showdown; record house revenue.
 - [ ] **6. Engine wiring** — join/leave a live table mid-session (the engine currently seats all players at
       `createNewGame`); reconcile with the cluster hot-state/ownership model.

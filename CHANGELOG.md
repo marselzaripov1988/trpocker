@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 4: stand-up (cash-out) wallet bridge
+- `CashGameWalletService.cashOut(userId, tableId)` stands a player up: it credits their seat's remaining stack
+  back to the wallet (new `CASH_CASHOUT` ledger type via `WalletService.creditCashOut`) and frees the seat
+  (`CashSeat` → `LEFT`). Idempotent — the credit is keyed on the seat id and a player with no live seat
+  (already cashed out / never seated) is a no-op returning zero; a busted (zero) stack frees the seat with no
+  wallet credit.
+- `CashGameWalletService.requestLeave(userId, tableId)` marks the seat `LEAVING` so a mid-hand stand-up is dealt
+  out and settled once the hand finishes (the engine wires the deferred cash-out in a later slice); between
+  hands it is immediately followed by `cashOut`.
+- Liquibase changeset 24 widens the `wallet_ledger_entries.type` CHECK to allow `CASH_CASHOUT` (Postgres-only,
+  mirroring 02/13/23). Verified: `CashGameWalletServiceIT` (now 10 cases, +cash-out credits/frees/idempotent,
+  requestLeave→cash-out, busted stack), full surefire suite green, and on a fresh Postgres the changeset applies
+  + a `CASH_CASHOUT` row inserts.
+
 ### 🎲 Cash games (ring tables) — slice 3: sit-down (buy-in) wallet bridge
 - `CashGameWalletService.buyIn(userId, tableId, playerName, buyIn)` sits a player down: it validates the table
   is active and the buy-in is within `[minBuyIn, maxBuyIn]`, assigns the lowest free seat (rejecting a full

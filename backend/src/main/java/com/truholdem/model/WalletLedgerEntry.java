@@ -123,6 +123,14 @@ public class WalletLedgerEntry {
                 amount.negate(), balanceAfter, idempotencyKey, null);
     }
 
+    /** Off-chain credit for standing up from a cash table (remaining stack returned). {@code idempotencyKey} is
+     *  the seat id, so each seat session is cashed out at most once. */
+    public static WalletLedgerEntry cashCashOut(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, String idempotencyKey) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.CASH_CASHOUT,
+                amount, balanceAfter, idempotencyKey, null);
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();
