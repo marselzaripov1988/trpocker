@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Allow the new CASH_BUYIN ledger type (off-chain debit for sitting down at a real-money cash table). Widen
+      the wallet_ledger_entries.type CHECK the same way changesets 02 and 13 did. Postgres-only (H2 tests
+      regenerate the schema from the entity enum via Hibernate).
+    -->
+    <changeSet id="wallet-004-cash-buyin-type" author="truholdem" dbms="postgresql">
+        <sql>
+            ALTER TABLE wallet_ledger_entries DROP CONSTRAINT IF EXISTS wallet_ledger_entries_type_check;
+            ALTER TABLE wallet_ledger_entries ADD CONSTRAINT wallet_ledger_entries_type_check
+                CHECK (type IN ('DEPOSIT', 'WITHDRAWAL', 'WITHDRAWAL_REVERSAL',
+                                'TOURNAMENT_BUYIN', 'TOURNAMENT_PAYOUT', 'TOURNAMENT_REFUND',
+                                'CASH_BUYIN'));
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

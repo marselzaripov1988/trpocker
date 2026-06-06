@@ -68,8 +68,11 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       ACTIVE/SITTING_OUT/LEAVING/LEFT, joined/left, `@Version`) + `CashSeatRepository` (active seats, live seat
       per player, seat-number occupancy, live count). Liquibase changeset 22 (`cash_seats` + index). Verified by
       `CashSeatRepositoryIT` + fresh Postgres `validate`. (chip↔asset scale deferred to the engine-wiring slice.)
-- [ ] **3. Sit-down (buy-in)** — `CashGameWalletService.buyIn`: debit `WalletAccount`, seat the player with a
-      stack, ledger entry. Validate min/max buy-in, seat availability, single-seat-per-table.
+- [x] **3. Sit-down (buy-in)** — `CashGameWalletService.buyIn`: validate active table + `[min,max]` buy-in +
+      lowest-free seat + one live seat per player, create `CashSeat`, debit `WalletAccount` (new `CASH_BUYIN`
+      ledger type via `WalletService.chargeCashBuyIn`, idempotent on the seat id). Liquibase changeset 23 widens
+      the ledger-type CHECK. Verified by `CashGameWalletServiceIT` (7 cases) + fresh-Postgres CHECK insert proof.
+      Concurrency-safe seat assignment (DB constraint / per-table writer) deferred to the engine/API slices.
 - [ ] **4. Stand-up (cash-out)** — credit the remaining stack back to the wallet on leave; ledger entry;
       handle leaving mid-hand (fold + cash out after hand).
 - [ ] **5. Rake** — take a % (with cap) from each contested pot on showdown; record house revenue.

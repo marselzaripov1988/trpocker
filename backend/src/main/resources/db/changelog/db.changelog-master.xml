@@ -32,5 +32,6 @@
     <include file="db/changelog/20-federation-final-buyout.xml"/>
     <include file="db/changelog/21-tournament-unregister-approval.xml"/>
     <include file="db/changelog/22-cash-seats.xml"/>
+    <include file="db/changelog/23-wallet-cash-buyin-type.xml"/>
 
 </databaseChangeLog>

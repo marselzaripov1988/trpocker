@@ -115,6 +115,14 @@ public class WalletLedgerEntry {
                 amount, balanceAfter, idempotencyKey, null);
     }
 
+    /** Off-chain debit for sitting down at a real-money cash table. {@code idempotencyKey} is the seat id, so a
+     *  re-sit after leaving is a distinct entry while a double-submit of the same seat is rejected. */
+    public static WalletLedgerEntry cashBuyIn(UUID userId, CryptoAsset asset, BigDecimal amount,
+            BigDecimal balanceAfter, String idempotencyKey) {
+        return new WalletLedgerEntry(userId, asset, WalletLedgerType.CASH_BUYIN,
+                amount.negate(), balanceAfter, idempotencyKey, null);
+    }
+
     @PrePersist
     void onCreate() {
         this.createdAt = Instant.now();

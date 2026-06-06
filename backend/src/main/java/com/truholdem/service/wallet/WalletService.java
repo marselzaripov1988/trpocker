@@ -414,6 +414,33 @@ public class WalletService {
     }
 
     /**
+     * Debit the wallet for sitting down at a real-money cash (ring) table. Idempotent by {@code idempotencyKey}
+     * (the seat id) — a repeated charge for the same seat is a no-op returning false. Throws
+     * {@link InsufficientFundsException} when the balance is too low.
+     */
+    @Transactional
+    public boolean chargeCashBuyIn(UUID userId, CryptoAsset asset, BigDecimal amount, String idempotencyKey) {
+        requireEnabled();
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Cash buy-in amount must be positive");
+        }
+        if (ledgerRepository.existsByExternalTxId(idempotencyKey)) {
+            return false;
+        }
+        WalletAccount account = accountRepository.findByUserIdAndAsset(userId, asset)
+                .orElseThrow(InsufficientFundsException::new);
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException();
+        }
+        account.debit(amount);
+        accountRepository.save(account);
+        ledgerRepository.save(WalletLedgerEntry.cashBuyIn(userId, asset, amount, account.getBalance(),
+                idempotencyKey));
+        log.info("Cash buy-in: debited {} {} from user {} ({})", amount, asset, userId, idempotencyKey);
+        return true;
+    }
+
+    /**
      * Credit the wallet with a real-money tournament payout/prize. Idempotent by {@code idempotencyKey}.
      */
     @Transactional

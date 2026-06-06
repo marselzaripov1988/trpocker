@@ -10,5 +10,7 @@ public enum WalletLedgerType {
     /** Off-chain credit: real-money tournament prize/payout. */
     TOURNAMENT_PAYOUT,
     /** Off-chain credit: buy-in returned when a real-money tournament is cancelled (e.g. under-filled). */
-    TOURNAMENT_REFUND
+    TOURNAMENT_REFUND,
+    /** Off-chain debit: sitting down at a real-money cash (ring) table (buy-in into a stack). */
+    CASH_BUYIN
 }

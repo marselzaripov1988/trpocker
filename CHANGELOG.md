@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 3: sit-down (buy-in) wallet bridge
+- `CashGameWalletService.buyIn(userId, tableId, playerName, buyIn)` sits a player down: it validates the table
+  is active and the buy-in is within `[minBuyIn, maxBuyIn]`, assigns the lowest free seat (rejecting a full
+  table), enforces one live seat per player per table, then creates the `CashSeat` and debits the wallet — all
+  in one transaction, so a failed debit (insufficient funds / payments disabled) rolls the seat back.
+- The wallet charge (`WalletService.chargeCashBuyIn`, new `CASH_BUYIN` ledger type) is **idempotent on the new
+  seat's id**, so re-sitting after standing up is a fresh buy-in while a double-submit of the same seat is a
+  no-op. Gated by the existing `app.payments.enabled` (real-money).
+- Liquibase changeset 23 widens the `wallet_ledger_entries.type` CHECK to allow `CASH_BUYIN` (Postgres-only,
+  mirroring changesets 02/13; H2 regenerates from the enum). Verified: `CashGameWalletServiceIT` (7 cases:
+  debit+seat, insufficient funds, out-of-range, seat assignment + single-seat, full table, closed table,
+  re-sit), full surefire suite green, and on a fresh Postgres the changeset applies + a `CASH_BUYIN` row inserts
+  while a bogus type is rejected by the CHECK.
+- No engine wiring / cash-out / rake yet — those are the next slices.
+
 ### 🎲 Cash games (ring tables) — slice 2: seat/session model
 - `CashSeat` persists a seated player's real-money session at a `CashTable`: their stack and cumulative buy-in
   (asset major units), zero-based seat number, and lifecycle `CashSeatStatus` (ACTIVE / SITTING_OUT / LEAVING /
