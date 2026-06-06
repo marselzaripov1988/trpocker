@@ -51,10 +51,13 @@ public record CreateTournamentRequest(
     Integer bountyAmount,
     
     
-    List<Integer> payoutStructure
+    List<Integer> payoutStructure,
+
+    /** When true, players cannot self-unregister / self-refund — cancellation is admin-only (default false). */
+    Boolean unregisterRequiresApproval
 ) {
-    
-    
+
+
     public static CreateTournamentRequest sitAndGo(String name, int buyIn) {
         return new CreateTournamentRequest(
             name,
@@ -64,7 +67,7 @@ public record CreateTournamentRequest(
             9,
             buyIn,
             "TURBO",
-            null, null, null, null, null, null, null
+            null, null, null, null, null, null, null, false
         );
     }
     
@@ -78,7 +81,7 @@ public record CreateTournamentRequest(
             maxPlayers,
             buyIn,
             "STANDARD",
-            null, null, null, null, null, null, null
+            null, null, null, null, null, null, null, false
         );
     }
     
@@ -98,7 +101,8 @@ public record CreateTournamentRequest(
             3,         
             buyIn * 2, 
             null,
-            null
+            null,
+            false
         );
     }
     
@@ -112,7 +116,7 @@ public record CreateTournamentRequest(
             maxPlayers,
             0,
             "STANDARD",
-            null, null, null, null, null, null, null
+            null, null, null, null, null, null, null, false
         );
     }
 
@@ -127,7 +131,8 @@ public record CreateTournamentRequest(
             "STANDARD",
             null, null, null, null, null,
             bountyAmount,
-            null
+            null,
+            false
         );
     }
 }

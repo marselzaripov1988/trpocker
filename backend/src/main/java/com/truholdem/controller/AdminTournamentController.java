@@ -142,6 +142,15 @@ public class AdminTournamentController {
         return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
     }
 
+    @PostMapping("/{id}/cancel-player/{playerId}")
+    @Operation(summary = "Cancel a single player's registration + refund (admin approval for unregister)")
+    public ResponseEntity<TournamentDetailResponse> cancelPlayer(@PathVariable UUID id,
+            @PathVariable UUID playerId) {
+        boolean refunded = tournamentWalletService.cancelPlayerAndRefund(id, playerId);
+        log.info("Admin cancelled player {} in tournament {} (refunded={})", playerId, id, refunded);
+        return ResponseEntity.ok(tournamentService.getTournamentDetail(id));
+    }
+
     @PostMapping("/{id}/eliminate/{playerId}")
     @Operation(summary = "Eliminate a player")
     public ResponseEntity<TournamentDetailResponse> eliminatePlayer(

@@ -116,6 +116,31 @@ public class TournamentWalletService {
     }
 
     /**
+     * Admin action: cancel a single player's registration and (for a real-money tournament) refund their
+     * entry fee — the buy-out price if they bought a higher-level pyramid seat, otherwise the flat buy-in.
+     * Uses the same idempotency key as {@link #cancelAndRefund}, so a later whole-tournament cancel never
+     * double-refunds this player. Returns whether a refund was credited.
+     */
+    @Transactional
+    public boolean cancelPlayerAndRefund(UUID tournamentId, UUID playerId) {
+        Tournament tournament = tournamentRepository.findById(tournamentId)
+                .orElseThrow(() -> new NoSuchElementException("Tournament not found: " + tournamentId));
+        boolean refunded = false;
+        if (tournament.isRealMoney()) {
+            PyramidBuyout buyout = buyoutRepository
+                    .findByTournamentIdAndBuyerPlayerId(tournamentId, playerId).orElse(null);
+            refunded = buyout != null
+                    ? walletService.refundBuyIn(playerId, buyout.getAsset(), buyout.getPriceAmount(),
+                            buyoutRefundKey(tournamentId, playerId))
+                    : walletService.refundBuyIn(playerId, tournament.getCryptoBuyInAsset(),
+                            tournament.getCryptoBuyInAmount(), refundKey(tournamentId, playerId));
+        }
+        tournamentService.adminCancelPlayerRegistration(tournamentId, playerId);
+        log.info("Admin cancelled player {} in tournament {} (refunded={})", playerId, tournamentId, refunded);
+        return refunded;
+    }
+
+    /**
      * Credit every in-the-money finisher of a completed real-money tournament with their crypto share.
      * No-op for play-money / unknown tournaments. Best-effort per finisher (a failed credit is logged, not
      * fatal) and idempotent via {@link #payout}. Returns the number of finishers actually credited.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Unregister-approval gate: when set on a tournament, players cannot self-unregister / self-refund —
+      cancellation + refund is admin-only. Postgres-only; H2 regenerates from the entity. Idempotent.
+    -->
+    <changeSet id="tournament-005-unregister-approval" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="tournaments" columnName="unregister_requires_approval"/></not>
+        </preConditions>
+        <addColumn tableName="tournaments">
+            <column name="unregister_requires_approval" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -69,6 +69,15 @@ import {
           </select>
         </label>
 
+        <label class="check">
+          <input
+            type="checkbox"
+            name="unregisterRequiresApproval"
+            [(ngModel)]="form.unregisterRequiresApproval"
+            data-cy="unregister-approval" />
+          Require admin approval to cancel participation / refund buy-ins &amp; tickets
+        </label>
+
         <div class="actions">
           <button type="submit" class="btn-primary" [disabled]="saving() || f.invalid" data-cy="submit-create">
             {{ saving() ? 'Creating…' : 'Create' }}
@@ -85,6 +94,8 @@ import {
     .form label { display: block; margin-bottom: 1rem; color: #cbd5e1; font-size: 0.85rem; }
     .form input, .form select { display: block; width: 100%; margin-top: 0.35rem; padding: 0.5rem; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form label.check { display: flex; align-items: flex-start; gap: 0.5rem; }
+    .form label.check input { width: auto; margin-top: 0.15rem; }
     .btn-primary { background: #2563eb; color: #fff; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; cursor: pointer; font-weight: 600; }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .alert.error { background: #7f1d1d; color: #fecaca; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
@@ -105,7 +116,8 @@ export class AdminTournamentCreateComponent {
     minPlayers: 2,
     maxPlayers: 9,
     buyIn: 100,
-    blindStructureType: 'STANDARD'
+    blindStructureType: 'STANDARD',
+    unregisterRequiresApproval: false
   };
 
   onSubmit(): void {

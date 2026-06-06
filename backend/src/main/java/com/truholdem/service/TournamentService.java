@@ -157,11 +157,32 @@ public class TournamentService {
         if (tournament.getStatus() != TournamentStatus.REGISTERING) {
             throw new IllegalStateException("Can only unregister during REGISTERING status");
         }
+        if (tournament.isUnregisterRequiresApproval()) {
+            throw new IllegalStateException(
+                    "This tournament requires admin approval to cancel participation / refund. Contact an admin.");
+        }
         if (!registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId)) {
             throw new IllegalStateException("Player not found in tournament");
         }
 
         registrationRepository.deleteByTournamentIdAndPlayerId(tournamentId, playerId);
+    }
+
+    /**
+     * Admin action: cancel a single player's registration (any time during REGISTERING, bypassing the
+     * self-unregister approval gate). Refunds the player's buy-in is handled by the caller for real-money
+     * tournaments. Idempotent on the registration delete.
+     */
+    public void adminCancelPlayerRegistration(UUID tournamentId, UUID playerId) {
+        Tournament tournament = findTournamentOrThrow(tournamentId);
+        if (tournament.getStatus() != TournamentStatus.REGISTERING) {
+            throw new IllegalStateException("Can only cancel a registration during REGISTERING status");
+        }
+        if (!registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId)) {
+            throw new IllegalStateException("Player not found in tournament");
+        }
+        registrationRepository.deleteByTournamentIdAndPlayerId(tournamentId, playerId);
+        log.info("Admin cancelled registration for player {} in tournament {}", playerId, tournamentId);
     }
 
     
@@ -883,7 +904,11 @@ public class TournamentService {
                     tournamentProperties.getPyramidDefaultSeatsPerTable(),
                     tournamentProperties.getPyramidDefaultHandsPerRound());
         }
-        
+
+        if (Boolean.TRUE.equals(request.unregisterRequiresApproval())) {
+            builder.unregisterRequiresApproval(true);
+        }
+
         return builder.build();
     }
 

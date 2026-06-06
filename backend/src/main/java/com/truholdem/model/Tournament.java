@@ -130,6 +130,10 @@ public class Tournament {
     @Column(name = "pyramid_buy_up_enabled", nullable = false)
     private boolean pyramidBuyUpEnabled = false;
 
+    /** When true, players cannot self-unregister / self-refund — cancellation + refund is admin-only. */
+    @Column(name = "unregister_requires_approval", nullable = false)
+    private boolean unregisterRequiresApproval = false;
+
     /** Pyramid format: current survival round (1-based). */
     @Column(name = "pyramid_round", nullable = false)
     private int pyramidRound = 1;
@@ -277,6 +281,14 @@ public class Tournament {
 
     public boolean isPyramidBuyUpEnabled() {
         return pyramidBuyUpEnabled;
+    }
+
+    public boolean isUnregisterRequiresApproval() {
+        return unregisterRequiresApproval;
+    }
+
+    public void setUnregisterRequiresApproval(boolean unregisterRequiresApproval) {
+        this.unregisterRequiresApproval = unregisterRequiresApproval;
     }
 
     public void setPyramidBuyUpEnabled(boolean pyramidBuyUpEnabled) {
@@ -799,6 +811,11 @@ public class Tournament {
         public TournamentBuilder pyramidConfig(int seatsPerTable, int handsPerRound) {
             tournament.setSeatsPerTable(seatsPerTable);
             tournament.setHandsPerRound(handsPerRound);
+            return this;
+        }
+
+        public TournamentBuilder unregisterRequiresApproval(boolean value) {
+            tournament.setUnregisterRequiresApproval(value);
             return this;
         }
 

@@ -14,6 +14,7 @@ export interface CreateTournamentAdminRequest {
   maxPlayers: number;
   buyIn: number;
   blindStructureType?: string;
+  unregisterRequiresApproval?: boolean;
 }
 
 export interface PyramidRunResponse {

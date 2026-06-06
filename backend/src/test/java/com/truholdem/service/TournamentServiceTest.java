@@ -190,7 +190,7 @@ class TournamentServiceTest {
             CreateTournamentRequest request = new CreateTournamentRequest(
                 "Invalid", TournamentType.FREEZEOUT, 1500, 
                 10, 5, 
-                100, null, null, null, null, null, null, null, null);
+                100, null, null, null, null, null, null, null, null, false);
             
             assertThatThrownBy(() -> tournamentService.createTournament(request))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -342,9 +342,37 @@ class TournamentServiceTest {
         @Test
         @DisplayName("should throw when unregistering non-existent player")
         void shouldThrowWhenUnregisteringNonExistentPlayer() {
-            assertThatThrownBy(() -> 
+            assertThatThrownBy(() ->
                 tournamentService.unregisterPlayer(tournamentId, UUID.randomUUID()))
                 .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("should reject self-unregister when admin approval is required")
+        void shouldRejectSelfUnregisterWhenApprovalRequired() {
+            tournament.setUnregisterRequiresApproval(true);
+            UUID playerId = UUID.randomUUID();
+
+            assertThatThrownBy(() ->
+                tournamentService.unregisterPlayer(tournamentId, playerId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("admin approval");
+
+            verify(registrationRepository, never())
+                .deleteByTournamentIdAndPlayerId(tournamentId, playerId);
+        }
+
+        @Test
+        @DisplayName("admin can cancel a registration even when approval is required")
+        void adminCanCancelRegistrationWhenApprovalRequired() {
+            tournament.setUnregisterRequiresApproval(true);
+            UUID playerId = UUID.randomUUID();
+            when(registrationRepository.existsByTournamentIdAndPlayerId(tournamentId, playerId))
+                .thenReturn(true);
+
+            tournamentService.adminCancelPlayerRegistration(tournamentId, playerId);
+
+            verify(registrationRepository).deleteByTournamentIdAndPlayerId(tournamentId, playerId);
         }
     }
     

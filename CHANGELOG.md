@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔒 Unregister-approval gate — restrict self-cancellation / refund to admins
+- Tournament creation gained an **`unregisterRequiresApproval`** flag (default `false`). When set, players can
+  no longer self-unregister or self-refund: `TournamentService.unregisterPlayer` rejects with *"requires admin
+  approval to cancel participation / refund"*. Cancellation + refund is then admin-only.
+- Admin path: `POST /admin/tournaments/{id}/cancel-player/{playerId}` →
+  `TournamentWalletService.cancelPlayerAndRefund` cancels a single player's registration (bypassing the gate via
+  `TournamentService.adminCancelPlayerRegistration`) and, for a real-money tournament, refunds their entry fee —
+  the buy-out price if they bought a higher-level pyramid seat, otherwise the flat buy-in. Idempotent: it reuses
+  the same refund keys as the whole-tournament cancel (`trefund:` / `tbuyup-refund:`), so a later full cancel
+  never double-refunds.
+- Persisted via Liquibase changeset 21 (`tournaments.unregister_requires_approval boolean not null default
+  false`, Postgres-only + idempotent). Admin create UI gained a checkbox; `CreateTournamentAdminRequest` /
+  `CreateTournamentRequest` carry the flag.
+- Verified: `TournamentServiceTest` (self-unregister rejected when the flag is set; admin cancel still works),
+  full surefire suite green, schema validated on a fresh Postgres (`ddl-auto=validate`), eslint + `ng build`
+  green.
+
 ### 🔺 Buy-up federated pyramid — slice 4b: UI (epic complete)
 - Admin (`/admin/federations`): the create form gained a **Buy-up** checkbox + buy-in amount/asset, and the
   lifecycle panel gained buy-up controls — **Open shard for buy-up** (shard-index input), **Close buy-up +
