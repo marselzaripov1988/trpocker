@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 
 import { FederationService } from '../federation.service';
-import { FederationDetail, FederationRegistration } from '../federation.models';
+import { FederationDetail, FederationRegistration, FinalSeat } from '../federation.models';
 import { ErrorHandlerService } from '../../services/error-handler.service';
 
 /**
@@ -42,6 +42,22 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
           <p class="closed">Registration is closed for this federation.</p>
         }
 
+        @if (finalSeats().length > 0) {
+          <section class="seats" data-cy="final-seats">
+            <h2>🎟️ Buy a guaranteed final seat</h2>
+            <p class="muted">Skip the shards — claim a finalist seat directly (closes that empty shard).</p>
+            <ul>
+              @for (s of finalSeats(); track s.shardIndex) {
+                <li>
+                  <span>Shard #{{ s.shardIndex }}</span>
+                  <span class="price">{{ s.price | number }} {{ s.asset }}</span>
+                  <button class="btn" [disabled]="busy()" (click)="buyFinal(s)" data-cy="buy-final">Buy</button>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
         @if (f.finalScheduledStart) {
           <p class="final">🏁 Final scheduled: <strong>{{ f.finalScheduledStart }}</strong></p>
         }
@@ -69,6 +85,12 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .closed, .muted { color: #9ca3af; }
     .final, .champ { color: #fbbf24; }
+    .seats { margin: 1rem 0; }
+    .seats ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+    .seats li { display: flex; align-items: center; gap: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.5rem 0.75rem; }
+    .seats .price { color: #fbbf24; margin-left: auto; }
+    .btn { background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; border-radius:8px; padding:0.4rem 1rem; font-weight:600; cursor:pointer; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   `]
 })
 export class FederationViewComponent implements OnInit {
@@ -78,6 +100,7 @@ export class FederationViewComponent implements OnInit {
 
   readonly federation = signal<FederationDetail | null>(null);
   readonly myRegistration = signal<FederationRegistration | null>(null);
+  readonly finalSeats = signal<readonly FinalSeat[]>([]);
   readonly loading = signal(true);
   readonly busy = signal(false);
 
@@ -109,11 +132,32 @@ export class FederationViewComponent implements OnInit {
     });
   }
 
+  buyFinal(seat: FinalSeat): void {
+    this.busy.set(true);
+    this.service.buyFinalSeat(this.id, seat.shardIndex).subscribe({
+      next: () => {
+        this.errorHandler.addSuccess('Final seat bought', `Shard #${seat.shardIndex} for ${seat.price} ${seat.asset}`);
+        this.busy.set(false);
+        this.load();
+      },
+      error: () => {
+        this.errorHandler.addError('Could not buy the final seat', 'It may no longer be available.');
+        this.busy.set(false);
+        this.load();
+      }
+    });
+  }
+
   private load(): void {
     this.loading.set(true);
     this.service.get(this.id).subscribe({
       next: detail => { this.federation.set(detail); this.loading.set(false); },
       error: () => { this.federation.set(null); this.loading.set(false); }
+    });
+    // Best-effort: final seats exist only for buy-up federations (the endpoint errors otherwise).
+    this.service.finalSeats(this.id).subscribe({
+      next: seats => this.finalSeats.set(seats),
+      error: () => this.finalSeats.set([])
     });
   }
 }

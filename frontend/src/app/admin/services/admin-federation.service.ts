@@ -37,4 +37,16 @@ export class AdminFederationService {
   drainShards(id: string): Observable<FederationDetail> {
     return this.http.post<FederationDetail>(`${this.url}/${id}/drain-shards`, {});
   }
+
+  openShardForBuyUp(id: string, shardIndex: number): Observable<FederationDetail> {
+    return this.http.post<FederationDetail>(`${this.url}/${id}/shards/${shardIndex}/open-buyup`, {});
+  }
+
+  closeBuyUp(id: string): Observable<FederationDetail> {
+    return this.http.post<FederationDetail>(`${this.url}/${id}/close-buyup`, {});
+  }
+
+  distribute(id: string, shardBps: number): Observable<FederationDetail> {
+    return this.http.post<FederationDetail>(`${this.url}/${id}/distribute?shardBps=${shardBps}`, {});
+  }
 }

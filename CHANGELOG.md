@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up federated pyramid — slice 4b: UI (epic complete)
+- Admin (`/admin/federations`): the create form gained a **Buy-up** checkbox + buy-in amount/asset, and the
+  lifecycle panel gained buy-up controls — **Open shard for buy-up** (shard-index input), **Close buy-up +
+  start**, and **Distribute prizes** (shard-bps input) — wired to the slice-3/4a endpoints via
+  `AdminFederationService`.
+- Player (`/federations/:id`): a **🎟️ Buy a guaranteed final seat** section lists the buyable final seats
+  (shard slot + price) with a **Buy** button (closes that empty shard, charges the wallet, refreshes), loaded
+  best-effort (the endpoint only returns seats for buy-up federations). New `FinalSeat` model +
+  `FederationService.finalSeats` / `buyFinalSeat`.
+- Verified: eslint clean and `ng build --configuration production` green. **This closes the buy-up federated
+  pyramid epic (slices 1–4): seat buy-outs in both the shard and the final, admin prize distribution from the
+  expected pool, full REST + UI.**
+
 ### 🔺 Buy-up federated pyramid — slice 4a: REST (admin window + player final seats)
 - Admin: `POST /admin/pyramid-federations/{id}/shards/{shardIndex}/open-buyup` (close a shard's registration
   early + open its seat buy-out window) and `POST …/close-buyup` (close every window + start the shards) —

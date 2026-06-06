@@ -33,4 +33,9 @@ export interface CreateFederationRequest {
   startingPlayers: number;
   shardSize: number;
   registrationDeadline?: string | null;
+  /** Optional real-money buy-in; with `buyUpEnabled` it's required (seat buy-outs charge it). */
+  buyInAmount?: number | null;
+  buyInAsset?: string | null;
+  /** Buy-up variant: each shard is a buy-up pyramid (players can buy higher-level / final seats). */
+  buyUpEnabled?: boolean;
 }

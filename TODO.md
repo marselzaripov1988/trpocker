@@ -193,8 +193,9 @@ shard and in the final; mechanics first, money later.
 - [x] **4a. REST** — admin `open-buyup` / `close-buyup` (+ existing `distribute`); player `final-seats` (GET) +
       `final-seats/{i}/buy`. DTOs `FinalSeatResponse`/`FinalSeatPurchaseResponse`. Verified by
       `FederatedBuyUpControllerIT`.
-- [ ] **4b. UI** — admin buy-up controls (create checkbox, open/close window, distribute) + player final-seat
-      tickets / shard buy-up panel.
+- [x] **4b. UI** — admin buy-up controls (create checkbox + buy-in, open/close window, distribute) + player
+      final-seat tickets section (`AdminFederationService` / `FederationService` extended). eslint + `ng build`
+      green. **Epic complete.**
 
 ## TODO — scale / load
 - [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`

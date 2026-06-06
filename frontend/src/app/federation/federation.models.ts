@@ -37,3 +37,10 @@ export interface FederationRegistration {
   shardStatus: ShardStatus;
   federationStatus: FederationStatus;
 }
+
+/** A buyable final seat (buy-up federation): claiming it closes the empty shard at {@code shardIndex}. */
+export interface FinalSeat {
+  shardIndex: number;
+  price: number;
+  asset: string;
+}
