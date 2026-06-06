@@ -28,5 +28,6 @@
     <include file="db/changelog/16-federated-pyramid.xml"/>
     <include file="db/changelog/17-federated-pyramid-registrations.xml"/>
     <include file="db/changelog/18-federated-pyramid-buyin.xml"/>
+    <include file="db/changelog/19-federated-pyramid-buyup.xml"/>
 
 </databaseChangeLog>

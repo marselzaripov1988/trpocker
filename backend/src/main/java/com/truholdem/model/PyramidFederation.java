@@ -73,6 +73,10 @@ public class PyramidFederation {
     @Column(name = "crypto_buy_in_asset", length = 32)
     private CryptoAsset cryptoBuyInAsset;
 
+    /** Buy-up variant: each shard is a buy-up pyramid where players can buy guaranteed higher-level seats. */
+    @Column(name = "buy_up_enabled", nullable = false)
+    private boolean buyUpEnabled = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -193,6 +197,14 @@ public class PyramidFederation {
 
     public boolean isRealMoney() {
         return cryptoBuyInAmount != null && cryptoBuyInAmount.signum() > 0 && cryptoBuyInAsset != null;
+    }
+
+    public boolean isBuyUpEnabled() {
+        return buyUpEnabled;
+    }
+
+    public void setBuyUpEnabled(boolean buyUpEnabled) {
+        this.buyUpEnabled = buyUpEnabled;
     }
 
     public Instant getCreatedAt() {

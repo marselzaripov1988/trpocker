@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up federated pyramid — slice 1: shard-level seat buy-outs
+- New variant of the federated pyramid (`buy_up_enabled` flag, changeset 19; requires a real-money buy-in):
+  each shard is a buy-up pyramid where players can buy guaranteed higher-level seats before the shard starts,
+  reusing the existing `PyramidBuyoutService` on the shard's child tournament. `openShardForBuyUp` closes a
+  shard's registration **while under-filled** (so upper sub-pyramids are above the floor frontier and thus
+  buyable), materializes a real-money buy-up child pyramid, seats its players via the wallet bridge (charging
+  the federation buy-in here, not at federation registration), and moves the shard to a new **`BUYUP_OPEN`**
+  status. Players buy seats via the existing `/v1/tournaments/{childId}/pyramid/...` endpoints;
+  `closeBuyUpAndStart` ends the window and starts the shard (fixed-bracket seating honours the buy-outs).
+  `register` skips the federation-level charge for buy-up federations; `promoteShards` materialises buy-up
+  shards as `BUYUP_OPEN` (occupying a wave slot); `createFederation` and `CreateFederationRequest` gained a
+  `buyUpEnabled` option.
+- **Money-later (as agreed):** the federation prize-pool reconciliation for a buy-up federation (mixed buy-ins
+  + buy-out prices) is deferred — `distributePrizes` is skipped for buy-up federations for now.
+- Verified by `FederatedBuyUpShardIT` (shardSize 4 / seats 2, 2 floor players): opening the window charges the
+  buy-in (300 → 280), the level-2 seat covering the empty floor is listed buyable and bought (refund 20 +
+  charge 40 → 260, buy-out persisted), and the shard then starts (RUNNING). Changeset 19 runs clean on a fresh
+  Postgres (`ddl-auto=validate`); the other federated ITs and the surefire suite stay green (1090). Follow-ups:
+  final-level buy-up, and the buy-up prize-pool reconciliation.
+
 ### 🔺 Federated pyramid — slice 8: cluster/load verify (epic complete)
 - `FederatedPyramidService.registerBotsBatch` bulk-registers synthetic bot players (play-money only) in a
   single batched insert, filling shards in order (flipping each full shard to READY, opening the next) while

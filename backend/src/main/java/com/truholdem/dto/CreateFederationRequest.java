@@ -22,5 +22,6 @@ public record CreateFederationRequest(
         @Min(2) int shardSize,
         Instant registrationDeadline,
         BigDecimal buyInAmount,
-        CryptoAsset buyInAsset) {
+        CryptoAsset buyInAsset,
+        boolean buyUpEnabled) {
 }

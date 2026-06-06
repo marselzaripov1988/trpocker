@@ -30,6 +30,7 @@ import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.notification.TournamentNotificationService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
+import com.truholdem.service.wallet.TournamentWalletService;
 import com.truholdem.service.wallet.WalletService;
 
 /**
@@ -54,6 +55,7 @@ public class FederatedPyramidService {
     private final PyramidTournamentService pyramidTournamentService;
     private final TournamentNotificationService notificationService;
     private final WalletService walletService;
+    private final TournamentWalletService tournamentWalletService;
     private final AppProperties.Tournament tournamentProperties;
     /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
     private final FederatedPyramidService self;
@@ -61,8 +63,10 @@ public class FederatedPyramidService {
     public FederatedPyramidService(PyramidFederationRepository federationRepository,
             PyramidFederationShardRepository shardRepository,
             PyramidFederationRegistrationRepository registrationRepository,
-            TournamentService tournamentService, PyramidTournamentService pyramidTournamentService,
+            TournamentService tournamentService,
+            PyramidTournamentService pyramidTournamentService,
             TournamentNotificationService notificationService, WalletService walletService,
+            TournamentWalletService tournamentWalletService,
             AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
@@ -71,6 +75,7 @@ public class FederatedPyramidService {
         this.pyramidTournamentService = pyramidTournamentService;
         this.notificationService = notificationService;
         this.walletService = walletService;
+        this.tournamentWalletService = tournamentWalletService;
         this.tournamentProperties = appProperties.getTournament();
         this.self = self;
     }
@@ -90,6 +95,21 @@ public class FederatedPyramidService {
     @Transactional
     public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
             Instant registrationDeadline, BigDecimal buyInAmount, CryptoAsset buyInAsset) {
+        return createFederation(name, startingPlayers, shardSize, registrationDeadline,
+                buyInAmount, buyInAsset, false);
+    }
+
+    /**
+     * As above, with an optional buy-up variant: when {@code buyUpEnabled}, each shard is a buy-up pyramid
+     * where players can buy guaranteed higher-level seats before the shard starts. Buy-up requires a
+     * real-money buy-in (charged when the player is seated into their shard, not at federation registration).
+     */
+    @Transactional
+    public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
+            Instant registrationDeadline, BigDecimal buyInAmount, CryptoAsset buyInAsset, boolean buyUpEnabled) {
+        if (buyUpEnabled && (buyInAmount == null || buyInAmount.signum() <= 0 || buyInAsset == null)) {
+            throw new IllegalArgumentException("A buy-up federated pyramid requires a real-money buy-in");
+        }
         int seats = tournamentProperties.getPyramidDefaultSeatsPerTable();
         int hands = tournamentProperties.getPyramidDefaultHandsPerRound();
         FederatedPyramidPlan plan = new FederatedPyramidPlan(startingPlayers, shardSize, seats);
@@ -100,6 +120,7 @@ public class FederatedPyramidService {
             federation.setCryptoBuyInAmount(buyInAmount);
             federation.setCryptoBuyInAsset(buyInAsset);
         }
+        federation.setBuyUpEnabled(buyUpEnabled);
         federation = federationRepository.save(federation);
 
         int nodeGroups = Math.max(1, tournamentProperties.getFederatedNodeGroupCount());
@@ -136,8 +157,9 @@ public class FederatedPyramidService {
         PyramidFederationShard shard = openFillShard(federationId)
                 .orElseThrow(() -> new IllegalStateException("Federation is full — all shards are filled"));
 
-        if (federation.isRealMoney()) {
+        if (federation.isRealMoney() && !federation.isBuyUpEnabled()) {
             // Charges the wallet; throws InsufficientFundsException (rolling back the registration) if too low.
+            // Buy-up federations charge the buy-in later, when the player is seated into their shard.
             walletService.chargeBuyIn(playerId, federation.getCryptoBuyInAsset(),
                     federation.getCryptoBuyInAmount(), "fedbuyin:" + federationId + ":" + playerId);
         }
@@ -216,7 +238,9 @@ public class FederatedPyramidService {
     public int promoteShards(UUID federationId) {
         PyramidFederation federation = requireFederation(federationId);
         int cap = tournamentProperties.getFederatedMaxConcurrentShards();
-        int running = shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING);
+        // BUYUP_OPEN shards (the pre-start buy-out window) also occupy a wave slot.
+        int running = shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING)
+                + shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.BUYUP_OPEN);
         List<PyramidFederationShard> ready = shardRepository
                 .findByFederationIdAndStatus(federationId, FederationShardStatus.READY).stream()
                 .sorted((a, b) -> Integer.compare(a.getShardIndex(), b.getShardIndex()))
@@ -227,7 +251,11 @@ public class FederatedPyramidService {
             if (running >= cap) {
                 break;
             }
-            startShard(federation, shard);
+            if (federation.isBuyUpEnabled()) {
+                materializeBuyUpShard(federation, shard);
+            } else {
+                startShard(federation, shard);
+            }
             running++;
             started++;
         }
@@ -282,6 +310,8 @@ public class FederatedPyramidService {
         self.promoteShards(federationId);
         int guard = 0;
         while (guard++ < 100_000) {
+            // Buy-up shards sit in BUYUP_OPEN until their window is closed; end it so they can run.
+            self.closeBuyUpAndStart(federationId);
             List<PyramidFederationShard> running = shardRepository
                     .findByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING);
             if (running.isEmpty()) {
@@ -387,7 +417,9 @@ public class FederatedPyramidService {
         federation.complete(championPlayerId);
         federationRepository.save(federation);
         log.info("Federation {} — COMPLETED, grand champion {}", federationId, championPlayerId);
-        if (federation.isRealMoney()) {
+        // Buy-up federations have a mixed pool (buy-ins + buy-out prices); their payout reconciliation is a
+        // later slice ("money later"). Plain real-money federations pay out the flat pool here.
+        if (federation.isRealMoney() && !federation.isBuyUpEnabled()) {
             distributePrizes(federation, championPlayerId);
         }
     }
@@ -451,6 +483,77 @@ public class FederatedPyramidService {
                 .map(PyramidFederationShard::getWinnerPlayerId)
                 .filter(w -> w != null)
                 .toList();
+    }
+
+    /**
+     * Buy-up variant: materialize a shard into a real-money buy-up child pyramid and seat its players (charging
+     * the buy-in via the wallet bridge), but leave it REGISTERING so players can buy guaranteed higher-level
+     * seats through the existing buy-up endpoints on {@code shard.tournamentId}. The shard becomes BUYUP_OPEN;
+     * {@link #closeBuyUpAndStart} ends the window and starts it.
+     */
+    private void materializeBuyUpShard(PyramidFederation federation, PyramidFederationShard shard) {
+        Tournament child = tournamentService.createTournament(CreateTournamentRequest.pyramid(
+                federation.getName() + " — shard " + shard.getShardIndex(),
+                federation.getShardSize(), federation.getSeatsPerTable(), federation.getHandsPerRound()));
+        // The tournament is managed in this transaction (createTournament joined it) — mutations flush on
+        // commit / before the bridge's lookup, so no explicit save is needed (and a merge would choke on the
+        // entity's immutable collections).
+        child.setCryptoBuyInAmount(federation.getCryptoBuyInAmount());
+        child.setCryptoBuyInAsset(federation.getCryptoBuyInAsset());
+        child.setPyramidBuyUpEnabled(true);
+        for (PyramidFederationRegistration reg :
+                registrationRepository.findByFederationIdAndShardIndex(federation.getId(), shard.getShardIndex())) {
+            // Charges the buy-in + registers into the child (so a later buy-out can replace that buy-in).
+            tournamentWalletService.buyIn(reg.getPlayerId(), child.getId(), reg.getPlayerName());
+        }
+        shard.markBuyUpOpen(child.getId());
+        shardRepository.save(shard);
+    }
+
+    /**
+     * Buy-up variant: close the buy-out window of every BUYUP_OPEN shard and start it (fixed-bracket seating
+     * honours the buy-outs), moving it to RUNNING. Idempotent. Returns the number started.
+     */
+    @Transactional
+    public int closeBuyUpAndStart(UUID federationId) {
+        int started = 0;
+        for (PyramidFederationShard shard :
+                shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.BUYUP_OPEN)) {
+            tournamentService.startTournament(shard.getTournamentId());
+            shard.markRunning(shard.getTournamentId());
+            shardRepository.save(shard);
+            started++;
+        }
+        if (started > 0) {
+            log.info("Federation {} — closed buy-out window + started {} shard(s)", federationId, started);
+        }
+        return started;
+    }
+
+    /**
+     * Buy-up variant: close a shard's registration early and open its buy-out window, even if it is not full —
+     * which is exactly what makes higher-level seats buyable (their sub-pyramids are above the floor frontier
+     * only while the shard is under-filled). The shard moves to BUYUP_OPEN; players then buy seats via the
+     * buy-up endpoints on the returned shard's tournament, and {@link #closeBuyUpAndStart} starts it.
+     */
+    @Transactional
+    public PyramidFederationShard openShardForBuyUp(UUID federationId, int shardIndex) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isBuyUpEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not a buy-up federation");
+        }
+        PyramidFederationShard shard = shardRepository.findByFederationIdAndShardIndex(federationId, shardIndex)
+                .orElseThrow(() -> new NoSuchElementException("Shard " + shardIndex + " not found"));
+        if (shard.getStatus() != FederationShardStatus.REGISTERING
+                && shard.getStatus() != FederationShardStatus.READY) {
+            throw new IllegalStateException("Shard " + shardIndex + " cannot open for buy-up (" + shard.getStatus() + ")");
+        }
+        materializeBuyUpShard(federation, shard);
+        if (federation.getStatus() == FederationStatus.REGISTERING) {
+            federation.markShardsRunning();
+            federationRepository.save(federation);
+        }
+        return shardRepository.findByFederationIdAndShardIndex(federationId, shardIndex).orElseThrow();
     }
 
     private void startShard(PyramidFederation federation, PyramidFederationShard shard) {

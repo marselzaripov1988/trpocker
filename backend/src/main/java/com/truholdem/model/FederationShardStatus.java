@@ -8,6 +8,8 @@ public enum FederationShardStatus {
     REGISTERING,
     /** Filled to capacity, waiting for a concurrency slot before its child pyramid is materialized. */
     READY,
+    /** Buy-up variant: the child pyramid is materialized + seated and open for seat buy-outs before it starts. */
+    BUYUP_OPEN,
     /** The shard's pyramid is running. */
     RUNNING,
     /** The shard produced its winner. */

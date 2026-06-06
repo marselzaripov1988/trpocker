@@ -90,6 +90,12 @@ public class PyramidFederationShard {
         this.filledCount++;
     }
 
+    /** Buy-up variant: the child pyramid is materialized + seated and open for seat buy-outs (REGISTERING). */
+    public void markBuyUpOpen(UUID tournamentId) {
+        this.tournamentId = tournamentId;
+        this.status = FederationShardStatus.BUYUP_OPEN;
+    }
+
     public void markRunning(UUID tournamentId) {
         this.tournamentId = tournamentId;
         this.status = FederationShardStatus.RUNNING;

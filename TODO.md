@@ -176,6 +176,18 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       Follow-up: engine-level table affinity to a shard's node-group (today: balanced metadata + LB/ops hint;
       shards already distribute via lease ownership).
 
+## TODO — buy-up federated pyramid [NEW EPIC]
+A federated pyramid variant where players can buy guaranteed higher-level seats. Decided: buy-up both in the
+shard and in the final; mechanics first, money later.
+- [x] **1. Shard-level buy-up** — `buy_up_enabled` flag (changeset 19) + `BUYUP_OPEN` shard status;
+      `openShardForBuyUp` closes a shard's registration under-filled (so upper seats are buyable), materializes
+      a real-money buy-up child pyramid (charged at shard seating via the bridge), reuses `PyramidBuyoutService`;
+      `closeBuyUpAndStart` starts it. Verified by `FederatedBuyUpShardIT`.
+- [ ] **2. Final-level buy-up** — buy a guaranteed seat among the finalists, bypassing your shard.
+- [ ] **3. Prize-pool reconciliation** — pay out a buy-up federation's mixed pool (buy-ins + buy-out prices)
+      to shard winners + champion (`distributePrizes` is currently skipped for buy-up federations).
+- [ ] **4. REST/UI** — expose `openShardForBuyUp` / buy-up window + tickets in the admin + player UI.
+
 ## TODO — scale / load
 - [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`
       / `.ps1`: STOMP-over-WS fleet through the round-robin LB, per-node `websocket_sessions_local` + heap
