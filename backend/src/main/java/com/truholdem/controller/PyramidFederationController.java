@@ -1,5 +1,6 @@
 package com.truholdem.controller;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,9 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.dto.FederationRegistrationResponse;
+import com.truholdem.dto.FinalSeatPurchaseResponse;
+import com.truholdem.dto.FinalSeatResponse;
+import com.truholdem.model.PyramidFederationFinalBuyout;
 import com.truholdem.model.PyramidFederationShard;
 import com.truholdem.model.User;
 import com.truholdem.service.tournament.FederatedPyramidService;
@@ -61,6 +65,27 @@ public class PyramidFederationController {
     public ResponseEntity<FederationDetailResponse> get(@PathVariable UUID id) {
         assertEnabled();
         return ResponseEntity.ok(federatedService.getFederationDetail(id));
+    }
+
+    @GetMapping("/{id}/final-seats")
+    @Operation(summary = "Buy-up: the buyable final seats (close an empty shard to become a finalist) + prices")
+    public ResponseEntity<List<FinalSeatResponse>> finalSeats(@PathVariable UUID id) {
+        assertEnabled();
+        List<FinalSeatResponse> seats = federatedService.availableFinalSeats(id).stream()
+                .map(t -> new FinalSeatResponse(t.shardIndex(), t.price(), t.asset()))
+                .toList();
+        return ResponseEntity.ok(seats);
+    }
+
+    @PostMapping("/{id}/final-seats/{shardIndex}/buy")
+    @Operation(summary = "Buy-up: buy a guaranteed final seat (closes shard {shardIndex}; charges the wallet)")
+    public ResponseEntity<FinalSeatPurchaseResponse> buyFinalSeat(@PathVariable UUID id,
+            @PathVariable int shardIndex, @AuthenticationPrincipal UserDetails principal) {
+        assertEnabled();
+        User user = (User) principal;
+        PyramidFederationFinalBuyout buyout = federatedService.buyFinalSeat(id, user.getId(), shardIndex);
+        return ResponseEntity.status(HttpStatus.CREATED).body(new FinalSeatPurchaseResponse(
+                id, user.getId(), buyout.getShardIndex(), buyout.getPriceAmount(), buyout.getAsset()));
     }
 
     private void assertEnabled() {

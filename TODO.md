@@ -190,7 +190,11 @@ shard and in the final; mechanics first, money later.
       `POST …/distribute?shardBps=N`: pool = **expected buy-ins** (`shardCount × shardSize × buyIn`, guaranteed),
       admin-chosen shard-winner share split among winners + remainder to champion (idempotent; shares one
       `payPool` core with the plain auto-payout). Verified by `FederatedPyramidPayoutIT`.
-- [ ] **4. REST/UI** — expose `openShardForBuyUp` / buy-up window + tickets in the admin + player UI.
+- [x] **4a. REST** — admin `open-buyup` / `close-buyup` (+ existing `distribute`); player `final-seats` (GET) +
+      `final-seats/{i}/buy`. DTOs `FinalSeatResponse`/`FinalSeatPurchaseResponse`. Verified by
+      `FederatedBuyUpControllerIT`.
+- [ ] **4b. UI** — admin buy-up controls (create checkbox, open/close window, distribute) + player final-seat
+      tickets / shard buy-up panel.
 
 ## TODO — scale / load
 - [x] **WS capacity scenario (cluster × N WS clients)** — `load/k6/websocket-cluster.js` + `run-ws-cluster.sh`

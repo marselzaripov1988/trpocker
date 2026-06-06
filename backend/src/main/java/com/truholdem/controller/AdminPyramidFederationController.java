@@ -91,6 +91,24 @@ public class AdminPyramidFederationController {
         return ResponseEntity.ok(federatedService.getFederationDetail(id));
     }
 
+    @PostMapping("/{id}/shards/{shardIndex}/open-buyup")
+    @Operation(summary = "Buy-up: close a shard's registration early + open its seat buy-out window (under-filled)")
+    public ResponseEntity<FederationDetailResponse> openShardForBuyUp(@PathVariable UUID id,
+            @PathVariable int shardIndex) {
+        assertEnabled();
+        federatedService.openShardForBuyUp(id, shardIndex);
+        return ResponseEntity.ok(federatedService.getFederationDetail(id));
+    }
+
+    @PostMapping("/{id}/close-buyup")
+    @Operation(summary = "Buy-up: close every shard's buy-out window and start the shards")
+    public ResponseEntity<FederationDetailResponse> closeBuyUp(@PathVariable UUID id) {
+        assertEnabled();
+        int started = federatedService.closeBuyUpAndStart(id);
+        log.info("Admin closed buy-up windows for federation {} ({} started)", id, started);
+        return ResponseEntity.ok(federatedService.getFederationDetail(id));
+    }
+
     @PostMapping("/{id}/schedule-final")
     @Operation(summary = "Schedule the final among shard winners + e-mail finalists (all shards must be done)")
     public ResponseEntity<FederationDetailResponse> scheduleFinal(@PathVariable UUID id,

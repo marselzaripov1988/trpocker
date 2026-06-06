@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up federated pyramid — slice 4a: REST (admin window + player final seats)
+- Admin: `POST /admin/pyramid-federations/{id}/shards/{shardIndex}/open-buyup` (close a shard's registration
+  early + open its seat buy-out window) and `POST …/close-buyup` (close every window + start the shards) —
+  alongside the existing `…/distribute`. Player: `GET /pyramid-federations/{id}/final-seats` (the buyable final
+  seats + prices) and `POST …/final-seats/{shardIndex}/buy` (buy a guaranteed finalist seat, charging the
+  wallet). New DTOs `FinalSeatResponse` / `FinalSeatPurchaseResponse`; shard-level buy-up still uses the
+  existing `/v1/tournaments/{childId}/pyramid/...` endpoints on the shard's child tournament.
+- Verified by `FederatedBuyUpControllerIT` (HTTP, flag on): admin creates a buy-up federation (2 shards), the
+  funded player lists the final seats (price 80) and buys the one closing shard 1, after which it is no longer
+  offered. ArchUnit + surefire suite green (1090). The admin/player UI is slice 4b.
+
 ### 🔺 Buy-up federated pyramid — slice 3: admin prize distribution (expected-buy-in pool)
 - An admin distributes a buy-up federation's prize pool once it is COMPLETED, via
   `POST /admin/pyramid-federations/{id}/distribute?shardBps=N` → `distributeFederationPrizes`. The pool is the
