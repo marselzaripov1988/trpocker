@@ -523,13 +523,48 @@ public class FederatedPyramidService {
      * being a shard winner, also collects a qualifier). Rounding is absorbed into the champion's share so the
      * payouts sum exactly to the pool. Idempotent via per-recipient award keys.
      */
+    /**
+     * Admin action (buy-up federations): distribute the prize pool once the federation is COMPLETED. The pool
+     * is the <b>expected buy-ins</b> — a guaranteed pool of the full field ({@code shardCount × shardSize ×
+     * buyIn}), independent of actual fill / buy-out prices — and the admin chooses the share for the shard
+     * winners (the rest goes to the grand champion). Idempotent.
+     */
+    @Transactional
+    public void distributeFederationPrizes(UUID federationId, int shardPrizeBps) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() != FederationStatus.COMPLETED || federation.getChampionPlayerId() == null) {
+            throw new IllegalStateException("Federation " + federationId + " is not completed");
+        }
+        if (!federation.isRealMoney()) {
+            throw new IllegalStateException("Play-money federation has no prize pool");
+        }
+        if (shardPrizeBps < 0 || shardPrizeBps > 10_000) {
+            throw new IllegalArgumentException("shardPrizeBps must be in [0, 10000]");
+        }
+        payPool(federation, federation.getChampionPlayerId(), expectedPool(federation), shardPrizeBps);
+    }
+
+    /** The guaranteed prize pool from the expected buy-ins: the full field × the buy-in. */
+    private static BigDecimal expectedPool(PyramidFederation federation) {
+        return federation.getCryptoBuyInAmount()
+                .multiply(BigDecimal.valueOf((long) federation.getShardCount() * federation.getShardSize()));
+    }
+
     private void distributePrizes(PyramidFederation federation, UUID championId) {
+        long registered = registrationRepository.countByFederationId(federation.getId());
+        payPool(federation, championId,
+                federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(registered)),
+                tournamentProperties.getFederatedShardPrizeBps());
+    }
+
+    /**
+     * Pay {@code pool} out: {@code bps} of it split equally among the shard winners (a qualifier), the rest to
+     * the grand champion (who also collects a qualifier). Rounding is absorbed into the champion's share so the
+     * payouts sum exactly to the pool. Idempotent via per-recipient award keys.
+     */
+    private void payPool(PyramidFederation federation, UUID championId, BigDecimal pool, int bps) {
         UUID federationId = federation.getId();
         CryptoAsset asset = federation.getCryptoBuyInAsset();
-        long registered = registrationRepository.countByFederationId(federationId);
-        BigDecimal pool = federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(registered));
-
-        int bps = tournamentProperties.getFederatedShardPrizeBps();
         BigDecimal shardPool = pool.multiply(BigDecimal.valueOf(bps)).divide(BigDecimal.valueOf(10_000));
         List<PyramidFederationShard> completed =
                 shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED);

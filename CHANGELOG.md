@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up federated pyramid — slice 3: admin prize distribution (expected-buy-in pool)
+- An admin distributes a buy-up federation's prize pool once it is COMPLETED, via
+  `POST /admin/pyramid-federations/{id}/distribute?shardBps=N` → `distributeFederationPrizes`. The pool is the
+  **guaranteed expected buy-ins** (`shardCount × shardSize × buyIn`) — independent of the actual fill and the
+  buy-out prices — and the admin chooses the shard-winner share (`shardBps`); that fraction is split equally
+  among the shard winners as a qualifier prize, and the remainder goes to the grand champion (who, as a shard
+  winner, also collects a qualifier). Rounding is absorbed into the champion's share so the payouts sum exactly
+  to the pool, and per-recipient award keys keep it idempotent. The plain-federation auto-payout (slice 7) and
+  this admin path now share one `payPool` core. No schema change.
+- Verified by `FederatedPyramidPayoutIT` (2 shards, buy-in 20 → expected pool 160): a 30% split pays 24 to each
+  shard winner and 112 to the champion (champion holds 236, the other winner 124), a re-run pays nothing more,
+  and distribution before completion is rejected. The slice-7 `FederatedPyramidPrizeIT` stays green; surefire
+  suite green (1090).
+
 ### 🔺 Buy-up federated pyramid — slice 2: final-level seat buy-outs
 - A player can now buy a guaranteed seat among the finalists, **bypassing the shards**: `buyFinalSeat` claims
   (and closes) one still-empty shard — the buyer becomes that shard's finalist directly — for a whole shard's

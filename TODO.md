@@ -186,8 +186,10 @@ shard and in the final; mechanics first, money later.
 - [x] **2. Final-level buy-up** — `buyFinalSeat` (close an empty shard for `shardSize × buyIn`, become its
       finalist) + `availableFinalSeats`; `PyramidFederationFinalBuyout` (changeset 20); barrier counts
       `completed + final-buyouts`; final seeded from winners + buyers. Verified by `FederatedFinalBuyoutIT`.
-- [ ] **3. Prize-pool reconciliation** — pay out a buy-up federation's mixed pool (buy-ins + buy-out prices)
-      to shard winners + champion (`distributePrizes` is currently skipped for buy-up federations).
+- [x] **3. Admin prize distribution** — `distributeFederationPrizes(fedId, shardBps)` + admin endpoint
+      `POST …/distribute?shardBps=N`: pool = **expected buy-ins** (`shardCount × shardSize × buyIn`, guaranteed),
+      admin-chosen shard-winner share split among winners + remainder to champion (idempotent; shares one
+      `payPool` core with the plain auto-payout). Verified by `FederatedPyramidPayoutIT`.
 - [ ] **4. REST/UI** — expose `openShardForBuyUp` / buy-up window + tickets in the admin + player UI.
 
 ## TODO — scale / load
