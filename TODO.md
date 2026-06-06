@@ -64,8 +64,10 @@ The platform has play-money hands + tournaments (with a wallet bridge) but **no 
 table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge, no rake, no lobby. Slices:
 - [x] **1. Table config entity** — `CashTable` (stakes SB/BB, min/max buy-in, max seats, asset, rake bps + cap,
       active) + `CashTableRepository` + Liquibase changeset 10. Verified H2 + fresh Postgres.
-- [ ] **2. Seat/session model** — `CashSeat` (table, user, stack, seatNo, sittingOut) + repository; map a money
-      buy-in to engine chips (define chip↔asset scale).
+- [x] **2. Seat/session model** — `CashSeat` (table, user, stack + buy-in total, seatNo, `CashSeatStatus`
+      ACTIVE/SITTING_OUT/LEAVING/LEFT, joined/left, `@Version`) + `CashSeatRepository` (active seats, live seat
+      per player, seat-number occupancy, live count). Liquibase changeset 22 (`cash_seats` + index). Verified by
+      `CashSeatRepositoryIT` + fresh Postgres `validate`. (chip↔asset scale deferred to the engine-wiring slice.)
 - [ ] **3. Sit-down (buy-in)** — `CashGameWalletService.buyIn`: debit `WalletAccount`, seat the player with a
       stack, ledger entry. Validate min/max buy-in, seat availability, single-seat-per-table.
 - [ ] **4. Stand-up (cash-out)** — credit the remaining stack back to the wallet on leave; ledger entry;

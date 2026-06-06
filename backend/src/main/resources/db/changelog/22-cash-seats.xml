@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Cash (ring) table seat sessions: a seated player's real-money stack, seat position and lifecycle status.
+      Postgres-only; H2 tests regenerate from the entity. Idempotent via tableExists.
+    -->
+    <changeSet id="cash-002-seats" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="cash_seats"/></not>
+        </preConditions>
+        <createTable tableName="cash_seats">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="cash_table_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="player_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="player_name" type="varchar(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="seat_number" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="stack" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="buy_in_total" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="joined_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+            <column name="left_at" type="timestamp with time zone"/>
+            <column name="version" type="bigint" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="cash_seats" indexName="idx_cash_seats_table">
+            <column name="cash_table_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

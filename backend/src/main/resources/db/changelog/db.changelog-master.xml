@@ -31,5 +31,6 @@
     <include file="db/changelog/19-federated-pyramid-buyup.xml"/>
     <include file="db/changelog/20-federation-final-buyout.xml"/>
     <include file="db/changelog/21-tournament-unregister-approval.xml"/>
+    <include file="db/changelog/22-cash-seats.xml"/>
 
 </databaseChangeLog>

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 2: seat/session model
+- `CashSeat` persists a seated player's real-money session at a `CashTable`: their stack and cumulative buy-in
+  (asset major units), zero-based seat number, and lifecycle `CashSeatStatus` (ACTIVE / SITTING_OUT / LEAVING /
+  LEFT) with `joinedAt` / `leftAt` and a `@Version` (the stack mutates hand-to-hand). Domain mutators:
+  `topUp`, `setStack`, `sitOut` / `sitIn`, `requestLeave`, `markLeft`.
+- `CashSeatRepository` adds the seat-session queries later slices need: active seats per table, a player's live
+  seat, seat-number occupancy and a live-seat count (all excluding `LEFT`).
+- Liquibase changeset 22 creates `cash_seats` (+ index on `cash_table_id`; Postgres-only, idempotent via
+  `tableExists`; H2 regenerates from the entity). Verified by `CashSeatRepositoryIT` (persist + top-up +
+  lifecycle + queries), full suite green, and schema validated on a fresh Postgres (`ddl-auto=validate`).
+  No service/engine/wallet wiring yet — those are the next slices.
+
 ### 🐛 Pyramid engine — fix StaleState / "Game not found" race when a round is driven over HTTP
 - A PYRAMID round (admin "advance round" and the federated shard/final drivers) plays its tables on a pool of
   worker threads, each committing in its own Hibernate session, while the driver runs on the request thread.
