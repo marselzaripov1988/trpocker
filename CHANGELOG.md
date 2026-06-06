@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 5: rake + house revenue
+- `CashRakeService.computeRake(pot, contested, rakeBps, rakeCap)` — pure rake calc: `pot * bps / 10000` rounded
+  **down** (never over-rakes), clamped to `rakeCap` (when positive) and the pot, and **zero for an uncontested
+  pot** (no flop — the standard "no-flop, no-drop" rule). `collectRake(table, pot, contested, key)` records the
+  take as house revenue (`CashRakeEntry`) and returns it; idempotent on the settling hand/game id (a re-settled
+  pot is recorded once, a zero rake is not recorded). `houseRevenue(tableId)` sums a table's accrued rake.
+- `CashRakeEntry` + `CashRakeEntryRepository` (lookup/exists by idempotency key, per-table list, `sum` query).
+  Liquibase changeset 25 creates `cash_rake_entries` (unique `idempotency_key` + index on `cash_table_id`;
+  Postgres-only, idempotent via `tableExists`; H2 regenerates from the entity).
+- The actual deduction of the rake from the winners' payout happens where the pot is awarded (the engine slice).
+  Verified: `CashRakeServiceIT` (bps/cap/no-flop-no-drop/round-down, idempotent accrual, uncontested not
+  recorded), full surefire suite green, schema validated on a fresh Postgres.
+
 ### 🎲 Cash games (ring tables) — slice 4: stand-up (cash-out) wallet bridge
 - `CashGameWalletService.cashOut(userId, tableId)` stands a player up: it credits their seat's remaining stack
   back to the wallet (new `CASH_CASHOUT` ledger type via `WalletService.creditCashOut`) and frees the seat

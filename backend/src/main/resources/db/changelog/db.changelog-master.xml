@@ -34,5 +34,6 @@
     <include file="db/changelog/22-cash-seats.xml"/>
     <include file="db/changelog/23-wallet-cash-buyin-type.xml"/>
     <include file="db/changelog/24-wallet-cash-cashout-type.xml"/>
+    <include file="db/changelog/25-cash-rake.xml"/>
 
 </databaseChangeLog>

@@ -78,7 +78,10 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       mark `CashSeat` LEFT; `requestLeave` marks LEAVING for a mid-hand stand-up. Liquibase changeset 24 widens
       the ledger-type CHECK. Verified by `CashGameWalletServiceIT` (10 cases) + fresh-Postgres CHECK insert proof.
       Deferred cash-out *after the hand* on a mid-hand leave is wired in slice 6 (engine).
-- [ ] **5. Rake** — take a % (with cap) from each contested pot on showdown; record house revenue.
+- [x] **5. Rake** — `CashRakeService.computeRake` (pure: bps + cap + round-down + no-flop-no-drop) +
+      `collectRake` (records `CashRakeEntry` house revenue, idempotent on the settling hand id) +
+      `houseRevenue`. Liquibase changeset 25 (`cash_rake_entries`, unique idempotency key). Verified by
+      `CashRakeServiceIT` + fresh-Postgres validate. Deducting the rake from the awarded pot is the engine slice.
 - [ ] **6. Engine wiring** — join/leave a live table mid-session (the engine currently seats all players at
       `createNewGame`); reconcile with the cluster hot-state/ownership model.
 - [ ] **7. REST API** — list tables, sit/leave, table state; secure + flag-gated.

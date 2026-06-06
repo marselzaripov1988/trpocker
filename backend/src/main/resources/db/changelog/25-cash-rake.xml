@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!--
+      Cash-table house revenue: the rake taken from each contested pot. Postgres-only; H2 tests regenerate from
+      the entity. Idempotent via tableExists. The idempotency_key (settling hand/game id) is unique so a
+      re-settled pot is recorded once.
+    -->
+    <changeSet id="cash-003-rake" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="cash_rake_entries"/></not>
+        </preConditions>
+        <createTable tableName="cash_rake_entries">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="cash_table_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="pot_amount" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="rake_amount" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="varchar(128)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_cash_rake_idempotency"/>
+            </column>
+            <column name="collected_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <createIndex tableName="cash_rake_entries" indexName="idx_cash_rake_table">
+            <column name="cash_table_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>
