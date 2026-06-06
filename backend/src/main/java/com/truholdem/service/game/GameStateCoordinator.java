@@ -106,6 +106,9 @@ public class GameStateCoordinator {
     private boolean shouldAsyncPersist(Game game) {
         return game.getId() != null
                 && appProperties.getGame().isAsyncPersistEnabled()
+                // A pyramid round driven synchronously persists in-line; an async write on a separate
+                // thread would race the driver's continued work on the same game (stale-version rollback).
+                && !HandLifecycleScheduling.isSuppressed()
                 && asyncPersistService.getIfAvailable() != null;
     }
 }

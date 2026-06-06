@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐛 Pyramid engine — fix StaleState / "Game not found" race when a round is driven over HTTP
+- A PYRAMID round (admin "advance round" and the federated shard/final drivers) plays its tables on a pool of
+  worker threads, each committing in its own Hibernate session, while the driver runs on the request thread.
+  Three live-play side effects raced that synchronous driver and surfaced as `NoSuchElementException: Game not
+  found` and `StaleStateException` (lost-update on the tournament registration) — but only over HTTP, never in
+  the service-level integration tests (no open-session-in-view there), so the bug hid behind green tests.
+- Fixes:
+  - **Live hand-lifecycle timer suppressed on the driver thread** — new `HandLifecycleScheduling` thread guard;
+    `GameHandLifecycleService.scheduleAfterHandCompleted` (the `HAND_COMPLETED → RESULT_DELAY → NEXT_HAND`
+    timer) and the per-turn timeout are skipped while a pyramid round drives hands itself.
+  - **Synchronous game persistence** during a driven round — `GameStateCoordinator` no longer hands the game
+    to the async persist thread when the driver is active (it would race the driver's own writes).
+  - **Stale persistence-context cleared** — the driver calls `EntityManager.clear()` after each round so the
+    re-seat / end-of-tournament reads observe the workers' committed `@Version`s instead of the request
+    session's pre-round copies. This was the root StaleState; it bites the admin "advance round" path in
+    production too, not just local runs.
+- Verified live: the full federated pyramid (8 → 4 shards → barrier → final) now runs to a grand champion over
+  REST, 5/5 deterministically; full surefire suite still green.
+
 ### 🔒 Unregister-approval gate — restrict self-cancellation / refund to admins
 - Tournament creation gained an **`unregisterRequiresApproval`** flag (default `false`). When set, players can
   no longer self-unregister or self-refund: `TournamentService.unregisterPlayer` rejects with *"requires admin

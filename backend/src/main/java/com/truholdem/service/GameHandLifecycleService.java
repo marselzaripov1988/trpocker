@@ -16,6 +16,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.model.HandLifecycleState;
 import com.truholdem.service.cluster.TableOwnershipService;
+import com.truholdem.service.game.HandLifecycleScheduling;
 
 @Service
 public class GameHandLifecycleService {
@@ -44,6 +45,12 @@ public class GameHandLifecycleService {
                 || game.getId() == null
                 || !game.isFinished()
                 || game.getHandLifecycleState() != HandLifecycleState.HAND_COMPLETED) {
+            return;
+        }
+
+        // A PYRAMID round driven synchronously (simulation / admin advance) progresses hands itself;
+        // the live lifecycle timer would race that driver, so it is suppressed on the driver thread.
+        if (HandLifecycleScheduling.isSuppressed()) {
             return;
         }
 

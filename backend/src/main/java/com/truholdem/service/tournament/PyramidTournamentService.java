@@ -19,6 +19,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.domain.event.TournamentPlayerEliminated;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.Game;
+import com.truholdem.service.game.HandLifecycleScheduling;
 import com.truholdem.model.Player;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentRegistration;
@@ -53,6 +54,15 @@ public class PyramidTournamentService {
     private final TransactionTemplate transactionTemplate;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.truholdem.repository.PyramidBuyoutRepository buyoutRepository;
+
+    /**
+     * The round is played on a pool of worker threads, each committing in its own session; the driver runs on
+     * a separate thread whose session (e.g. the request-scoped open-in-view session) would otherwise keep the
+     * pre-round registration/table entities cached at a stale {@code @Version}. The driver clears its context
+     * after each round so the subsequent re-seat / end-of-tournament reads see the workers' committed state.
+     */
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     public PyramidTournamentService(
             TournamentRepository tournamentRepository,
@@ -96,6 +106,8 @@ public class PyramidTournamentService {
             throw new IllegalStateException("No active tables for pyramid round " + tournament.getPyramidRound());
         }
         processRoundTables(tournamentId, tables, tournament.getHandsPerRound());
+        // Workers committed in their own sessions; drop this thread's stale copies before re-reading.
+        entityManager.clear();
         advanceToNextRound(tournamentId);
         if (registrationRepository.countActiveByTournamentId(tournamentId) == 1) {
             endTournamentInTransaction(tournamentId);
@@ -140,6 +152,8 @@ public class PyramidTournamentService {
             log.info("Pyramid round {} table play finished in {} ms",
                     tournament.getPyramidRound(), System.currentTimeMillis() - roundStart);
 
+            // Workers committed eliminations/chip updates in their own sessions; drop this thread's stale copies.
+            entityManager.clear();
             advanceToNextRound(tournamentId);
             roundsPlayed++;
         }
@@ -172,11 +186,16 @@ public class PyramidTournamentService {
             List<Future<?>> futures = new ArrayList<>(tables.size());
             for (TournamentTable table : tables) {
                 UUID tableId = table.getId();
-                futures.add(executor.submit(() -> transactionTemplate.execute(status -> {
-                    playHandsOnTable(tournamentId, tableId, handsPerRound);
-                    resolveTableSurvivor(tournamentId, tableId);
+                futures.add(executor.submit(() -> {
+                    // This thread drives the hands synchronously and advances the bracket itself, so the
+                    // live timer-driven hand lifecycle must not fire for these games (it would race us).
+                    HandLifecycleScheduling.runSuppressed(() -> transactionTemplate.execute(status -> {
+                        playHandsOnTable(tournamentId, tableId, handsPerRound);
+                        resolveTableSurvivor(tournamentId, tableId);
+                        return null;
+                    }));
                     return null;
-                })));
+                }));
             }
             for (Future<?> future : futures) {
                 future.get(30, TimeUnit.MINUTES);

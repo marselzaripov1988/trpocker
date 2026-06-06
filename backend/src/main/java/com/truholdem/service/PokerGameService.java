@@ -42,6 +42,7 @@ import com.truholdem.service.cluster.ClusterActionForwarder;
 import com.truholdem.service.cluster.ClusterForwardException;
 import com.truholdem.service.cluster.TableOwnershipService;
 import com.truholdem.service.game.GameStateService;
+import com.truholdem.service.game.HandLifecycleScheduling;
 import com.truholdem.service.game.TableCommandDispatcher;
 import com.truholdem.service.tournament.TournamentChipSyncService;
 import com.truholdem.service.tournament.TournamentTableShardService;
@@ -1487,7 +1488,10 @@ public class PokerGameService {
             return saved;
         }
         Game saved = gameStateService.afterPlayerAction(game);
-        turnTimeoutService.scheduleForCurrentTurn(saved);
+        // Skip the live turn timer when a pyramid round is driven synchronously on this thread.
+        if (!HandLifecycleScheduling.isSuppressed()) {
+            turnTimeoutService.scheduleForCurrentTurn(saved);
+        }
         return saved;
     }
 
