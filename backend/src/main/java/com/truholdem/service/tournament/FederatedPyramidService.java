@@ -21,10 +21,12 @@ import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.FederationShardStatus;
 import com.truholdem.model.FederationStatus;
 import com.truholdem.model.PyramidFederation;
+import com.truholdem.model.PyramidFederationFinalBuyout;
 import com.truholdem.model.PyramidFederationRegistration;
 import com.truholdem.model.PyramidFederationShard;
 import com.truholdem.model.Tournament;
 import com.truholdem.repository.PyramidFederationRegistrationRepository;
+import com.truholdem.repository.PyramidFederationFinalBuyoutRepository;
 import com.truholdem.repository.PyramidFederationRepository;
 import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.service.TournamentService;
@@ -51,6 +53,7 @@ public class FederatedPyramidService {
     private final PyramidFederationRepository federationRepository;
     private final PyramidFederationShardRepository shardRepository;
     private final PyramidFederationRegistrationRepository registrationRepository;
+    private final PyramidFederationFinalBuyoutRepository finalBuyoutRepository;
     private final TournamentService tournamentService;
     private final PyramidTournamentService pyramidTournamentService;
     private final TournamentNotificationService notificationService;
@@ -63,6 +66,7 @@ public class FederatedPyramidService {
     public FederatedPyramidService(PyramidFederationRepository federationRepository,
             PyramidFederationShardRepository shardRepository,
             PyramidFederationRegistrationRepository registrationRepository,
+            PyramidFederationFinalBuyoutRepository finalBuyoutRepository,
             TournamentService tournamentService,
             PyramidTournamentService pyramidTournamentService,
             TournamentNotificationService notificationService, WalletService walletService,
@@ -71,6 +75,7 @@ public class FederatedPyramidService {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
         this.registrationRepository = registrationRepository;
+        this.finalBuyoutRepository = finalBuyoutRepository;
         this.tournamentService = tournamentService;
         this.pyramidTournamentService = pyramidTournamentService;
         this.notificationService = notificationService;
@@ -326,13 +331,96 @@ public class FederatedPyramidService {
 
     private void maybeAwaitFinal(UUID federationId) {
         PyramidFederation federation = requireFederation(federationId);
-        if (federation.getStatus() == FederationStatus.SHARDS_RUNNING
-                && shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED)
-                        == federation.getShardCount()) {
+        if (federation.getStatus() != FederationStatus.SHARDS_RUNNING
+                && federation.getStatus() != FederationStatus.REGISTERING) {
+            return;
+        }
+        // The field is fully resolved when each shard either produced a winner or was closed by a final buy-out.
+        int resolved = shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED)
+                + finalBuyoutRepository.countByFederationId(federationId);
+        if (resolved == federation.getShardCount()) {
             federation.markAwaitingFinal();
             federationRepository.save(federation);
-            log.info("Federation {} — all {} shards done; AWAITING_FINAL", federationId, federation.getShardCount());
+            log.info("Federation {} — field resolved ({} shards); AWAITING_FINAL",
+                    federationId, federation.getShardCount());
         }
+    }
+
+    /** A buyable final seat: claiming it closes the (empty) shard at {@code shardIndex} for {@code price}. */
+    public record FinalSeatTicket(int shardIndex, BigDecimal price, CryptoAsset asset) {
+    }
+
+    /**
+     * Buy-up variant: the final seats a player can buy directly (bypassing the shards). A seat is buyable while
+     * its shard is still empty (no floor registrations) and not already bought; the price is a whole shard's
+     * buy-ins ({@code shardSize × buyIn}).
+     */
+    @Transactional(readOnly = true)
+    public List<FinalSeatTicket> availableFinalSeats(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isBuyUpEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not a buy-up federation");
+        }
+        BigDecimal price = finalSeatPrice(federation);
+        List<FinalSeatTicket> tickets = new ArrayList<>();
+        for (PyramidFederationShard shard : shardRepository.findByFederationIdOrderByShardIndexAsc(federationId)) {
+            if (isFinalSeatBuyable(federationId, shard)) {
+                tickets.add(new FinalSeatTicket(shard.getShardIndex(), price, federation.getCryptoBuyInAsset()));
+            }
+        }
+        return tickets;
+    }
+
+    /**
+     * Buy-up variant: buy a guaranteed seat among the finalists, bypassing the shards. Claims (and closes) the
+     * empty shard at {@code shardIndex} — the buyer becomes its finalist. Charges {@code shardSize × buyIn}.
+     * One buy-out per player. When the closed shards plus completed shards account for the whole field, the
+     * federation moves to AWAITING_FINAL.
+     */
+    @Transactional
+    public PyramidFederationFinalBuyout buyFinalSeat(UUID federationId, UUID playerId, int shardIndex) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isBuyUpEnabled() || !federation.isRealMoney()) {
+            throw new IllegalStateException("Federation " + federationId + " is not a real-money buy-up federation");
+        }
+        if (federation.getStatus() != FederationStatus.REGISTERING
+                && federation.getStatus() != FederationStatus.SHARDS_RUNNING) {
+            throw new IllegalStateException("Final seats can only be bought before the final");
+        }
+        if (finalBuyoutRepository.existsByFederationIdAndBuyerPlayerId(federationId, playerId)) {
+            throw new IllegalStateException("Player has already bought a final seat");
+        }
+        PyramidFederationShard shard = shardRepository.findByFederationIdAndShardIndex(federationId, shardIndex)
+                .orElseThrow(() -> new NoSuchElementException("Shard " + shardIndex + " not found"));
+        if (!isFinalSeatBuyable(federationId, shard)) {
+            throw new IllegalStateException("Final seat not buyable (shard is not empty, or already taken)");
+        }
+        BigDecimal price = finalSeatPrice(federation);
+        walletService.chargeBuyIn(playerId, federation.getCryptoBuyInAsset(), price,
+                "fedfinalbuy:" + federationId + ":" + playerId);
+        boolean wasOpenForFill = shard.getStatus() == FederationShardStatus.REGISTERING;
+        shard.cancel(); // closed — its finalist slot is the buyer
+        shardRepository.save(shard);
+        if (wasOpenForFill) {
+            openNextPendingShard(federationId);
+        }
+        PyramidFederationFinalBuyout buyout = finalBuyoutRepository.save(new PyramidFederationFinalBuyout(
+                federationId, playerId, shardIndex, price, federation.getCryptoBuyInAsset()));
+        log.info("Player {} bought a final seat (closing shard {}) in federation {} for {} {}",
+                playerId, shardIndex, federationId, price, federation.getCryptoBuyInAsset());
+        maybeAwaitFinal(federationId);
+        return buyout;
+    }
+
+    private boolean isFinalSeatBuyable(UUID federationId, PyramidFederationShard shard) {
+        return shard.getFilledCount() == 0
+                && (shard.getStatus() == FederationShardStatus.PENDING
+                        || shard.getStatus() == FederationShardStatus.REGISTERING)
+                && !finalBuyoutRepository.existsByFederationIdAndShardIndex(federationId, shard.getShardIndex());
+    }
+
+    private static BigDecimal finalSeatPrice(PyramidFederation federation) {
+        return federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(federation.getShardSize()));
     }
 
     /**
@@ -384,6 +472,11 @@ public class FederatedPyramidService {
             String name = registrationRepository.findByFederationIdAndPlayerId(federationId, winner)
                     .map(PyramidFederationRegistration::getPlayerName).orElse("Finalist");
             tournamentService.registerPlayer(finalT.getId(), winner, name);
+        }
+        // Buy-up variant: the players who bought a final seat are finalists too (they closed an empty shard).
+        for (PyramidFederationFinalBuyout buyout : finalBuyoutRepository.findByFederationId(federationId)) {
+            tournamentService.registerPlayer(finalT.getId(), buyout.getBuyerPlayerId(),
+                    "Finalist-" + buyout.getShardIndex());
         }
         tournamentService.startTournament(finalT.getId());
         federation.markFinalRunning(finalT.getId());
@@ -476,13 +569,18 @@ public class FederatedPyramidService {
                 shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED));
     }
 
-    /** Winners of the completed shards (the finalists), ordered by shard index. */
+    /** The finalists to notify: shard winners plus anyone who bought a final seat directly. */
     private List<UUID> finalistPlayerIds(UUID federationId) {
-        return shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED).stream()
-                .sorted((a, b) -> Integer.compare(a.getShardIndex(), b.getShardIndex()))
-                .map(PyramidFederationShard::getWinnerPlayerId)
-                .filter(w -> w != null)
-                .toList();
+        List<UUID> finalists = new ArrayList<>(
+                shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED).stream()
+                        .sorted((a, b) -> Integer.compare(a.getShardIndex(), b.getShardIndex()))
+                        .map(PyramidFederationShard::getWinnerPlayerId)
+                        .filter(w -> w != null)
+                        .toList());
+        for (PyramidFederationFinalBuyout buyout : finalBuyoutRepository.findByFederationId(federationId)) {
+            finalists.add(buyout.getBuyerPlayerId());
+        }
+        return finalists;
     }
 
     /**

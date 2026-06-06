@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Buy-up federated pyramid: final-level seat buy-outs (claim a finalist slot, closing an empty shard). -->
+    <changeSet id="federated-006-final-buyouts" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <not><tableExists tableName="pyramid_federation_final_buyouts"/></not>
+        </preConditions>
+        <createTable tableName="pyramid_federation_final_buyouts">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="federation_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="buyer_player_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="shard_index" type="integer">
+                <constraints nullable="false"/>
+            </column>
+            <column name="price_amount" type="numeric(38, 18)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset" type="varchar(32)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamp with time zone">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint tableName="pyramid_federation_final_buyouts"
+                constraintName="uq_federation_final_buyout_player"
+                columnNames="federation_id, buyer_player_id"/>
+        <addUniqueConstraint tableName="pyramid_federation_final_buyouts"
+                constraintName="uq_federation_final_buyout_seat"
+                columnNames="federation_id, shard_index"/>
+    </changeSet>
+
+</databaseChangeLog>

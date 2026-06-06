@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔺 Buy-up federated pyramid — slice 2: final-level seat buy-outs
+- A player can now buy a guaranteed seat among the finalists, **bypassing the shards**: `buyFinalSeat` claims
+  (and closes) one still-empty shard — the buyer becomes that shard's finalist directly — for a whole shard's
+  buy-ins (`shardSize × buyIn`). `availableFinalSeats` lists the buyable (empty, untaken) shard slots with
+  their price. New `PyramidFederationFinalBuyout` entity/repository (changeset 20, unique per player + per
+  shard slot). The field is "resolved" when each shard either produced a winner or was closed by a final
+  buy-out, so `maybeAwaitFinal` now counts `completed + final-buyouts == shardCount` → AWAITING_FINAL; the
+  final is seeded from the shard winners **plus** the final-seat buyers (who are also notified by `scheduleFinal`).
+- Verified by `FederatedFinalBuyoutIT` (2-shard buy-up federation, buy-in 20): buying a final seat charges 80
+  (300 → 220), records the buy-out, closes the shard (CANCELLED) and drops it from the offers; and with a
+  shard-0 winner + a final buy-out the federation reaches AWAITING_FINAL and `startFinal` seeds both finalists.
+  Changeset 20 runs clean on a fresh Postgres (`ddl-auto=validate`); surefire suite green (1090). Money-later
+  (prize-pool reconciliation) still pending (slice 3).
+
 ### 🔺 Buy-up federated pyramid — slice 1: shard-level seat buy-outs
 - New variant of the federated pyramid (`buy_up_enabled` flag, changeset 19; requires a real-money buy-in):
   each shard is a buy-up pyramid where players can buy guaranteed higher-level seats before the shard starts,

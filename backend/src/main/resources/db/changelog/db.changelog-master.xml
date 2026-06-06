@@ -29,5 +29,6 @@
     <include file="db/changelog/17-federated-pyramid-registrations.xml"/>
     <include file="db/changelog/18-federated-pyramid-buyin.xml"/>
     <include file="db/changelog/19-federated-pyramid-buyup.xml"/>
+    <include file="db/changelog/20-federation-final-buyout.xml"/>
 
 </databaseChangeLog>

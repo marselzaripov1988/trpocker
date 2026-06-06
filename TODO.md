@@ -183,7 +183,9 @@ shard and in the final; mechanics first, money later.
       `openShardForBuyUp` closes a shard's registration under-filled (so upper seats are buyable), materializes
       a real-money buy-up child pyramid (charged at shard seating via the bridge), reuses `PyramidBuyoutService`;
       `closeBuyUpAndStart` starts it. Verified by `FederatedBuyUpShardIT`.
-- [ ] **2. Final-level buy-up** — buy a guaranteed seat among the finalists, bypassing your shard.
+- [x] **2. Final-level buy-up** — `buyFinalSeat` (close an empty shard for `shardSize × buyIn`, become its
+      finalist) + `availableFinalSeats`; `PyramidFederationFinalBuyout` (changeset 20); barrier counts
+      `completed + final-buyouts`; final seeded from winners + buyers. Verified by `FederatedFinalBuyoutIT`.
 - [ ] **3. Prize-pool reconciliation** — pay out a buy-up federation's mixed pool (buy-ins + buy-out prices)
       to shard winners + champion (`distributePrizes` is currently skipped for buy-up federations).
 - [ ] **4. REST/UI** — expose `openShardForBuyUp` / buy-up window + tickets in the admin + player UI.
