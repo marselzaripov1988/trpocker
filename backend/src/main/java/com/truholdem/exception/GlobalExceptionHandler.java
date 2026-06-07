@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.truholdem.domain.exception.GameDomainException;
 import com.truholdem.domain.exception.GameStateException;
@@ -327,6 +328,28 @@ public class GlobalExceptionHandler {
         );
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(
+            ResponseStatusException ex, WebRequest request) {
+        // Honour the status carried by the exception (e.g. a 404 feature gate) instead of letting it
+        // fall through to the generic handler and surface as a 500.
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        logger.warn("Response status exception [{}]: {}", status.value(), ex.getReason());
+
+        ErrorResponse error = new ErrorResponse(
+            status.value(),
+            status.getReasonPhrase(),
+            ex.getReason(),
+            getPath(request),
+            getCorrelationId()
+        );
+
+        return ResponseEntity.status(status).body(error);
     }
 
     @ExceptionHandler(Exception.class)

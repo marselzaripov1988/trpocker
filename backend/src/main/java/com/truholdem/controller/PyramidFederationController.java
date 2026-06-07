@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
@@ -20,6 +19,7 @@ import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.dto.FederationRegistrationResponse;
 import com.truholdem.dto.FinalSeatPurchaseResponse;
 import com.truholdem.dto.FinalSeatResponse;
+import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.PyramidFederationFinalBuyout;
 import com.truholdem.model.PyramidFederationShard;
 import com.truholdem.model.User;
@@ -90,7 +90,7 @@ public class PyramidFederationController {
 
     private void assertEnabled() {
         if (!appProperties.getTournament().isFederatedPyramidEnabled()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Federated pyramid is not enabled");
+            throw new ResourceNotFoundException("Federated pyramid is not enabled");
         }
     }
 }

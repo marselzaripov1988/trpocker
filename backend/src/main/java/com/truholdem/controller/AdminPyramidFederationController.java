@@ -13,13 +13,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateFederationRequest;
 import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.dto.ScheduleTournamentRequest;
+import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.PyramidFederation;
 import com.truholdem.service.tournament.FederatedPyramidService;
 
@@ -157,7 +157,7 @@ public class AdminPyramidFederationController {
 
     private void assertEnabled() {
         if (!appProperties.getTournament().isFederatedPyramidEnabled()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Federated pyramid is not enabled");
+            throw new ResourceNotFoundException("Federated pyramid is not enabled");
         }
     }
 }
