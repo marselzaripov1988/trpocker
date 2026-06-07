@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 9: end-to-end money round-trip (epic complete)
+- `CashGameEndToEndIT` drives the whole money path over HTTP: two players deposit (100 total), sit (buy-in
+  debits the wallet), the table deals, a **contested hand is played to showdown over the `act` endpoints**
+  (resolving whose turn from the state and check/calling), then both stand up and cash out. It asserts **money
+  is conserved across the engine + wallet boundary** — the players' final wallet balances sum to 99.99 and,
+  with the 0.01 house rake, back to the 100.00 deposited; nothing is created or lost.
+- **This closes the cash-games epic (slices 1–9):** table config → seats → wallet buy-in/cash-out → rake/house
+  revenue → the pure aggregate-kernel engine (money↔chip scale, live-hand persistence) → REST API → lobby/table
+  UI → this end-to-end accounting proof. All real-money, flag-gated (`app.cash.enabled` + `app.payments.enabled`),
+  with tournaments untouched on the legacy engine.
+
 ### 🎲 Cash games (ring tables) — slice 8: lobby + table UI
 - Angular cash feature over the slice-7 REST API: a **lobby** (`/cash`) listing open tables (stakes, seated
   count, buy-in range) with an inline buy-in input + **Sit** (then routes to the table), and a **table page**

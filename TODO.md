@@ -107,7 +107,10 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       (`/cash/:id`, seats, current hand with your own hole cards, deal/fold/check/call/raise/leave) + 💵 Cash
       nav link. `CashService`/`cash.models.ts`/`CashLobbyComponent`/`CashTableComponent`, lazy routes behind the
       auth guard. eslint + `ng build` green.
-- [ ] **9. Verify** — full suite + fresh-Postgres cluster + an end-to-end buy-in→play→cash-out IT.
+- [x] **9. Verify** — `CashGameEndToEndIT`: deposit → sit → deal → play a contested showdown over the `act`
+      endpoints → cash out, asserting money is conserved (final wallets 99.99 + 0.01 house rake = 100 deposited).
+      Full suite green. **Cash-games epic complete (slices 1–9).** Remaining follow-up: cluster ownership of an
+      always-on table (no-op single-node today).
 Open design questions: chip↔money scale; rake model (no-flop-no-drop?); mid-hand leave; bot seating; per-table
 single-writer under the existing cluster ownership.
 
