@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔧 Aggregate engine migration — Phase A: fix the aggregate-path new-game insert
+- `PokerGameService.createNewGameViaAggregate` pre-assigned the new `Game`'s id (`game.setId(aggregate.getId())`);
+  since `Game.id` is `@GeneratedValue`, Spring Data's `save()` then treated the fresh entity as a **detached
+  merge** and Hibernate failed with *"Detached entity … uninitialized version value 'null'"*. Dropped the manual
+  `setId` so the id is generated on persist (an insert), mirroring the working `CashGameService.openHand`;
+  subsequent actions reconstitute the aggregate from the persisted `Game`, so the aggregate id tracks it from
+  then on.
+- Effect: with `app.game.engine=aggregate`, games now create + play (the persistence errors are gone) —
+  `FullGameFlowIT` went from 22 persistence *errors* to 0 errors / 6 behavioural-parity *failures* (bots,
+  hand-history, error-recovery), which are the next phases. The **default `legacy` engine is untouched** (the
+  change only affects the aggregate path); the full surefire suite (1096) stays green on the default. First step
+  of `AGGREGATE_MIGRATION_PLAN.md`.
+
 ### 🎲 Cash games (ring tables) — slice 9: end-to-end money round-trip (epic complete)
 - `CashGameEndToEndIT` drives the whole money path over HTTP: two players deposit (100 total), sit (buy-in
   debits the wallet), the table deals, a **contested hand is played to showdown over the `act` endpoints**

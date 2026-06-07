@@ -1311,8 +1311,11 @@ public class PokerGameService {
         assignPlayerIdsFromInfo(aggregate, playersInfo);
         aggregate.startNewHand();
 
+        // Do NOT pre-assign the id: Game.id is @GeneratedValue, so a manually-set id makes Spring Data's
+        // save() treat the fresh entity as a detached merge (→ "uninitialized version") instead of an insert.
+        // The id is generated on persist; subsequent actions reconstitute the aggregate from the Game entity,
+        // so the aggregate id tracks the persisted game id from then on (mirrors CashGameService.openHand).
         Game game = new Game();
-        game.setId(aggregate.getId());
         game.setSmallBlind(sb);
         game.setBigBlind(bb);
         game.setMinRaiseAmount(bb);
