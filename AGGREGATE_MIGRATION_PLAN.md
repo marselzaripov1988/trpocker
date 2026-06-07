@@ -79,6 +79,21 @@ where schema-relevant, docs + commit + push.
   crashes: bot integration (3), hand-history recording (1), error-recovery / invalid-raise handling (2). These
   belong to Phases B/C below — the `FullGameFlowIT`-green gate therefore moves to **after Phase C**.
 
+> **Reconnaissance finding (the keystone parity issue) — `Game.finished` is overloaded.**
+> The legacy engine and every test/driver treat `Game.finished` as **"the current hand is done"** (set true at
+> showdown/fold, reset to false when the next hand is dealt). The aggregate's `PokerGame.isFinished()` means
+> **"the whole match is over"** (≤1 player left with chips). The `mapper/PokerGameMapper` bridges both
+> *directions* through this single field — `applyToGame` writes `game.finished = aggregate.isFinished()` and
+> `fromGame`/`reconstitute` reads `game.finished` back into `aggregate.finished`. A naive one-line flip in
+> `applyToGame` (set finished from `phase == FINISHED`) was probed: it fixed hand completion + hand-history +
+> the two bot tests on the aggregate engine, but **broke multi-hand flow** (`fromGame` then read the hand-done
+> flag as match-over, so `aggregate.startNewHand()` threw "game has already finished") — net 6→6, so it was
+> reverted to keep the tree clean. **Proper Theme-1 fix (a real Phase-C sub-slice, ~2 files + tests):** make
+> `Game.finished` mean **hand-done** everywhere — `applyToGame` sets it from `phase == FINISHED`, and
+> `reconstitute`/`PersistedGameState` must **derive** the aggregate's match-over from the chip counts (≤1 player
+> with chips) instead of reading it back from `Game.finished`. Cash is unaffected either way (it reads
+> `aggregate.getPhase() == FINISHED`, never `Game.finished`).
+
 ### Phase B — Characterization / golden parity net  ·  the safety net
 - With a **seeded/deterministic deck**, capture legacy outcomes (winners, final chips, pot, board, side pots)
   for a representative battery: HU check/call showdown, 3-way pot, multi-way all-in with side pots, split pot,
