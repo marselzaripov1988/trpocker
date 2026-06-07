@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 7: REST API
+- A flag-gated (`app.cash.enabled`, default off → 404) cash-table REST surface over the slice-6 engine:
+  - Player (`/v1/cash/tables`): `GET` lobby (open tables + seated counts), `GET /{id}` state (seats + the
+    current hand from the caller's perspective — only their own hole cards), `POST /{id}/sit` (buy-in →
+    seat), `POST /{id}/leave` (cash out now, or deferred to the hand end if a hand is live), `POST /{id}/deal`
+    (deal the next hand), `POST /{id}/act` (fold/check/call/bet/raise; money amounts convert to chips via the
+    table scale, and the caller is resolved to their engine seat by name).
+  - Admin (`/v1/admin/cash/tables`): `POST` create a table (ADMIN role).
+- DTOs `CreateCashTableRequest`, `CashTableResponse`, `CashTableStateResponse` (+ `CashSeatResponse` /
+  `CashHandResponse`), `SitDownRequest`/`SitDownResponse`, `CashActionRequest`/`CashActionResponse`,
+  `CashLeaveResponse`. `CashGameService` gained `createTable` / `listActiveTables` / `seatsOf` / `sit` /
+  `actAsUser` / `leaveTable`. Real-money buy-ins still require `app.payments.enabled`.
+- Verified by `CashTableControllerIT` (admin create → lobby list → two players sit → deal → the current actor
+  folds → the other leaves and cashes out, all over HTTP) and `CashTableControllerDisabledIT` (404 when the
+  flag is off). Full surefire suite green. No schema change.
+
 ### 🎲 Cash games (ring tables) — slice 6c: persist the live hand across actions
 - A continuous cash table's live hand now survives between actions (and nodes): `CashGameService.openHand`
   persists the dealt hand as a `games` row via the aggregate↔JPA `PokerGameMapper` and links the table

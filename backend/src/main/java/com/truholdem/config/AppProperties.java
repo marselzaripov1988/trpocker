@@ -47,6 +47,10 @@ public class AppProperties {
     @NotNull
     private final Payments payments = new Payments();
 
+    @Valid
+    @NotNull
+    private final Cash cash = new Cash();
+
 
     public Jwt getJwt() {
         return jwt;
@@ -74,6 +78,28 @@ public class AppProperties {
 
     public Payments getPayments() {
         return payments;
+    }
+
+    public Cash getCash() {
+        return cash;
+    }
+
+    /**
+     * Cash (ring) tables. Default OFF — when disabled the cash REST endpoints reject (404), so the subsystem is
+     * inert until explicitly enabled. Real-money buy-ins additionally require {@code app.payments.enabled}.
+     */
+    public static class Cash {
+
+        /** Master switch for the cash-table REST surface (lobby, sit/leave, deal/act, state). */
+        private boolean enabled = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 
     /**

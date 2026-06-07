@@ -232,6 +232,81 @@ public class CashGameService {
         return new CashHandResult(totalRake, cashedOut);
     }
 
+    /** Create a cash table; validates the blinds/buy-in produce a sane integer chip range. */
+    @Transactional
+    public CashTable createTable(String name, com.truholdem.model.CryptoAsset asset, BigDecimal smallBlind,
+            BigDecimal bigBlind, BigDecimal minBuyIn, BigDecimal maxBuyIn, int maxSeats, int rakeBasisPoints,
+            BigDecimal rakeCap) {
+        CashChipScale.forBlinds(smallBlind, bigBlind).toChips(maxBuyIn); // rejects a config that overflows chips
+        CashTable table = new CashTable(name, asset, smallBlind, bigBlind, minBuyIn, maxBuyIn, maxSeats,
+                rakeBasisPoints, rakeCap);
+        return cashTableRepository.save(table);
+    }
+
+    /** Sit down at a cash table: debit the wallet for the buy-in and seat the player. */
+    @Transactional
+    public CashSeat sit(UUID userId, UUID tableId, String playerName, BigDecimal buyIn) {
+        return walletBridge.buyIn(userId, tableId, playerName, buyIn);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CashTable> listActiveTables() {
+        return cashTableRepository.findByActiveTrueOrderBySmallBlindAsc();
+    }
+
+    @Transactional(readOnly = true)
+    public CashTable getTable(UUID tableId) {
+        return requireTable(tableId);
+    }
+
+    /** Seats currently at the table (not yet stood up), in seat order. */
+    @Transactional(readOnly = true)
+    public List<CashSeat> seatsOf(UUID tableId) {
+        return cashSeatRepository.findByCashTableId(tableId).stream()
+                .filter(CashSeat::isSeated)
+                .sorted(java.util.Comparator.comparingInt(CashSeat::getSeatNumber))
+                .toList();
+    }
+
+    /**
+     * Apply an action on behalf of the authenticated user: resolve their seat → the engine player (by name) in
+     * the current hand, convert any money amount to chips, and {@link #act}.
+     */
+    @Transactional
+    public CashActResult actAsUser(UUID tableId, UUID userId, PlayerAction action, BigDecimal amount) {
+        CashTable table = requireTable(tableId);
+        CashSeat seat = cashSeatRepository
+                .findByCashTableIdAndPlayerIdAndStatusNot(tableId, userId, CashSeatStatus.LEFT)
+                .orElseThrow(() -> new IllegalStateException("You are not seated at table " + tableId));
+        UUID gameId = table.getCurrentGameId();
+        if (gameId == null) {
+            throw new IllegalStateException("No live hand at table " + tableId);
+        }
+        PokerGame view = gameMapper.fromGame(gameRepository.findById(gameId)
+                .orElseThrow(() -> new NoSuchElementException("Cash hand not found: " + gameId)));
+        Player enginePlayer = view.getPlayers().stream()
+                .filter(p -> p.getName().equals(seat.getPlayerName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("You are not in the current hand"));
+        Integer chips = amount != null ? CashChipScale.forTable(table).toChips(amount) : null;
+        return act(tableId, enginePlayer.getId(), action, chips);
+    }
+
+    /**
+     * Stand up: if a hand is live the seat is marked LEAVING and cashed out when the hand finishes; otherwise it
+     * is cashed out immediately. Returns whether the cash-out happened now and the amount credited.
+     */
+    @Transactional
+    public CashLeaveResult leaveTable(UUID userId, UUID tableId) {
+        CashTable table = requireTable(tableId);
+        if (table.getCurrentGameId() != null) {
+            walletBridge.requestLeave(userId, tableId);
+            return new CashLeaveResult(false, BigDecimal.ZERO);
+        }
+        BigDecimal credited = walletBridge.cashOut(userId, tableId);
+        return new CashLeaveResult(true, credited);
+    }
+
     private CashTable requireTable(UUID tableId) {
         return cashTableRepository.findById(tableId)
                 .orElseThrow(() -> new NoSuchElementException("Cash table not found: " + tableId));
@@ -246,5 +321,9 @@ public class CashGameService {
      * players cashed out). When the hand continues, {@code handComplete} is false with a zero/empty settlement.
      */
     public record CashActResult(boolean handComplete, BigDecimal totalRake, List<UUID> cashedOut) {
+    }
+
+    /** Outcome of leaving: whether the cash-out happened now (vs deferred to hand end) and the amount credited. */
+    public record CashLeaveResult(boolean cashedOutNow, BigDecimal amount) {
     }
 }
