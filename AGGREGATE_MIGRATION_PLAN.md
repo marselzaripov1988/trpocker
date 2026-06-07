@@ -94,7 +94,19 @@ where schema-relevant, docs + commit + push.
 > with chips) instead of reading it back from `Game.finished`. Cash is unaffected either way (it reads
 > `aggregate.getPhase() == FINISHED`, never `Game.finished`).
 
-### Phase B — Characterization / golden parity net  ·  the safety net
+### Phase B — Characterization / golden parity net  ·  STARTED
+- **Existing nets (reuse):** `PokerGameRulesGoldenTest` (aggregate) ↔ `GameRulesGoldenTest` (legacy) pin the
+  bookkeeping (dead button / missed blinds / last aggressor); `PokerGameShowdownTest` pins showdown invariants
+  (chip conservation, side-pot zero-sum, winner metadata) deck-independently. Hand ranking is covered by the
+  `HandRanker` golden tests.
+- **Done (seed):** `CrossEnginePokerParityIT` — the same deck-independent fold-out hand is run on **both**
+  engines (flipping `app.game.engine` at runtime, restored in `finally`) and the **final stacks + winner must be
+  identical**. Currently **green**, so legacy and aggregate already agree on the position/blind/fold bookkeeping.
+  This is the cross-engine oracle the deep Phase-C changes run against; it grows (multi-hand, showdown with a
+  deterministic deck, bots) as each Phase-C gap is closed.
+- **Next in B:** a deterministic-deck seam (test-only — e.g. craft a `PersistedGameState` deck via
+  `reconstitute`, or a `@VisibleForTesting` deck setter) so showdown / side-pot / split outcomes can be pinned
+  and compared across engines, not just fold-outs.
 - With a **seeded/deterministic deck**, capture legacy outcomes (winners, final chips, pot, board, side pots)
   for a representative battery: HU check/call showdown, 3-way pot, multi-way all-in with side pots, split pot,
   pre-flop fold-walk, dead-button elimination, missed blinds.
