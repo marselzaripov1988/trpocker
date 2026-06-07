@@ -51,7 +51,7 @@ public class RedisGameStateStore {
 
     public RedisGameStateStore(
             @Qualifier("gameStateRedisTemplate") RedisTemplate<String, String> redisTemplate,
-            ObjectMapper objectMapper,
+            @Qualifier("gameStateObjectMapper") ObjectMapper objectMapper,
             TableOwnershipService ownership,
             AppProperties appProperties) {
         this.redisTemplate = redisTemplate;

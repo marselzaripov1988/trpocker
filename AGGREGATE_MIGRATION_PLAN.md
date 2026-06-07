@@ -173,9 +173,24 @@ where schema-relevant, docs + commit + push.
   hand ends, and chips are conserved — with a long result delay so the lifecycle doesn't deal a new hand mid-assert.
   Green. `GameTurnTimeoutService` also gained `cancelAll()` / `pendingTimeoutCount()` (graceful shutdown + test
   isolation), mirroring `GameHandLifecycleService`.
-- **Remaining Phase-C work:** Redis hot-state (`GameStateCoordinator`/`RedisGameStateStore`) and cluster
-  routing/ownership exercised under `engine=aggregate` (add ITs per concern). Statistics, hand history, bots,
-  lifecycle multi-hand, and turn-timeout are now all covered on the aggregate engine.
+- **Theme — Redis hot-state (bug found + fixed).** Hot-state (`app.game.hot-state-enabled=true`, **on by default**)
+  serialized the whole JPA `Game` to Redis with the **REST/default `ObjectMapper`**, which honours `@JsonIgnore` on
+  `Game.deck` — so a Redis cache hit returned a **deckless** game and the next street could not be dealt (an empty
+  deck threw). Hole cards survive (`Player.hand` is not `@JsonIgnore`), so this only bites multi-street hands — and
+  affected **both** engines; `FullGameFlowIT` never caught it because it mocks `RedisTemplate` (every `find` misses →
+  DB fallback with the deck intact). Fix: a dedicated `gameStateObjectMapper` (a copy of the app mapper + a targeted
+  mix-in that re-exposes only `Game.deck`) injected into `RedisGameStateStore`; the REST mapper still hides the deck,
+  and bidirectional `@JsonIgnore` back-references are left alone (no serialization cycle). `HotStateGameSerialization
+  Test` pins both halves (default mapper drops the deck, hot-state mapper keeps it); `AggregateHotStateMultiStreetIT`
+  runs a check/call hand to a **five-card showdown over a real Redis container** on the aggregate engine, with chips
+  conserved — impossible before the fix.
+  > Observed (separate, pre-existing): under hot-state the async DB writer (`AsyncGamePersistService`) logs a
+  > `StaleObjectStateException`/rollback on its background thread when its version trails the Redis-authoritative
+  > state. It's best-effort and doesn't corrupt the authoritative flow, but the async-persist↔hot-state version
+  > reconciliation deserves its own slice.
+- **Remaining Phase-C work:** cluster routing/ownership exercised under `engine=aggregate` (add an IT). Statistics,
+  hand history, bots, lifecycle multi-hand, turn-timeout, and Redis hot-state are now all covered on the aggregate
+  engine.
 
 ### Phase D — Pyramid / parallel processing on aggregate (D2)
 - Make `PyramidTournamentService.processRoundTables` correct under aggregate (worker-thread persistence,
