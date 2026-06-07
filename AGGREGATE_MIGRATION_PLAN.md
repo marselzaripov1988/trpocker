@@ -152,11 +152,23 @@ where schema-relevant, docs + commit + push.
   the bot-decision assertion was made robust (folded / hand-ended / chips-committed instead of the reset-prone
   `hasActed` flag on a stale Player reference).
 - **Result:** `FullGameFlowIT` is **23/23 green on both engines** (was 6 failures on aggregate). Full surefire suite
-  **1099 green**. Remaining Phase-C work: turn-timeout + Redis hot-state + cluster routing under aggregate, and the
-  multi-hand next-hand transition driver on the aggregate path (still owned by the legacy lifecycle today).
-  > Note (pre-existing, not introduced here): `FullGameFlowIT$StatisticsPersistenceTests.shouldRecordHandHistory` can
-  > flake on legacy with an `ObjectOptimisticLockingFailureException` on the `@AfterEach` game delete racing the async
-  > hand-lifecycle — the same OSIV/async-persist family fixed for the pyramid. Worth a dedicated cleanup-ordering slice.
+  **1099 green**.
+- **Theme 2 — lifecycle-driven multi-hand on aggregate (verified).** The automatic between-hands transition already
+  routes through the aggregate: `finalizeAggregateHand → GameHandLifecycleService.scheduleAfterHandCompleted →
+  RESULT_DELAY → startNextHandFromLifecycleInternal → startNewHandInternal → startNewHandViaAggregate` (which drops
+  busted players, reconstitutes, `aggregate.startNewHand()`, re-persists). The Theme-1 fix is load-bearing here:
+  after a finished hand `Game.finished` = hand-done = true, but `isMatchOver` re-derivation (gated on `<2` players
+  with chips, after the bust-out removal) yields `aggregate.finished=false`, so `startNewHand()` proceeds instead of
+  throwing "game has already finished". New `AggregateLifecycleMultiHandIT` pins this end-to-end: a heads-up hand is
+  folded out, **no manual `startNewHand`**, and the lifecycle timer alone advances the hand number, deals fresh hole
+  cards, posts blinds, and conserves chips (stacks + pot == buy-ins). Green.
+- **Test-isolation fix (done).** `GameHandLifecycleService` gained `cancelAll()` / `pendingTransitionCount()` and
+  `FullGameFlowIT` now cancels pending transitions in `@AfterEach` + retries its `@BeforeEach` cleanup, removing a
+  pre-existing flaky `ObjectOptimisticLockingFailureException` where a scheduled transition re-persisted its game
+  during the next test's versioned `deleteAll` (same OSIV/async-persist family fixed for the pyramid).
+- **Remaining Phase-C work:** turn-timeout and Redis hot-state (`GameStateCoordinator`/`RedisGameStateStore`) and
+  cluster routing/ownership exercised under `engine=aggregate` (add ITs per concern; statistics + hand history +
+  bots + lifecycle multi-hand are now covered).
 
 ### Phase D — Pyramid / parallel processing on aggregate (D2)
 - Make `PyramidTournamentService.processRoundTables` correct under aggregate (worker-thread persistence,
