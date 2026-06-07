@@ -86,6 +86,9 @@ class FullGameFlowIT {
     private GameRepository gameRepository;
 
     @Autowired
+    private GameHandLifecycleService lifecycleService;
+
+    @Autowired
     private PlayerStatisticsRepository statsRepository;
 
     @Autowired
@@ -102,13 +105,25 @@ class FullGameFlowIT {
 
     @BeforeEach
     void setUp() {
-        
         reset(messagingTemplate);
-        
-        
-        handHistoryRepository.deleteAll();
-        statsRepository.deleteAll();
-        gameRepository.deleteAll();
+        // Kill any between-hands transition a previous scenario scheduled (fires ~100 ms later on the scheduler
+        // thread and re-persists its game), then clean the DB. The cleanup retries: a transition already mid-save
+        // when we cancel can still bump a game's @Version and make a versioned deleteAll fail with an optimistic-
+        // lock error — re-cancelling and retrying converges once the straggler finishes.
+        lifecycleService.cancelAll();
+        await().atMost(5, TimeUnit.SECONDS).ignoreExceptions().untilAsserted(() -> {
+            lifecycleService.cancelAll();
+            handHistoryRepository.deleteAll();
+            statsRepository.deleteAll();
+            gameRepository.deleteAll();
+            assertThat(gameRepository.count()).isZero();
+        });
+    }
+
+    @AfterEach
+    void quiesceLifecycle() {
+        // Stop the next test's cleanup from racing a transition this test scheduled.
+        lifecycleService.cancelAll();
     }
 
     

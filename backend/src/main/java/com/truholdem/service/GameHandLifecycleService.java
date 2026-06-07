@@ -84,6 +84,22 @@ public class GameHandLifecycleService {
     }
 
     /**
+     * Cancel every pending between-hands transition. Used for graceful shutdown and for test isolation so a
+     * timer scheduled by one scenario cannot fire (and mutate / re-persist a game) during the next one's cleanup.
+     * Does not interrupt a transition already executing; callers that need full quiescence should also wait for
+     * {@link #pendingTransitionCount()} to settle.
+     */
+    public void cancelAll() {
+        scheduledTransitions.values().forEach(future -> future.cancel(false));
+        scheduledTransitions.clear();
+    }
+
+    /** Number of between-hands transitions currently scheduled (not yet fired or cancelled). */
+    public int pendingTransitionCount() {
+        return scheduledTransitions.size();
+    }
+
+    /**
      * Resume a pending between-hands transition after this node takes over an orphaned table whose
      * previous owner died with the timer pending. Each branch re-checks the lifecycle state and only
      * the owning node proceeds, so it is safe to call unconditionally on takeover.
