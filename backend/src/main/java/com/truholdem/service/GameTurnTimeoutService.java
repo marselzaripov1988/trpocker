@@ -99,4 +99,19 @@ public class GameTurnTimeoutService {
             existing.cancel(false);
         }
     }
+
+    /**
+     * Cancel every pending turn timer. Used for graceful shutdown and for test isolation so a timer scheduled by
+     * one scenario cannot fire (and auto-act on a game) during the next one's cleanup. Does not interrupt a timeout
+     * already executing.
+     */
+    public void cancelAll() {
+        scheduledTimeouts.values().forEach(future -> future.cancel(false));
+        scheduledTimeouts.clear();
+    }
+
+    /** Number of turn timers currently scheduled (not yet fired or cancelled). */
+    public int pendingTimeoutCount() {
+        return scheduledTimeouts.size();
+    }
 }

@@ -166,9 +166,16 @@ where schema-relevant, docs + commit + push.
   `FullGameFlowIT` now cancels pending transitions in `@AfterEach` + retries its `@BeforeEach` cleanup, removing a
   pre-existing flaky `ObjectOptimisticLockingFailureException` where a scheduled transition re-persisted its game
   during the next test's versioned `deleteAll` (same OSIV/async-persist family fixed for the pyramid).
-- **Remaining Phase-C work:** turn-timeout and Redis hot-state (`GameStateCoordinator`/`RedisGameStateStore`) and
-  cluster routing/ownership exercised under `engine=aggregate` (add ITs per concern; statistics + hand history +
-  bots + lifecycle multi-hand are now covered).
+- **Theme — turn-action timeout on aggregate (verified).** `GameTurnTimeoutService.scheduleForCurrentTurn` fires
+  `PokerGameService.handleTurnTimeout`, which routes through `handleTurnTimeoutInternal → playerActInternal →
+  playerActViaAggregate` — i.e. the auto-fold/-check executes in the aggregate kernel. New `AggregateTurnTimeoutIT`
+  pins it: heads-up, the player on the clock never acts, the 1 s timer auto-folds them (facing the big blind), the
+  hand ends, and chips are conserved — with a long result delay so the lifecycle doesn't deal a new hand mid-assert.
+  Green. `GameTurnTimeoutService` also gained `cancelAll()` / `pendingTimeoutCount()` (graceful shutdown + test
+  isolation), mirroring `GameHandLifecycleService`.
+- **Remaining Phase-C work:** Redis hot-state (`GameStateCoordinator`/`RedisGameStateStore`) and cluster
+  routing/ownership exercised under `engine=aggregate` (add ITs per concern). Statistics, hand history, bots,
+  lifecycle multi-hand, and turn-timeout are now all covered on the aggregate engine.
 
 ### Phase D — Pyramid / parallel processing on aggregate (D2)
 - Make `PyramidTournamentService.processRoundTables` correct under aggregate (worker-thread persistence,
