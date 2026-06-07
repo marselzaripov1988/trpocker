@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### 🔧 Aggregate engine migration — Phase B (seed): cross-engine parity net
-- `CrossEnginePokerParityIT` runs the same deck-independent fold-out hand on **both** engines — flipping
+- `CrossEnginePokerParityIT` runs the same deck-independent hands on **both** engines — flipping
   `app.game.engine` between `legacy` and `aggregate` at runtime (restored in `finally`) — and asserts the final
-  stacks and the winner are **identical**. It is green, so the two engines already agree on the
-  position/blind/fold bookkeeping; this is the cross-engine oracle the deeper Phase-C engine changes will run
-  against. (The existing `PokerGameRulesGoldenTest` / `PokerGameShowdownTest` already pin the aggregate's
+  stacks and the winner are **identical**. Four scenarios (3-handed fold-out, heads-up fold, raise→fold,
+  raise→re-raise→fold) all green, so the two engines agree byte-for-byte on the position / blind / bet / raise /
+  fold bookkeeping; this is the cross-engine oracle the deeper Phase-C engine changes will run against. (The existing `PokerGameRulesGoldenTest` / `PokerGameShowdownTest` already pin the aggregate's
   bookkeeping + showdown invariants deck-independently.) Next: a deterministic-deck seam to pin showdown /
   side-pot / split outcomes across engines, then close the parity gaps (`Game.finished` overload, multi-hand,
   bots) catalogued in `AGGREGATE_MIGRATION_PLAN.md`.

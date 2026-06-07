@@ -99,11 +99,12 @@ where schema-relevant, docs + commit + push.
   bookkeeping (dead button / missed blinds / last aggressor); `PokerGameShowdownTest` pins showdown invariants
   (chip conservation, side-pot zero-sum, winner metadata) deck-independently. Hand ranking is covered by the
   `HandRanker` golden tests.
-- **Done (seed):** `CrossEnginePokerParityIT` — the same deck-independent fold-out hand is run on **both**
-  engines (flipping `app.game.engine` at runtime, restored in `finally`) and the **final stacks + winner must be
-  identical**. Currently **green**, so legacy and aggregate already agree on the position/blind/fold bookkeeping.
-  This is the cross-engine oracle the deep Phase-C changes run against; it grows (multi-hand, showdown with a
-  deterministic deck, bots) as each Phase-C gap is closed.
+- **Done (seed):** `CrossEnginePokerParityIT` — the same deck-independent hands are run on **both** engines
+  (flipping `app.game.engine` at runtime, restored in `finally`) and the **final stacks + winner must be
+  identical**. Four scenarios green (3-handed fold-out, heads-up fold, raise→fold, raise→re-raise→fold), so
+  legacy and aggregate agree byte-for-byte on the position / blind / bet / raise / fold bookkeeping. This is the
+  cross-engine oracle the deep Phase-C changes run against; it grows (multi-hand, showdown with a deterministic
+  deck, bots) as each Phase-C gap is closed.
 - **Next in B:** a deterministic-deck seam (test-only — e.g. craft a `PersistedGameState` deck via
   `reconstitute`, or a `@VisibleForTesting` deck setter) so showdown / side-pot / split outcomes can be pinned
   and compared across engines, not just fold-outs.
