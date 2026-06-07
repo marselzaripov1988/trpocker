@@ -61,6 +61,10 @@ public class CashTable {
     @Column(nullable = false)
     private boolean active = true;
 
+    /** The current live hand (a {@code games} row), or null when the table is idle. One hand at a time. */
+    @Column(name = "current_game_id")
+    private UUID currentGameId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -132,6 +136,14 @@ public class CashTable {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public UUID getCurrentGameId() {
+        return currentGameId;
+    }
+
+    public void setCurrentGameId(UUID currentGameId) {
+        this.currentGameId = currentGameId;
     }
 
     public Instant getCreatedAt() {

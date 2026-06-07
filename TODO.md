@@ -92,8 +92,13 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
         `PotAwarded` pot in money off the winner — no-flop-no-drop, house revenue via `CashRakeService` — write
         final stacks back to seats, deferred cash-out for LEAVING seats). Verified by `CashGameServiceIT` (fold
         no-rake, showdown raked, leaving cashed out). Kernel un-mutated; tournaments untouched.
-  - [ ] **6c. continuous-table hot-state** — reconcile an indefinitely-live cash table with the cluster
-        ownership/hot-state model.
+  - [x] **6c. live-hand persistence** — `CashGameService.openHand` persists the dealt hand as a `games` row via
+        the aggregate↔JPA `PokerGameMapper` + links `cash_tables.current_game_id` (changeset 26); `act` reloads
+        from the DB, applies one action, and persists-or-settles+frees the table; `peekHand` reconstitutes.
+        Storing via the JPA `Game` entity (not a JSON snapshot) keeps hole cards (`@JsonIgnore` but
+        `@ElementCollection`). Verified by `CashHandPersistenceIT` (hole cards survive; a hand driven entirely
+        through `act()` reloading from the DB reaches showdown, rakes, frees the table). Remaining: cluster
+        ownership of an always-on table (no-op single-node today).
 - [ ] **7. REST API** — list tables, sit/leave, table state; secure + flag-gated.
 - [ ] **8. Lobby + table UI** — browse cash tables with stakes, pick buy-in, sit/leave with a stack.
 - [ ] **9. Verify** — full suite + fresh-Postgres cluster + an end-to-end buy-in→play→cash-out IT.

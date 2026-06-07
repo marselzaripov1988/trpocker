@@ -35,5 +35,6 @@
     <include file="db/changelog/23-wallet-cash-buyin-type.xml"/>
     <include file="db/changelog/24-wallet-cash-cashout-type.xml"/>
     <include file="db/changelog/25-cash-rake.xml"/>
+    <include file="db/changelog/26-cash-table-current-game.xml"/>
 
 </databaseChangeLog>

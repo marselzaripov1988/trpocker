@@ -17,15 +17,19 @@ import com.truholdem.domain.aggregate.PokerGame;
 import com.truholdem.domain.event.DomainEvent;
 import com.truholdem.domain.event.PotAwarded;
 import com.truholdem.domain.value.Chips;
+import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.model.CashChipScale;
 import com.truholdem.model.CashSeat;
 import com.truholdem.model.CashSeatStatus;
 import com.truholdem.model.CashTable;
+import com.truholdem.model.Game;
 import com.truholdem.model.GamePhase;
+import com.truholdem.model.PlayerAction;
 import com.truholdem.model.PlayerInfo;
 import com.truholdem.model.Player;
 import com.truholdem.repository.CashSeatRepository;
 import com.truholdem.repository.CashTableRepository;
+import com.truholdem.repository.GameRepository;
 import com.truholdem.service.wallet.CashGameWalletService;
 
 /**
@@ -48,13 +52,18 @@ public class CashGameService {
     private final CashSeatRepository cashSeatRepository;
     private final CashRakeService rakeService;
     private final CashGameWalletService walletBridge;
+    private final GameRepository gameRepository;
+    private final PokerGameMapper gameMapper;
 
     public CashGameService(CashTableRepository cashTableRepository, CashSeatRepository cashSeatRepository,
-            CashRakeService rakeService, CashGameWalletService walletBridge) {
+            CashRakeService rakeService, CashGameWalletService walletBridge,
+            GameRepository gameRepository, PokerGameMapper gameMapper) {
         this.cashTableRepository = cashTableRepository;
         this.cashSeatRepository = cashSeatRepository;
         this.rakeService = rakeService;
         this.walletBridge = walletBridge;
+        this.gameRepository = gameRepository;
+        this.gameMapper = gameMapper;
     }
 
     /**
@@ -64,14 +73,18 @@ public class CashGameService {
      */
     @Transactional(readOnly = true)
     public PokerGame startHand(UUID tableId) {
-        CashTable table = requireTable(tableId);
+        return buildHand(requireTable(tableId));
+    }
+
+    /** Build (deal) a fresh aggregate hand for the table's ACTIVE seats; does not persist. */
+    private PokerGame buildHand(CashTable table) {
         if (!table.isActive()) {
-            throw new IllegalStateException("Cash table " + tableId + " is closed");
+            throw new IllegalStateException("Cash table " + table.getId() + " is closed");
         }
         CashChipScale scale = CashChipScale.forTable(table);
-        List<CashSeat> active = cashSeatRepository.findByCashTableIdAndStatus(tableId, CashSeatStatus.ACTIVE);
+        List<CashSeat> active = cashSeatRepository.findByCashTableIdAndStatus(table.getId(), CashSeatStatus.ACTIVE);
         if (active.size() < 2) {
-            throw new IllegalStateException("Need at least 2 active seats to start a hand at table " + tableId);
+            throw new IllegalStateException("Need at least 2 active seats to start a hand at table " + table.getId());
         }
         List<PlayerInfo> infos = new ArrayList<>(active.size());
         for (CashSeat seat : active) {
@@ -81,8 +94,69 @@ public class CashGameService {
                 Chips.of(scale.toChips(table.getSmallBlind())),
                 Chips.of(scale.toChips(table.getBigBlind())));
         game.startNewHand();
-        log.info("Started cash hand {} at table {} with {} players", game.getId(), tableId, active.size());
         return game;
+    }
+
+    /**
+     * Open a new live hand at the table and persist it (one live hand per table). The hand is stored as a
+     * {@code games} row via the aggregate↔JPA mapper — so hole cards / deck survive between actions and nodes —
+     * and the table is linked to it. Returns the persisted game id; drive it with {@link #act} and the hand
+     * settles itself when it finishes.
+     */
+    @Transactional
+    public UUID openHand(UUID tableId) {
+        CashTable table = requireTable(tableId);
+        if (table.getCurrentGameId() != null) {
+            throw new IllegalStateException("Table " + tableId + " already has a live hand");
+        }
+        PokerGame aggregate = buildHand(table);
+        Game game = new Game();
+        gameMapper.applyToGame(aggregate, game);
+        Game saved = gameRepository.save(game);
+        table.setCurrentGameId(saved.getId());
+        cashTableRepository.save(table);
+        log.info("Opened cash hand {} at table {}", saved.getId(), tableId);
+        return saved.getId();
+    }
+
+    /** Reconstitute the table's current live hand from storage, or null when the table is idle. */
+    @Transactional(readOnly = true)
+    public PokerGame peekHand(UUID tableId) {
+        UUID gameId = requireTable(tableId).getCurrentGameId();
+        if (gameId == null) {
+            return null;
+        }
+        return gameMapper.fromGame(gameRepository.findById(gameId)
+                .orElseThrow(() -> new NoSuchElementException("Cash hand not found: " + gameId)));
+    }
+
+    /**
+     * Apply one action to the table's live hand: load it from storage, execute the action, and either persist
+     * the advanced state (hand continues) or settle the hand and free the table (hand finished). The hand state
+     * — including hole cards — is reloaded from the DB each call, so play survives across requests and nodes.
+     */
+    @Transactional
+    public CashActResult act(UUID tableId, UUID enginePlayerId, PlayerAction action, Integer amountChips) {
+        CashTable table = requireTable(tableId);
+        UUID gameId = table.getCurrentGameId();
+        if (gameId == null) {
+            throw new IllegalStateException("Table " + tableId + " has no live hand");
+        }
+        Game game = gameRepository.findById(gameId)
+                .orElseThrow(() -> new NoSuchElementException("Cash hand not found: " + gameId));
+        PokerGame aggregate = gameMapper.fromGame(game);
+        aggregate.executeAction(enginePlayerId, action, amountChips != null ? Chips.of(amountChips) : null);
+
+        if (aggregate.getPhase() == GamePhase.FINISHED) {
+            CashHandResult settlement = settleHand(tableId, aggregate);
+            table.setCurrentGameId(null);
+            cashTableRepository.save(table);
+            gameRepository.delete(game);
+            return new CashActResult(true, settlement.totalRake(), settlement.cashedOut());
+        }
+        gameMapper.applyToGame(aggregate, game);
+        gameRepository.save(game);
+        return new CashActResult(false, BigDecimal.ZERO, List.of());
     }
 
     /**
@@ -165,5 +239,12 @@ public class CashGameService {
 
     /** Outcome of settling a cash hand: the rake taken (house revenue) and the players cashed out on leaving. */
     public record CashHandResult(BigDecimal totalRake, List<UUID> cashedOut) {
+    }
+
+    /**
+     * Outcome of applying one action: whether it completed the hand and, if so, the settlement (rake taken +
+     * players cashed out). When the hand continues, {@code handComplete} is false with a zero/empty settlement.
+     */
+    public record CashActResult(boolean handComplete, BigDecimal totalRake, List<UUID> cashedOut) {
     }
 }

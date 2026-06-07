@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 6c: persist the live hand across actions
+- A continuous cash table's live hand now survives between actions (and nodes): `CashGameService.openHand`
+  persists the dealt hand as a `games` row via the aggregate↔JPA `PokerGameMapper` and links the table
+  (`cash_tables.current_game_id`, changeset 26); `act` reloads it from the DB, executes one action, and either
+  persists the advanced state (hand continues) or settles + frees the table (hand finished, via the slice-6b
+  settlement). `peekHand` reconstitutes the current hand for inspection.
+- Storing via the JPA `Game` entity (not a JSON snapshot) is deliberate: hole cards are `@JsonIgnore` but
+  `@ElementCollection`, so they persist in the DB and survive reload — a JSON snapshot would have dropped them
+  and broken showdown after a reload.
+- Verified by `CashHandPersistenceIT`: `openHand` persists the hand with each player's two hole cards intact and
+  rejects a second concurrent hand; a hand driven **entirely through `act()`** (the aggregate reloaded from the
+  DB on every call) reaches a 5-card showdown, rakes 0.01, frees the table and removes the live-hand row. Full
+  surefire suite green; changeset 26 validated on a fresh Postgres. (Cluster ownership of an always-on table —
+  a no-op single-node today — is the remaining cluster-hardening follow-up.)
+
 ### 🎲 Cash games (ring tables) — slice 6b: cash hand on the aggregate kernel + settlement
 - `CashGameService` drives a cash hand on the pure `domain.aggregate.PokerGame` kernel and settles it back to
   seats + wallet — tournaments stay on the default legacy engine, so this touches no tournament code.
