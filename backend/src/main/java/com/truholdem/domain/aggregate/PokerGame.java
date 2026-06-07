@@ -65,7 +65,14 @@ public class PokerGame {
     
     private final List<Card> deck = new ArrayList<>();
 
-    
+    /**
+     * Test seam (null in production): when set, the next deal uses this exact card order instead of shuffling,
+     * so showdown / side-pot / split outcomes can be pinned deterministically. Package-private — only the
+     * aggregate's own tests set it via {@link #useFixedDeck(List)}.
+     */
+    private List<Card> fixedDeck;
+
+
     private final List<Integer> sidePotAmounts = new ArrayList<>();
 
     
@@ -679,7 +686,21 @@ public class PokerGame {
     }
 
     private void shuffleDeck() {
+        if (fixedDeck != null) {
+            deck.clear();
+            deck.addAll(fixedDeck);
+            return;
+        }
         Collections.shuffle(deck);
+    }
+
+    /**
+     * Test seam: force the next {@link #startNewHand()} to deal from {@code cards} in order instead of
+     * shuffling (deal order: hole cards round-robin, then burn+flop, burn+turn, burn+river). Lets tests pin
+     * deterministic showdown / side-pot outcomes. No-op effect in production (never called there).
+     */
+    void useFixedDeck(List<Card> cards) {
+        this.fixedDeck = new ArrayList<>(cards);
     }
 
     private void dealHoleCards() {

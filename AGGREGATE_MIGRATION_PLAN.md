@@ -105,9 +105,14 @@ where schema-relevant, docs + commit + push.
   legacy and aggregate agree byte-for-byte on the position / blind / bet / raise / fold bookkeeping. This is the
   cross-engine oracle the deep Phase-C changes run against; it grows (multi-hand, showdown with a deterministic
   deck, bots) as each Phase-C gap is closed.
-- **Next in B:** a deterministic-deck seam (test-only — e.g. craft a `PersistedGameState` deck via
-  `reconstitute`, or a `@VisibleForTesting` deck setter) so showdown / side-pot / split outcomes can be pinned
-  and compared across engines, not just fold-outs.
+- **Done (deterministic deck):** added a package-private `PokerGame.useFixedDeck(List<Card>)` test seam (null
+  in production → no behaviour change; `shuffleDeck()` deals from it in order when set). `PokerGameDeterministic
+  ShowdownTest` uses it to pin an exact main + two side-pot distribution (3 unequal all-in stacks; AA/KK/QQ on a
+  blank board → P2 wins the main pot, P1 side pot 1, P0 the uncontested side pot 2 back). This locks the
+  aggregate's showdown/side-pot math (beyond the zero-sum invariant already in `PokerGameShowdownTest`).
+- **Next in B:** a matching deterministic-deck seam on the *legacy* deal so the **same** pinned board can be
+  compared cross-engine at showdown (currently the cross-engine net is deck-independent fold/bet only; the
+  deterministic showdown is pinned on the aggregate alone).
 - With a **seeded/deterministic deck**, capture legacy outcomes (winners, final chips, pot, board, side pots)
   for a representative battery: HU check/call showdown, 3-way pot, multi-way all-in with side pots, split pot,
   pre-flop fold-walk, dead-button elimination, missed blinds.

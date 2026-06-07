@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔧 Aggregate engine migration — Phase B: deterministic-deck showdown golden test
+- Added a package-private `PokerGame.useFixedDeck(List<Card>)` test seam (null in production → no behaviour
+  change; `shuffleDeck()` deals from the fixed order when set). `PokerGameDeterministicShowdownTest` uses it to
+  pin an exact side-pot distribution: three unequal stacks (1000/500/200) all-in pre-flop with AA/KK/QQ on a
+  blank board → the short stack (AA) takes the main pot, the next (KK) the first side pot, and the big stack
+  (QQ) gets the uncontested second side pot back (600/600/500, chips conserved). This locks the aggregate's
+  showdown / side-pot math deterministically (beyond the zero-sum invariant in `PokerGameShowdownTest`). Full
+  surefire suite green (1097).
+
 ### 🔧 Aggregate engine migration — Phase B (seed): cross-engine parity net
 - `CrossEnginePokerParityIT` runs the same deck-independent hands on **both** engines — flipping
   `app.game.engine` between `legacy` and `aggregate` at runtime (restored in `finally`) — and asserts the final
