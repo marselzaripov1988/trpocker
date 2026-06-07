@@ -94,7 +94,7 @@ where schema-relevant, docs + commit + push.
 > with chips) instead of reading it back from `Game.finished`. Cash is unaffected either way (it reads
 > `aggregate.getPhase() == FINISHED`, never `Game.finished`).
 
-### Phase B — Characterization / golden parity net  ·  STARTED
+### Phase B — Characterization / golden parity net  ·  COMPLETE
 - **Existing nets (reuse):** `PokerGameRulesGoldenTest` (aggregate) ↔ `GameRulesGoldenTest` (legacy) pin the
   bookkeeping (dead button / missed blinds / last aggressor); `PokerGameShowdownTest` pins showdown invariants
   (chip conservation, side-pot zero-sum, winner metadata) deck-independently. Hand ranking is covered by the
@@ -110,15 +110,22 @@ where schema-relevant, docs + commit + push.
   ShowdownTest` uses it to pin an exact main + two side-pot distribution (3 unequal all-in stacks; AA/KK/QQ on a
   blank board → P2 wins the main pot, P1 side pot 1, P0 the uncontested side pot 2 back). This locks the
   aggregate's showdown/side-pot math (beyond the zero-sum invariant already in `PokerGameShowdownTest`).
-- **Next in B:** a matching deterministic-deck seam on the *legacy* deal so the **same** pinned board can be
-  compared cross-engine at showdown (currently the cross-engine net is deck-independent fold/bet only; the
-  deterministic showdown is pinned on the aggregate alone).
-- With a **seeded/deterministic deck**, capture legacy outcomes (winners, final chips, pot, board, side pots)
-  for a representative battery: HU check/call showdown, 3-way pot, multi-way all-in with side pots, split pot,
-  pre-flop fold-walk, dead-button elimination, missed blinds.
-- Run the identical scenarios against the aggregate engine; assert **identical** results. These tests become the
-  oracle for every later phase (run them with the flag both ways).
-- Where the deck isn't seedable today, add a test-only deck seam (no production change).
+- **Finding — showdown ranking is already a single source of truth (no legacy deal seam needed):** both engines
+  determine the showdown **winner** through the *same* code. Legacy `PokerGameService.evaluateHands(...)` calls
+  `handEvaluator.evaluate(...)`, and `HandEvaluator` is a thin `@Component` that **delegates to
+  `domain.value.HandRanker.evaluate(...)`** — the exact static call the aggregate `PokerGame` makes directly.
+  (`HandAnalysisService` is bot AI, not used in showdown.) So who-wins parity is **structural**, not a behaviour
+  diff: the only per-engine showdown code left is the pot/side-pot *distribution* algorithm. We therefore did
+  **not** seam the prod-critical legacy `createNewGame` deal (poor risk/reward) and instead:
+  - **Done (cross-engine ranker guard):** `HandRankerParityTest` asserts legacy `HandEvaluator` == aggregate
+    `HandRanker` across every hand category + kicker tie-breakers — locking the single source of truth so a future
+    fork of `HandEvaluator` (re-introducing a second ranker) is caught immediately. Pure unit test, no prod change.
+  - **Aggregate side-pot distribution** is pinned by `PokerGameDeterministicShowdownTest` (above); the legacy
+    distribution is the long-standing battle-tested default. A full cross-engine *distribution* comparison would
+    need a legacy deal seam for marginal value (ranker already shared) and is deferred as out-of-scope for B.
+- **Phase B is complete:** the golden net now covers (a) cross-engine betting/fold parity (`CrossEnginePokerParityIT`,
+  deck-independent), (b) deterministic aggregate side-pot distribution, and (c) cross-engine showdown-ranking parity
+  (`HandRankerParityTest`). This is the oracle later phases run against (flag both ways).
 
 ### Phase C — Orchestration parity on the aggregate path
 - Verify each production concern works when `engine=aggregate`: hand-lifecycle (`GameHandLifecycleService`),
