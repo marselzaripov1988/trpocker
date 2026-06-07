@@ -82,8 +82,16 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       `collectRake` (records `CashRakeEntry` house revenue, idempotent on the settling hand id) +
       `houseRevenue`. Liquibase changeset 25 (`cash_rake_entries`, unique idempotency key). Verified by
       `CashRakeServiceIT` + fresh-Postgres validate. Deducting the rake from the awarded pot is the engine slice.
-- [ ] **6. Engine wiring** — join/leave a live table mid-session (the engine currently seats all players at
-      `createNewGame`); reconcile with the cluster hot-state/ownership model.
+- [ ] **6. Engine wiring** (Option A: reuse the pure `domain.aggregate.PokerGame` kernel for cash; tournaments
+      stay on the default `legacy` engine — zero blast radius). Sub-slices:
+  - [x] **6a. money↔chip scale + kernel decision** — `CashChipScale` (per-table chip unit = 10^-d from the
+        blinds; `toChips`/`toMoney`/`dust`, int-overflow guarded). Verified by `CashChipScaleTest` + the
+        aggregate kernel gate (PokerGame{,Rules,Showdown,Betting} tests). No tournament code touched.
+  - [ ] **6b. cash driver** — build a cash hand on the aggregate kernel from a `CashTable` (fixed SB/BB via the
+        scale), seat live players, run the hand, deduct rake at pot award, sync final stacks back to `CashSeat`,
+        deferred cash-out after the hand for a LEAVING seat.
+  - [ ] **6c. continuous-table hot-state** — reconcile an indefinitely-live cash table with the cluster
+        ownership/hot-state model.
 - [ ] **7. REST API** — list tables, sit/leave, table state; secure + flag-gated.
 - [ ] **8. Lobby + table UI** — browse cash tables with stakes, pick buy-in, sit/leave with a stack.
 - [ ] **9. Verify** — full suite + fresh-Postgres cluster + an end-to-end buy-in→play→cash-out IT.

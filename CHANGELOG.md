@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 6a: money ↔ chip-unit scale + engine kernel decision
+- Decided the cash engine strategy: **reuse the existing pure aggregate kernel** (`domain.aggregate.PokerGame`
+  + `domain.value.*`, already JPA/Spring-free and integer-`Chips` based, with golden/showdown/betting tests)
+  rather than forking the engine or migrating tournaments off the default `legacy` engine. Cash drives the
+  aggregate kernel via a money↔chip boundary; tournaments are untouched (zero blast radius).
+- `CashChipScale` — the per-table money↔chip-unit mapping. The engine plays in whole `int` chips; a cash table's
+  stakes/stacks are real-money `BigDecimal`. The chip unit is `10^-d` where `d` is the decimals needed to
+  represent the blinds exactly, so the blinds are whole chip counts and a stack quantises to chips with
+  sub-unit dust floored off (e.g. SB 0.05 / BB 0.10 → chip unit 0.01 → SB 5 / BB 10 chips, 10.00 = 1000 chips).
+  `toChips` / `toMoney` / `dust`, overflow-guarded against the engine's int chip range. Pure, immutable, no
+  engine/JPA coupling.
+- Verified: `CashChipScaleTest` (chip unit per blinds for cent/milli/sat tables, round-trip + dust, forTable,
+  guards incl. int overflow) + the aggregate-kernel gate (`PokerGameTest` / `PokerGameRulesGoldenTest` /
+  `PokerGameShowdownTest` / `PokerGameBettingTest`, 71 green) + full surefire suite. No schema change; no
+  tournament code touched.
+
 ### 🎲 Cash games (ring tables) — slice 5: rake + house revenue
 - `CashRakeService.computeRake(pot, contested, rakeBps, rakeCap)` — pure rake calc: `pot * bps / 10000` rounded
   **down** (never over-rakes), clamped to `rakeCap` (when positive) and the pot, and **zero for an uncontested
