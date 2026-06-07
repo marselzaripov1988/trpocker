@@ -25,6 +25,9 @@ import java.util.UUID;
 @Component
 public class PokerGameMapper {
 
+    /** A hold'em match needs at least two players holding chips; below that the match is over. */
+    private static final int MIN_PLAYERS_FOR_MATCH = 2;
+
     public PokerGame fromGame(Game game) {
         Objects.requireNonNull(game, "Game cannot be null");
         return PokerGame.reconstitute(toPersistedState(game));
@@ -44,7 +47,10 @@ public class PokerGameMapper {
         game.setDealerPosition(aggregate.getDealerPosition());
         game.setCurrentPlayerIndex(aggregate.getCurrentPlayerIndex());
         game.setHandNumber(aggregate.getHandNumber());
-        game.setFinished(aggregate.isFinished());
+        // game.finished means "the current hand is done" on the wire (legacy/test semantics); it is owned by
+        // applyPhaseAndPot below (true iff phase == FINISHED). The aggregate's own isFinished() is the *match-over*
+        // concept and must NOT be written here — doing so made a finished hand reconstitute as a finished match and
+        // broke multi-hand flow. Match-over is re-derived from chip counts on the way back in toPersistedState.
         game.setWinnerName(aggregate.getWinnerName());
         game.setWinningHandDescription(aggregate.getWinningHandDescription());
         game.setLastRaiseAmount(aggregate.getLastRaiseAmount());
@@ -83,7 +89,7 @@ public class PokerGameMapper {
                 game.getDealerPosition(),
                 game.getCurrentPlayerIndex(),
                 game.getHandNumber(),
-                game.isFinished(),
+                isMatchOver(game),
                 game.getCurrentBet(),
                 game.getMinRaiseAmount(),
                 game.getLastRaiseAmount(),
@@ -133,9 +139,25 @@ public class PokerGameMapper {
             game.setPhase(GamePhase.SHOWDOWN);
             game.setCurrentPot(0);
         } else {
-            game.setFinished(aggregate.isFinished());
+            game.setFinished(false);
             game.setPhase(aggregate.getPhase());
             game.setCurrentPot(aggregate.getMainPotAmount());
         }
+    }
+
+    /**
+     * Re-derives the aggregate's <i>match-over</i> flag from a {@link Game} whose {@code finished} column carries
+     * the wire <i>hand-done</i> meaning. A match is over only once the current hand has finished <b>and</b> fewer
+     * than {@link #MIN_PLAYERS_FOR_MATCH} players still hold chips. Gating on hand-done is essential: mid-hand a
+     * player can sit at zero chips (all-in) without the match being over, so a pure chip-count check would falsely
+     * end heads-up all-in hands on reload. This mirrors {@code PokerGame.completeHand} exactly (phase == FINISHED,
+     * then players-with-chips &lt; MIN_PLAYERS).
+     */
+    private static boolean isMatchOver(Game game) {
+        if (!game.isFinished()) {
+            return false;
+        }
+        long withChips = game.getPlayers().stream().filter(p -> p.getChips() > 0).count();
+        return withChips < MIN_PLAYERS_FOR_MATCH;
     }
 }

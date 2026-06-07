@@ -123,7 +123,7 @@ class PokerGameShowdownTest {
         }
 
         @Test
-        @DisplayName("a fold-out win awards the pot with no showdown description")
+        @DisplayName("a fold-out win awards the pot with the legacy 'all opponents folded' description")
         void foldOutWin() {
             PokerGame game = PokerGame.create(List.of(
                     new PlayerInfo("Alice", 1000, false),
@@ -137,7 +137,10 @@ class PokerGameShowdownTest {
             assertEquals(2000, totalChips(game));
             assertNotNull(game.getWinnerName());
             assertEquals(1, game.getWinnerIds().size());
-            assertNull(game.getWinningHandDescription(), "fold-out wins have no hand description");
+            // Parity with the legacy engine: an uncontested (everyone-folded) pot carries the wire description
+            // "All opponents folded" rather than a showdown hand rank. Pinned so both engines agree.
+            assertEquals("All opponents folded", game.getWinningHandDescription(),
+                    "fold-out wins use the legacy uncontested-pot description");
 
             HandCompleted completed = lastHandCompleted(game);
             assertNotNull(completed);

@@ -20,6 +20,8 @@ public class PokerGame {
 
     private static final int MIN_PLAYERS = 2;
     private static final int MAX_PLAYERS = 10;
+    /** Winning-hand description for an uncontested pot (all opponents folded); matches the legacy engine verbatim. */
+    private static final String WON_BY_FOLD_DESCRIPTION = "All opponents folded";
 
     private final UUID id;
 
@@ -950,22 +952,25 @@ public class PokerGame {
         int amount = potAmount;
         winner.addWinnings(amount);
 
+        // Match the legacy engine's wire format for an uncontested (everyone-folded) pot so the winning-hand
+        // description is identical across engines (PokerGameService sets the same string on a fold-out win).
         winnerName = winner.getName();
-        winningHandDescription = null;
+        winningHandDescription = WON_BY_FOLD_DESCRIPTION;
         winnerIds.clear();
         winnerIds.add(winner.getId());
 
         raiseEvent(new PotAwarded(
                 id, winner.getId(), winner.getName(),
                 Chips.of(amount),
-                null,
+                WON_BY_FOLD_DESCRIPTION,
                 Pot.PotType.MAIN
         ));
 
         potAmount = 0;
 
         List<HandCompleted.PotResult> potResults = List.of(
-                new HandCompleted.PotResult(winner.getId(), winner.getName(), Chips.of(amount), null, false));
+                new HandCompleted.PotResult(winner.getId(), winner.getName(), Chips.of(amount),
+                        WON_BY_FOLD_DESCRIPTION, false));
         completeHand(false, potResults);
     }
 

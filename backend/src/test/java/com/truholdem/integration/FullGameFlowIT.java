@@ -1,5 +1,6 @@
 package com.truholdem.integration;
 
+import com.truholdem.domain.exception.InvalidActionException;
 import com.truholdem.dto.ShowdownResult;
 import com.truholdem.dto.WebSocketGameUpdateMessage;
 import com.truholdem.model.*;
@@ -539,14 +540,28 @@ class FullGameFlowIT {
 
             refreshGame();
 
-            
+
             Player bot = game.getCurrentPlayer();
             if (bot != null && bot.isBot()) {
-                game = pokerGameService.executeBotAction(gameId, bot.getId());
-                
+                UUID botId = bot.getId();
+                int potBefore = game.getCurrentPot();
+                game = pokerGameService.executeBotAction(gameId, botId);
+
                 refreshGame();
-                
-                assertThat(bot.hasActed() || bot.isFolded()).isTrue();
+
+                // Assert the bot actually took its turn — engine-agnostically. `hasActed` is NOT a reliable signal:
+                // when the bot's call/check completes the betting round the engine advances to the next street and
+                // resets every player's hasActed flag, so a freshly reloaded bot can legitimately show hasActed=false
+                // (and the aggregate engine reconstitutes fresh Player instances each load, so the pre-action `bot`
+                // reference is stale anyway). The action's *effect* is the robust proof: the bot folded, the hand
+                // ended (heads-up fold), or chips moved into the pot (call/raise).
+                Player botAfter = game.getPlayers().stream()
+                        .filter(p -> p.getId().equals(botId))
+                        .findFirst()
+                        .orElseThrow();
+                assertThat(botAfter.isFolded() || game.isFinished() || game.getCurrentPot() > potBefore)
+                        .as("bot must have folded, ended the hand, or committed chips to the pot")
+                        .isTrue();
             }
         }
     }
@@ -874,9 +889,11 @@ class FullGameFlowIT {
 
             
             if (current.getBetAmount() < game.getCurrentBet()) {
-                assertThatThrownBy(() -> 
+                // Both engines reject an illegal check facing a bet; the concrete type differs (legacy
+                // IllegalStateException vs aggregate InvalidActionException) — assert engine-agnostically.
+                assertThatThrownBy(() ->
                     pokerGameService.playerAct(gameId, current.getId(), PlayerAction.CHECK, 0)
-                ).isInstanceOf(IllegalStateException.class);
+                ).isInstanceOfAny(IllegalStateException.class, InvalidActionException.class);
             }
 
             
@@ -903,10 +920,12 @@ class FullGameFlowIT {
             Player current = game.getCurrentPlayer();
             
             
-            int tooSmallRaise = 1; 
-            assertThatThrownBy(() -> 
+            int tooSmallRaise = 1;
+            // Both engines reject a below-minimum raise (both map to HTTP 400); the concrete type differs
+            // (legacy IllegalArgumentException vs aggregate InvalidActionException) — assert engine-agnostically.
+            assertThatThrownBy(() ->
                 pokerGameService.playerAct(gameId, current.getId(), PlayerAction.RAISE, tooSmallRaise)
-            ).isInstanceOf(IllegalArgumentException.class);
+            ).isInstanceOfAny(IllegalArgumentException.class, InvalidActionException.class);
 
             
             refreshGame();
