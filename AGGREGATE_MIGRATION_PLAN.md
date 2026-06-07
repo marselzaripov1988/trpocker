@@ -127,7 +127,7 @@ where schema-relevant, docs + commit + push.
   deck-independent), (b) deterministic aggregate side-pot distribution, and (c) cross-engine showdown-ranking parity
   (`HandRankerParityTest`). This is the oracle later phases run against (flag both ways).
 
-### Phase C — Orchestration parity on the aggregate path  ·  STARTED (FullGameFlowIT green both ways)
+### Phase C — Orchestration parity on the aggregate path  ·  COMPLETE
 - Verify each production concern works when `engine=aggregate`: hand-lifecycle (`GameHandLifecycleService`),
   turn-timeout, Redis hot-state (`GameStateCoordinator`/`RedisGameStateStore`), async-persist, cluster
   routing/ownership (`TableCommandDispatcher`, `TableOwnershipService`, `ClusterActionForwarder`), statistics
@@ -196,9 +196,18 @@ where schema-relevant, docs + commit + push.
   surfacing as an `UnexpectedRollbackException`. `AggregateHotStateMultiStreetIT` now runs clean (no stale/rollback
   logs); `HotStateGameSerializationTest` pins that the hot-state mapper keeps the version while the REST mapper drops
   it.
-- **Remaining Phase-C work:** cluster routing/ownership exercised under `engine=aggregate` (add an IT). Statistics,
-  hand history, bots, lifecycle multi-hand, turn-timeout, and Redis hot-state are now all covered on the aggregate
-  engine.
+- **Theme — cluster routing/ownership on aggregate (verified).** Cross-node action routing is engine-agnostic at the
+  service layer (`ClusterActionForwarder` → owner's `playerActLocal` → `playerActInternal` → `playerActViaAggregate`),
+  and the owner persists to shared Redis while the forwarder reloads cross-node — so it depends on the hot-state deck
+  fix above. `AggregateClusterRoutingIT` boots two real nodes with `engine=aggregate`, creates a table on node-A, and
+  drives a whole check/call hand through node-B (the non-owner): every action forwards to node-A, applies in the
+  aggregate kernel, and reloads cross-node, reaching a **five-card showdown** with chips conserved and ownership
+  unmoved. (A `TaskRejectedException` may appear in the log during `@AfterAll` context teardown — an async task hitting
+  an already-terminated executor; harmless shutdown ordering, not a test failure.)
+- **Phase C is complete:** statistics, hand history, bots, lifecycle multi-hand, turn-timeout, Redis hot-state
+  (multi-street + version), and cross-node cluster routing/ownership are all verified on the aggregate engine; the
+  `Game.finished` overload and the fold-out description are at parity, and the hot-state deck/version losses (which
+  affected both engines) are fixed. `FullGameFlowIT` is green on both engines and the full surefire suite is green.
 
 ### Phase D — Pyramid / parallel processing on aggregate (D2)
 - Make `PyramidTournamentService.processRoundTables` correct under aggregate (worker-thread persistence,
