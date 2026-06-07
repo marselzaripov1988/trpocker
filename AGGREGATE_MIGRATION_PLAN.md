@@ -184,10 +184,18 @@ where schema-relevant, docs + commit + push.
   Test` pins both halves (default mapper drops the deck, hot-state mapper keeps it); `AggregateHotStateMultiStreetIT`
   runs a check/call hand to a **five-card showdown over a real Redis container** on the aggregate engine, with chips
   conserved — impossible before the fix.
-  > Observed (separate, pre-existing): under hot-state the async DB writer (`AsyncGamePersistService`) logs a
-  > `StaleObjectStateException`/rollback on its background thread when its version trails the Redis-authoritative
-  > state. It's best-effort and doesn't corrupt the authoritative flow, but the async-persist↔hot-state version
-  > reconciliation deserves its own slice.
+- **Theme — async-persist ↔ hot-state version reconciliation (fixed).** Root cause of the `StaleObjectState
+  Exception`/rollback noise above: `Game.version` (the `@Version` token) is also `@JsonIgnore`d, so a game reloaded
+  from Redis had a **null** version → the async DB writer treated it as a transient insert against an existing row
+  ("unsaved-value mapping was incorrect"). Fix part 1: the hot-state mix-in now re-exposes `Game.version` too, so
+  the optimistic-lock token round-trips and the writer issues a correct versioned `UPDATE` (helps the legacy engine
+  equally). Fix part 2: `AsyncGamePersistService` now does the DB write in a dedicated transaction via a self-proxy
+  and catches `ObjectOptimisticLockingFailureException` on the non-transactional `@Async` method — a genuinely
+  concurrent mirror write (hand-end finalize racing the result-delay transition) rolls back cleanly and is logged at
+  DEBUG (Redis stays authoritative; the next boundary write re-persists), instead of poisoning the transaction and
+  surfacing as an `UnexpectedRollbackException`. `AggregateHotStateMultiStreetIT` now runs clean (no stale/rollback
+  logs); `HotStateGameSerializationTest` pins that the hot-state mapper keeps the version while the REST mapper drops
+  it.
 - **Remaining Phase-C work:** cluster routing/ownership exercised under `engine=aggregate` (add an IT). Statistics,
   hand history, bots, lifecycle multi-hand, turn-timeout, and Redis hot-state are now all covered on the aggregate
   engine.

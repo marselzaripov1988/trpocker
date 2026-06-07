@@ -55,9 +55,11 @@ class HotStateGameSerializationTest {
     }
 
     @Test
-    @DisplayName("the hot-state mapper preserves the full state including the deck")
-    void hotStateMapperPreservesDeck() throws Exception {
+    @DisplayName("the hot-state mapper preserves the full state including the deck and version")
+    void hotStateMapperPreservesDeckAndVersion() throws Exception {
         Game game = sampleGame();
+        setVersion(game, 7L);
+
         Game back = hotStateMapper.readValue(hotStateMapper.writeValueAsString(game), Game.class);
 
         // The dedicated hot-state mapper re-exposes the deck so a Redis cache hit returns a fully playable game
@@ -65,5 +67,25 @@ class HotStateGameSerializationTest {
         assertThat(back.getDeck()).as("hot-state mapper keeps the deck")
                 .containsExactly(new Card(Suit.CLUBS, Value.TWO), new Card(Suit.DIAMONDS, Value.SEVEN));
         assertThat(back.getPlayers().get(0).getHand()).hasSize(2);
+        // The optimistic-lock token must survive too, or the async DB writer treats the reload as a transient
+        // insert and logs stale-object errors.
+        assertThat(back.getVersion()).as("hot-state mapper keeps the @Version token").isEqualTo(7L);
+    }
+
+    @Test
+    @DisplayName("the default mapper drops the version (so it must not be used for hot-state)")
+    void defaultMapperLosesVersion() throws Exception {
+        Game game = sampleGame();
+        setVersion(game, 7L);
+
+        Game back = defaultMapper.readValue(defaultMapper.writeValueAsString(game), Game.class);
+
+        assertThat(back.getVersion()).as("default mapper drops the @JsonIgnore version").isNull();
+    }
+
+    private static void setVersion(Game game, long version) throws Exception {
+        var field = Game.class.getDeclaredField("version");
+        field.setAccessible(true);
+        field.set(game, version);
     }
 }

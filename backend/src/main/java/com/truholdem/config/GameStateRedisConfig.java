@@ -50,18 +50,24 @@ public class GameStateRedisConfig {
     public ObjectMapper gameStateObjectMapper(ObjectMapper base) {
         ObjectMapper mapper = base.copy();
         mapper.addMixIn(Game.class, GameHotStateMixin.class);
-        logger.info("Hot-state Redis ObjectMapper configured (deck re-exposed for full-state persistence)");
+        logger.info("Hot-state Redis ObjectMapper configured (deck + version re-exposed for full-state persistence)");
         return mapper;
     }
 
     /**
-     * Jackson mix-in (never instantiated — only its annotations are read) that re-exposes {@code Game.deck} for
-     * hot-state serialization only; the REST mapper still hides it.
+     * Jackson mix-in (never instantiated — only its annotations are read) that re-exposes, for hot-state
+     * serialization only, two fields the REST mapper hides: {@code Game.deck} (so a cache hit can still deal the
+     * next street) and {@code Game.version} (the JPA optimistic-lock token — without it a Redis-reloaded game has a
+     * null version and a later persist is mishandled as a transient insert). The REST mapper still hides both.
      */
     public static final class GameHotStateMixin {
         @JsonIgnore(false)
         @JsonProperty("deck")
         List<Card> deck;
+
+        @JsonIgnore(false)
+        @JsonProperty("version")
+        Long version;
 
         private GameHotStateMixin() {
         }
