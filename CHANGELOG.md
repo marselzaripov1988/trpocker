@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 6b: cash hand on the aggregate kernel + settlement
+- `CashGameService` drives a cash hand on the pure `domain.aggregate.PokerGame` kernel and settles it back to
+  seats + wallet — tournaments stay on the default legacy engine, so this touches no tournament code.
+  - `startHand(tableId)` maps each ACTIVE `CashSeat`'s money stack to engine chips via `CashChipScale`, builds
+    the aggregate game with the table's fixed blinds (in chips) and deals. Players map to seats by name (the
+    kernel assigns fresh player ids).
+  - `settleHand(tableId, finishedGame)` (hand done = phase `FINISHED`): takes the rake from each awarded
+    `PotAwarded` pot (no-flop-no-drop — only a contested pot that saw a flop is raked), recording house revenue
+    via `CashRakeService`; writes each player's final chips back to their seat in money; and cashes out any seat
+    that asked to leave (`LEAVING` → `CashGameWalletService.cashOut`). Rake is applied in money space off the
+    pot winner, so the kernel is never mutated and chips are conserved (table total drops by exactly the rake).
+- Verified by `CashGameServiceIT` (3 cases on the kernel: uncontested pre-flop fold → no rake + stacks
+  conserved; check/call to a 5-card showdown → 0.20 pot raked 0.01 + house revenue + stacks down to 19.99; a
+  seat that left mid-hand is cashed out on settle and its wallet credited). Full surefire suite green. No schema
+  change. (Persisting the live hand between actions + cluster hot-state for an always-on table is slice 6c.)
+
 ### 🎲 Cash games (ring tables) — slice 6a: money ↔ chip-unit scale + engine kernel decision
 - Decided the cash engine strategy: **reuse the existing pure aggregate kernel** (`domain.aggregate.PokerGame`
   + `domain.value.*`, already JPA/Spring-free and integer-`Chips` based, with golden/showdown/betting tests)

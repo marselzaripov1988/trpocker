@@ -87,9 +87,11 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
   - [x] **6a. money↔chip scale + kernel decision** — `CashChipScale` (per-table chip unit = 10^-d from the
         blinds; `toChips`/`toMoney`/`dust`, int-overflow guarded). Verified by `CashChipScaleTest` + the
         aggregate kernel gate (PokerGame{,Rules,Showdown,Betting} tests). No tournament code touched.
-  - [ ] **6b. cash driver** — build a cash hand on the aggregate kernel from a `CashTable` (fixed SB/BB via the
-        scale), seat live players, run the hand, deduct rake at pot award, sync final stacks back to `CashSeat`,
-        deferred cash-out after the hand for a LEAVING seat.
+  - [x] **6b. cash driver** — `CashGameService.startHand` (map ACTIVE seats → engine chips via `CashChipScale`,
+        build the aggregate `PokerGame` with the table's fixed blinds, deal) + `settleHand` (rake each
+        `PotAwarded` pot in money off the winner — no-flop-no-drop, house revenue via `CashRakeService` — write
+        final stacks back to seats, deferred cash-out for LEAVING seats). Verified by `CashGameServiceIT` (fold
+        no-rake, showdown raked, leaving cashed out). Kernel un-mutated; tournaments untouched.
   - [ ] **6c. continuous-table hot-state** — reconcile an indefinitely-live cash table with the cluster
         ownership/hot-state model.
 - [ ] **7. REST API** — list tables, sit/leave, table state; secure + flag-gated.
