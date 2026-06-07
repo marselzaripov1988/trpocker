@@ -103,7 +103,10 @@ table-config, no sit-down/buy-in, no stand-up/cash-out, no wallet↔table bridge
       (lobby, state, sit, leave, deal, act) + admin `/v1/admin/cash/tables` (create). DTOs + `CashGameService`
       orchestration (`createTable`/`listActiveTables`/`seatsOf`/`sit`/`actAsUser`/`leaveTable`). Verified by
       `CashTableControllerIT` (full HTTP flow) + `CashTableControllerDisabledIT` (404 when off).
-- [ ] **8. Lobby + table UI** — browse cash tables with stakes, pick buy-in, sit/leave with a stack.
+- [x] **8. Lobby + table UI** — Angular `cash` feature: lobby (`/cash`, list + sit with buy-in) + table
+      (`/cash/:id`, seats, current hand with your own hole cards, deal/fold/check/call/raise/leave) + 💵 Cash
+      nav link. `CashService`/`cash.models.ts`/`CashLobbyComponent`/`CashTableComponent`, lazy routes behind the
+      auth guard. eslint + `ng build` green.
 - [ ] **9. Verify** — full suite + fresh-Postgres cluster + an end-to-end buy-in→play→cash-out IT.
 Open design questions: chip↔money scale; rake model (no-flop-no-drop?); mid-hand leave; bot seating; per-table
 single-writer under the existing cluster ownership.

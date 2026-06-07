@@ -37,6 +37,25 @@ export const routes: Routes = [
   },
 
   {
+    path: 'cash',
+    loadComponent: () =>
+      import('./cash/cash-lobby/cash-lobby.component').then(
+        (m) => m.CashLobbyComponent
+      ),
+    canActivate: [authGuard],
+    title: 'Cash Tables - TruHoldem',
+  },
+  {
+    path: 'cash/:id',
+    loadComponent: () =>
+      import('./cash/cash-table/cash-table.component').then(
+        (m) => m.CashTableComponent
+      ),
+    canActivate: [authGuard],
+    title: 'Cash Table - TruHoldem',
+  },
+
+  {
     path: 'tournaments',
     loadChildren: () =>
       import('./tournament/tournament.routes').then((m) => m.TOURNAMENT_ROUTES),

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎲 Cash games (ring tables) — slice 8: lobby + table UI
+- Angular cash feature over the slice-7 REST API: a **lobby** (`/cash`) listing open tables (stakes, seated
+  count, buy-in range) with an inline buy-in input + **Sit** (then routes to the table), and a **table page**
+  (`/cash/:id`) showing the seats (your seat and the player to act highlighted), the current hand (phase, pot,
+  community cards, and **only your own hole cards**), and the controls: **Deal**, **Fold/Check/Call/Raise**
+  (shown only on your turn), and **Leave** (cash out now or at the hand end). A 💵 Cash nav link is added for
+  authenticated users.
+- Standalone components with signals + OnPush, mirroring the federation feature: `CashService`
+  (`/v1/cash/tables` client), `cash.models.ts` (DTO mirrors), `CashLobbyComponent`, `CashTableComponent`; lazy
+  routes `cash` / `cash/:id` behind the auth guard. Verified: eslint clean and `ng build` green.
+
 ### 🎲 Cash games (ring tables) — slice 7: REST API
 - A flag-gated (`app.cash.enabled`, default off → 404) cash-table REST surface over the slice-6 engine:
   - Player (`/v1/cash/tables`): `GET` lobby (open tables + seated counts), `GET /{id}` state (seats + the
