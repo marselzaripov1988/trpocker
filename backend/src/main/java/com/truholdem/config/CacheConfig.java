@@ -55,6 +55,10 @@ public class CacheConfig {
     @Bean
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "simple", matchIfMissing = true)
     public CacheManager simpleCacheManager() {
-        return new ConcurrentMapCacheManager("games", "playerStats", "handHistory");
+        // No fixed name list: a ConcurrentMapCacheManager constructed with explicit names is static and throws
+        // "Cannot find cache named 'X'" for any other cache (e.g. 'users' → profile/avatar updates 400'd under
+        // the docker profile, which uses simple cache). With no names it creates caches on demand, matching the
+        // RedisCacheManager's create-on-missing behaviour used by the other profiles.
+        return new ConcurrentMapCacheManager();
     }
 }
