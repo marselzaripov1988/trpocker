@@ -242,11 +242,22 @@ where schema-relevant, docs + commit + push.
   pot + side pots + multi-player showdown) to completion with chips conserved — complementing the mostly-heads-up
   aggregate ITs and `PyramidAggregateEngineIT`.
 
-### Phase F — Flip the default to aggregate
-- Set `app.game.engine=aggregate` as the default; run the **entire** surefire suite (1090+) plus every `*IT`
-  individually, the golden net both ways, a fresh-Postgres `validate`, a **live smoke** on the dev stack
-  (create + play a SNG, a pyramid, a cash table), and re-run the WS **load test** to catch any perf regression.
-- Provide a one-line rollback (`app.game.engine=legacy`) until F is fully signed off in an environment.
+### Phase F — Flip the default to aggregate  ·  DONE (code) / smoke + load-test recommended pre-prod
+- **Done:** `application.properties` now ships `app.game.engine=aggregate` (the production default). **One-line
+  rollback:** set it back to `legacy` (a comment in the file records this).
+- **Test-suite strategy (deliberate):** `application-test.properties` still pins `app.game.engine=legacy`, so the 62
+  `@ActiveProfiles("test")` classes keep exercising the **legacy** path — that is the rollback regression net kept
+  alive until Phase G deletes legacy. The aggregate engine is covered instead by the dedicated aggregate ITs
+  (lifecycle multi-hand, turn-timeout, hot-state multi-street, cluster routing, many-way bots, pyramid) plus
+  `CrossEnginePokerParityIT` (golden net, both ways) and `FullGameFlowIT` (no profile → now inherits the aggregate
+  default). `PokerGameServiceTest` mocks the engine, so it tests both paths regardless of the property.
+- **Verified:** full `mvnw -o test` suite **1102 green** after the flip (unit + legacy-pinned tests unaffected);
+  `FullGameFlowIT` **23/23 green on the new aggregate default** (run with no `-D` flag); the whole pyramid IT set and
+  the aggregate ITs are green. So the build is green with aggregate as the shipped default.
+- **Recommended before a production cutover (environment-dependent, not run here):** fresh-Postgres Liquibase
+  `validate`, a live smoke on the dev stack (create + play a SNG, a pyramid, a cash table on the running app), and a
+  re-run of the WS scaling **load test** to confirm no perf regression on the aggregate path. Roll back via the flag
+  if any of these regress.
 
 ### Phase G — Retire legacy
 - Delete the legacy engine code in `PokerGameService` (the imperative betting/showdown/pot logic and its

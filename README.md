@@ -529,7 +529,8 @@ Each risky step is guarded by a feature flag for fast rollback.
   which were duplicated and the listener was an unreachable stub). The legacy path keeps its
   imperative stats, so this is gated by `app.game.engine=AGGREGATE`.
 - ✅ Sanitized read projection: REST/WS responses go through a viewer-aware `HoleCardSanitizer`.
-  The **deck is never serialized** (`@JsonIgnore`); **opponents' hole cards** are masked until
+  The **deck is never serialized to clients** (`@JsonIgnore` on the REST mapper; the hot-state Redis mapper
+  re-exposes it so the authoritative live state stays playable across nodes); **opponents' hole cards** are masked until
   showdown (own seats revealed, folded hands stay hidden). WS broadcasts mask all hands and the
   Angular store restores the local player's own hand across masked updates.
 - ✅ Dedicated history read-model: `HandHistoryController` returns a `HandHistoryResponse` DTO instead of
