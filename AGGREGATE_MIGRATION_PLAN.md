@@ -209,11 +209,21 @@ where schema-relevant, docs + commit + push.
   `Game.finished` overload and the fold-out description are at parity, and the hot-state deck/version losses (which
   affected both engines) are fixed. `FullGameFlowIT` is green on both engines and the full surefire suite is green.
 
-### Phase D — Pyramid / parallel processing on aggregate (D2)
-- Make `PyramidTournamentService.processRoundTables` correct under aggregate (worker-thread persistence,
-  version safety, OSIV-clear as in the committed pyramid fix).
-- **Gate:** `PyramidTournamentIT`, `PyramidAdvanceRoundIT`, `FederatedPyramidFinalIT`,
-  `FederatedPyramidServiceIT` green with `engine=aggregate`.
+### Phase D — Pyramid / parallel processing on aggregate (D2)  ·  COMPLETE (no production change needed)
+- **Finding:** `PyramidTournamentService.processRoundTables` already runs correctly under `engine=aggregate` after
+  Phases A–C — no code change was required. Each round-N table is a **distinct game**, so the worker threads (one
+  per table, each in its own transaction with the live lifecycle suppressed via `HandLifecycleScheduling
+  .runSuppressed`, plus the `EntityManager.clear()` after each round) drive the aggregate kernel concurrently with
+  no cross-game `@Version` contention. The Phase-A `createNewGameViaAggregate` insert fix and the Phase-C hot-state
+  deck/version round-trip are what make the per-table create + multi-action play work on the aggregate path.
+- **Gate — the entire pyramid IT set is green with `engine=aggregate`** (verified via `-Dapp.game.engine=aggregate`):
+  `FederatedPyramidServiceIT` (7), `PyramidAdvanceRoundIT` (1), `FederatedPyramidFinalIT` (4),
+  `FederatedPyramidControllerIT` (2), `FederatedPyramidNodeGroupIT` (2), `FederatedPyramidPayoutIT` (2),
+  `FederatedPyramidPrizeIT` (1), `PyramidBuyoutControllerIT` (2), `PyramidBuyoutRepositoryIT` (3),
+  `PyramidBuyUpRunIT` (1), `FederatedPyramidControllerDisabledIT`.
+- **Permanent guard:** `PyramidAggregateEngineIT` pins `app.game.engine=aggregate` via `@TestPropertySource` and runs
+  a 30-player / 3-table round through `processRoundTables`, asserting each table promotes one survivor onto a single
+  level-2 table — so the parallel pyramid flow stays green on the aggregate engine without relying on a `-D` flag.
 
 ### Phase E — Migrate flows one type at a time (still flag-gated)
 - Order by risk: **SNG / Freezeout → Rebuy / Bounty → Pyramid → Federated pyramid → buy-up variants**.
