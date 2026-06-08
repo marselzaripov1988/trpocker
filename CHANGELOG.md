@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔔 Hot-state alerting (Prometheus)
+- Two `truholdem-hotstate` alert rules in `docker/prometheus/alerts.yml` close the observability gap the
+  silent-disable bug exposed (and that the graceful-degradation change widened — a failed Redis write no longer
+  surfaces as a 5xx, so the existing `HighErrorRate` alert would not catch it):
+  - **`HotStateDisabledButEnabled`** — `truholdem_hotstate_enabled == 1 and truholdem_hotstate_active == 0`.
+    Fires when the feature switch is on but the store never wired (exactly the `@ConditionalOnBean` regression).
+    Never false-fires when hot-state is intentionally off (then `enabled == 0`).
+  - **`HotStateWriteFailures`** — `rate(truholdem_hotstate_write_failures_total[5m]) > 0`. Fires when Redis writes
+    are failing at runtime and the coordinator is degrading to PostgreSQL.
+- `GameStateCoordinator` now publishes two gauges backing the first rule: `truholdem.hotstate.enabled` (the config
+  flag) and `truholdem.hotstate.active` (whether the store is actually wired and serving writes). Validated with
+  `promtool check rules` (23 rules). Full backend suite green.
+
 ### 🛡️ Hot-state resilience: graceful degradation + write-failure metric
 - A Redis **infrastructure** failure on a hot-state write (Redis unreachable / timed out → a Spring
   `DataAccessException`) no longer propagates into gameplay (which would 500 the player's action). `GameStateCoordinator`

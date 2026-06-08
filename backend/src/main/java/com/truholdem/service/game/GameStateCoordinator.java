@@ -15,6 +15,7 @@ import com.truholdem.repository.GameRepository;
 import com.truholdem.service.cluster.StaleOwnershipException;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 
 /**
@@ -56,6 +57,17 @@ public class GameStateCoordinator {
         this.hotStateWriteFailures = Counter.builder("truholdem.hotstate.write.failures")
                 .description("Redis hot-state writes that failed on an infrastructure error and fell back to "
                         + "PostgreSQL. A non-zero rate means the cluster hot-state is degraded — alert on it.")
+                .register(meterRegistry);
+        // Configured switch (app.game.hot-state-enabled) vs. actually-wired state. They diverge exactly in the
+        // class of bug that silently disabled hot-state in production: enabled=1 but active=0. Alert on that gap
+        // (it never false-fires when hot-state is intentionally off, since then enabled=0 too).
+        Gauge.builder("truholdem.hotstate.enabled", this,
+                        c -> c.appProperties.getGame().isHotStateEnabled() ? 1.0 : 0.0)
+                .description("1 if app.game.hot-state-enabled is set, else 0 (the intended configuration).")
+                .register(meterRegistry);
+        Gauge.builder("truholdem.hotstate.active", this, c -> c.isHotStateActive() ? 1.0 : 0.0)
+                .description("1 if Redis hot-state is actually wired and serving writes, else 0. If enabled=1 "
+                        + "but active=0, the hot-state beans failed to wire — Redis is silently bypassed.")
                 .register(meterRegistry);
     }
 
