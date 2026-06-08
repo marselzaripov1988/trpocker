@@ -259,7 +259,16 @@ where schema-relevant, docs + commit + push.
   re-run of the WS scaling **load test** to confirm no perf regression on the aggregate path. Roll back via the flag
   if any of these regress.
 
-### Phase G — Retire legacy
+### Phase G — Retire legacy  ·  DEFERRED (waiting on production burn-in)
+> **Decision:** hold Phase G until the aggregate engine has run as the production default for a burn-in period.
+> Deleting legacy is irreversible — it removes the one-line `app.game.engine=legacy` rollback — so it should only
+> happen after the live smoke + load test pass and the aggregate default has proven stable in an environment.
+> Footprint to remove when it's time: ~1000 LOC / ~40 KB of legacy imperative logic inside `PokerGameService`
+> (leaving a ~500-line orchestrator over the aggregate + mapper), `model/Deck.java` (~51 LOC, legacy-only),
+> the `GameEngine` enum, and ~3100 LOC of legacy-specific tests (most of `PokerGameServiceTest` + `GameRulesGolden
+> Test`). Also flip `application-test.properties` to `aggregate` then prune the now-legacy `@ActiveProfiles("test")`
+> assertions.
+
 - Delete the legacy engine code in `PokerGameService` (the imperative betting/showdown/pot logic and its
   helpers) and any now-dead orchestration branches; collapse the `app.game.engine` flag and `GameEngine` enum;
   remove `usesAggregateEngine()` branching so there is one path.
