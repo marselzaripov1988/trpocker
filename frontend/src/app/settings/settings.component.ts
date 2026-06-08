@@ -41,7 +41,7 @@ interface GameSettings {
             <span class="avatar-current-label">Your avatar</span>
           </div>
           <div class="avatar-choices">
-            <span class="setting-label">Pick a preset</span>
+            <span class="setting-label">Pick an avatar</span>
             <div class="avatar-presets" data-cy="avatar-presets">
               @for (preset of avatarPresets; track preset) {
                 <button
@@ -54,16 +54,6 @@ interface GameSettings {
                 >{{ preset }}</button>
               }
             </div>
-            <label class="avatar-url-label">
-              <span class="setting-label">…or an image URL</span>
-              <input
-                type="url"
-                [(ngModel)]="customAvatarUrl"
-                (input)="selectAvatar(customAvatarUrl)"
-                placeholder="https://example.com/me.png"
-                data-cy="avatar-url-input"
-              />
-            </label>
             <div class="avatar-actions">
               <button
                 type="button"
@@ -511,10 +501,6 @@ interface GameSettings {
     }
     .avatar-preset:hover { background: rgba(255, 255, 255, 0.16); }
     .avatar-preset.selected { border-color: #ffd700; background: rgba(255, 215, 0, 0.15); }
-    .avatar-url-label input {
-      width: 100%; padding: 8px 10px; border-radius: 8px; color: #fff;
-      background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15);
-    }
     .avatar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .btn-save-avatar {
       padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
@@ -536,7 +522,6 @@ export class SettingsComponent implements OnInit, OnDestroy {
   // Avatar editor
   readonly avatarPresets = ['🦊', '🐼', '🐲', '🦁', '🐯', '🐸', '🦅', '🐺', '🦈', '🐙', '🤠', '🥷', '🧙', '👑'];
   selectedAvatar = '';
-  customAvatarUrl = '';
   avatarSaving = false;
   avatarMessage = '';
 
@@ -590,9 +575,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     // Seed the avatar editor from the current user and keep it in sync.
     this.auth.currentUser$.pipe(takeUntil(this.destroy$)).subscribe(user => {
-      const avatar = user?.avatarUrl ?? '';
-      this.selectedAvatar = avatar;
-      this.customAvatarUrl = /^(https?:\/\/|data:)/i.test(avatar) ? avatar : '';
+      this.selectedAvatar = user?.avatarUrl ?? '';
     });
   }
 
