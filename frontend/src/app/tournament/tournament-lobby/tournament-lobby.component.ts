@@ -195,6 +195,33 @@ import { PyramidBuyUpPanelComponent } from '../pyramid-buy-up-panel/pyramid-buy-
                 </button>
               }
 
+              @if (isRegistered() && tournament()!.status === 'RUNNING' && isRebuyTournament()) {
+                <div class="rebuy-panel" data-cy="rebuy-panel">
+                  <span class="rebuy-info" data-cy="rebuy-used">
+                    🔁 Rebuys used: {{ myPlayer()?.rebuysUsed ?? 0 }}
+                  </span>
+                  <button
+                    class="btn-rebuy"
+                    (click)="rebuy()"
+                    [disabled]="isLoading()"
+                    data-cy="rebuy-btn"
+                  >
+                    🔁 Rebuy ({{ tournament()!.config.buyIn | number }})
+                  </button>
+                </div>
+              }
+
+              @if (isBountyTournament()) {
+                <div class="bounty-panel" data-cy="bounty-panel">
+                  <span>🎯 Bounty tournament — knock players out to win their bounties.</span>
+                  @if (isRegistered()) {
+                    <span class="bounty-info" data-cy="bounty-knockouts">
+                      Your knockouts: {{ myPlayer()?.knockouts ?? 0 }}
+                    </span>
+                  }
+                </div>
+              }
+
               @if (tournament()!.status === 'FINISHED') {
                 <div class="tournament-finished">
                   <p>🏁 This tournament has ended</p>
@@ -548,6 +575,34 @@ import { PyramidBuyUpPanelComponent } from '../pyramid-buy-up-panel/pyramid-buy-
       justify-content: space-between;
     }
 
+    .rebuy-panel, .bounty-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      flex-wrap: wrap;
+    }
+
+    .rebuy-info, .bounty-info { color: #94a3b8; font-weight: 600; }
+
+    .btn-rebuy {
+      padding: 0.5rem 1rem;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #fff;
+      border: none;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-rebuy:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-rebuy:not(:disabled):hover { transform: translateY(-1px); }
+
     .registered-badge {
       color: #34d399;
       font-weight: 600;
@@ -654,6 +709,9 @@ export class TournamentLobbyComponent implements OnInit, OnDestroy {
   readonly myPlayer = toSignal(this.store.myPlayer$, { initialValue: null });
   readonly isRegistering = toSignal(this.store.isRegistering$, { initialValue: false });
 
+  readonly isRebuyTournament = computed(() => this.tournament()?.type === 'REBUY');
+  readonly isBountyTournament = computed(() => this.tournament()?.type === 'BOUNTY');
+
   ngOnInit(): void {
     const tournamentId = this.route.snapshot.paramMap.get('id');
     if (tournamentId) {
@@ -683,6 +741,14 @@ export class TournamentLobbyComponent implements OnInit, OnDestroy {
     const tournament = this.tournament();
     if (tournament) {
       this.store.unregisterFromTournament(tournament.id);
+    }
+  }
+
+  /** Request a rebuy for the signed-in player (rebuy tournaments, while RUNNING). */
+  rebuy(): void {
+    const tournament = this.tournament();
+    if (tournament) {
+      this.store.requestRebuy(tournament.id);
     }
   }
 

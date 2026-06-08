@@ -121,6 +121,7 @@ describe('TournamentLobbyComponent', () => {
       'loadTournament',
       'registerForTournament',
       'unregisterFromTournament',
+      'requestRebuy',
       'subscribeTournamentUpdates'
     ], {
       tournamentLobbyVm$: vmSubject.asObservable(),
@@ -379,6 +380,38 @@ describe('TournamentLobbyComponent', () => {
   
   
   
+
+  describe('Rebuy', () => {
+    it('shows the rebuy button for a running rebuy tournament and requests a rebuy on click', () => {
+      const tournament = { ...createMockTournament({ status: 'RUNNING' }), type: 'REBUY' };
+      vmSubject.next(createMockViewModel({ tournament, isRegistered: true }));
+      myPlayerSubject.next(createMockPlayer({ id: 'user-1', rebuysUsed: 1 }));
+      fixture.detectChanges();
+
+      const rebuyBtn: HTMLButtonElement | null =
+        fixture.nativeElement.querySelector('[data-cy="rebuy-btn"]');
+      expect(rebuyBtn).toBeTruthy();
+
+      rebuyBtn!.click();
+      expect(mockStore.requestRebuy).toHaveBeenCalledWith(tournament.id);
+    });
+
+    it('hides the rebuy button for a non-rebuy (freezeout) tournament', () => {
+      const tournament = { ...createMockTournament({ status: 'RUNNING' }), type: 'FREEZEOUT' };
+      vmSubject.next(createMockViewModel({ tournament, isRegistered: true }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('[data-cy="rebuy-btn"]')).toBeNull();
+    });
+
+    it('shows the bounty panel for a bounty tournament', () => {
+      const tournament = { ...createMockTournament({ status: 'RUNNING' }), type: 'BOUNTY' };
+      vmSubject.next(createMockViewModel({ tournament, isRegistered: true }));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('[data-cy="bounty-panel"]')).toBeTruthy();
+    });
+  });
 
   describe('Registration', () => {
     it('should show register button when can register', () => {

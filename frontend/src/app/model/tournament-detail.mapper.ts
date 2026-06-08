@@ -106,6 +106,7 @@ function baseTournamentPlayer(
     handsWon: 0,
     biggestPot: 0,
     knockouts: 0,
+    rebuysUsed: 0,
     isEliminated: false,
     isBot: false,
     canAct() {
@@ -134,7 +135,8 @@ function mapPlayerEntry(entry: TournamentPlayerEntryApi): TournamentPlayer {
     finishPosition: entry.finishPosition ?? undefined,
     prizeMoney: entry.prizeWon ?? undefined,
     isEliminated: isEliminatedStatus(entry.status),
-    knockouts: entry.bountiesCollected ?? 0
+    knockouts: entry.bountiesCollected ?? 0,
+    rebuysUsed: entry.rebuysUsed ?? 0
   });
 }
 

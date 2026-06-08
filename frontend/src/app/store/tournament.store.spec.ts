@@ -792,6 +792,40 @@ describe('TournamentStore', () => {
       }));
     });
 
+    describe('requestRebuy', () => {
+      it('should post a rebuy for my player and reload the tournament', fakeAsync(() => {
+        store.setMyPlayer(createMockTournamentPlayer({ id: 'me', name: 'MyPlayer' }));
+
+        store.requestRebuy('test-id');
+        tick();
+
+        const rebuyReq = httpMock.expectOne(`${apiUrl}/test-id/rebuy`);
+        expect(rebuyReq.request.method).toBe('POST');
+        expect(rebuyReq.request.body).toEqual({ playerId: 'me' });
+        rebuyReq.flush({
+          playerId: 'me', playerName: 'MyPlayer', newChipCount: 1500,
+          rebuysUsed: 1, rebuysRemaining: 2, canRebuyAgain: true
+        });
+        tick();
+
+        const reload = httpMock.expectOne(`${apiUrl}/test-id`);
+        expect(reload.request.method).toBe('GET');
+        reload.flush(createMockTournamentDetailApi({ id: 'test-id' }));
+
+        flush();
+      }));
+
+      it('should not call the rebuy endpoint when there is no seated player', fakeAsync(() => {
+        store.setMyPlayer(null);
+
+        store.requestRebuy('test-id');
+        tick();
+
+        httpMock.expectNone(`${apiUrl}/test-id/rebuy`);
+        flush();
+      }));
+    });
+
     describe('loadTournament', () => {
       it('should load specific tournament by ID', fakeAsync(() => {
         store.loadTournament('test-id');

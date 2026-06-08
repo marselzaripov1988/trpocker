@@ -551,6 +551,35 @@ export class TournamentStore extends ComponentStore<TournamentStoreState> {
   );
 
 
+  /**
+   * Request a rebuy for the signed-in player in a rebuy tournament. The backend validates eligibility
+   * (within the rebuy deadline level and under the max-rebuys cap) and rejects with 400 otherwise. On success
+   * the tournament detail is reloaded so the player's refreshed chip stack and rebuy count are reflected.
+   */
+  readonly requestRebuy = this.effect<string>(tournamentId$ =>
+    tournamentId$.pipe(
+      tap(() => this.setLoading(true)),
+      withLatestFrom(this.myPlayer$),
+      switchMap(([tournamentId, myPlayer]) => {
+        if (!myPlayer) {
+          this.setLoading(false);
+          return EMPTY;
+        }
+
+        return this.http.post(
+          `${this.apiUrl}/${tournamentId}/rebuy`,
+          { playerId: myPlayer.id }
+        ).pipe(
+          tapResponse(
+            () => this.loadTournament(tournamentId),
+            (error: HttpErrorResponse) => this.handleError(error)
+          )
+        );
+      })
+    )
+  );
+
+
   readonly ensureTableHand = this.effect<{ tournamentId: string; tableId: string }>(params$ =>
     params$.pipe(
       switchMap(({ tournamentId, tableId }) =>

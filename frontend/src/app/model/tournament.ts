@@ -59,6 +59,8 @@ export interface TournamentPlayer extends Player {
   handsWon: number;
   biggestPot: number;
   knockouts: number;
+  /** Rebuys this player has used (rebuy tournaments). */
+  rebuysUsed?: number;
   isEliminated: boolean;
   eliminatedBy?: string;
   eliminatedAtLevel?: number;
