@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,13 +18,20 @@ import com.truholdem.model.Card;
 import com.truholdem.model.Game;
 
 @Configuration
+// Gated solely by the explicit feature switch. A previous @ConditionalOnBean(RedisConnectionFactory)
+// guard silently disabled hot-state in production: this @Configuration is processed during component
+// scan, before RedisAutoConfiguration registers the connection factory, so the guard never matched on a
+// real boot (it only matched in tests that declare RedisConnectionFactory as a user @Bean). The injected
+// RedisConnectionFactory below is always auto-configured because the redis starter is on the classpath.
 @ConditionalOnProperty(name = "app.game.hot-state-enabled", havingValue = "true")
-@ConditionalOnBean(RedisConnectionFactory.class)
 public class GameStateRedisConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(GameStateRedisConfig.class);
 
-    @Bean(name = "gameStateRedisTemplate")
+    // defaultCandidate = false: this is a specialized template for hot-state only. It must never satisfy a
+    // by-type RedisTemplate<String,String> injection elsewhere (it would collide with the auto-configured
+    // stringRedisTemplate); RedisGameStateStore pulls it via the explicit @Qualifier("gameStateRedisTemplate").
+    @Bean(name = "gameStateRedisTemplate", defaultCandidate = false)
     public RedisTemplate<String, String> gameStateRedisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
@@ -46,7 +52,11 @@ public class GameStateRedisConfig {
      * targeted mix-in), so client-facing responses still hide it and bidirectional {@code @JsonIgnore}
      * back-references are left untouched (avoiding serialization cycles).
      */
-    @Bean(name = "gameStateObjectMapper")
+    // defaultCandidate = false: a specialized hot-state mapper that re-exposes Game.deck/version. It must not
+    // satisfy a by-type ObjectMapper injection elsewhere (that would (a) hand other beans a deck-exposing
+    // mapper and (b) create a self-cycle when resolving this method's own `base` parameter). Hot-state pulls it
+    // via the explicit @Qualifier("gameStateObjectMapper"); everyone else keeps the primary application mapper.
+    @Bean(name = "gameStateObjectMapper", defaultCandidate = false)
     public ObjectMapper gameStateObjectMapper(ObjectMapper base) {
         ObjectMapper mapper = base.copy();
         mapper.addMixIn(Game.class, GameHotStateMixin.class);

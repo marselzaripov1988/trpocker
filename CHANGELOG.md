@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐞 Pre-prod fix: Redis hot-state was silently disabled in production
+- **Root cause:** `GameStateRedisConfig` and `RedisGameStateStore` carried
+  `@ConditionalOnProperty(app.game.hot-state-enabled=true)` **and** `@ConditionalOnBean(RedisConnectionFactory)`.
+  A user `@Component`/`@Configuration` is evaluated during component scan, *before* Spring Boot's
+  `RedisAutoConfiguration` registers `redisConnectionFactory`, so the `@ConditionalOnBean` guard never matched on
+  a real boot — the hot-state beans were skipped and `GameStateCoordinator.isHotStateActive()` was always
+  `false`. Net effect in production: **the `hot-state-enabled` flag did nothing**; Redis was never written, and
+  the entire Phase-2 *"Redis is authoritative live state during a hand"* design plus the Phase-5 cluster
+  failover/routing/fencing (all of which read shared hot-state) silently degraded to Postgres-only. A multi-node
+  cluster would not share in-progress game state. Tests masked it because they declare `RedisConnectionFactory`
+  as a *user* `@Bean` (registered early), so `@ConditionalOnBean` matched there but not in the packaged app.
+- **Fix:** dropped the `@ConditionalOnBean(RedisConnectionFactory)` guard — the explicit
+  `@ConditionalOnProperty` switch is the intended control, and the redis starter is always on the classpath, so
+  the factory is always auto-configured. Enabling the beans exposed a previously-hidden ambiguity (a second
+  `ObjectMapper`/`RedisTemplate<String,String>` in the context, including a self-cycle when resolving
+  `gameStateObjectMapper`'s own `base` parameter); marked the two specialized hot-state beans
+  `@Bean(defaultCandidate = false)` so they serve **only** the explicit `@Qualifier` injection in
+  `RedisGameStateStore` and never pollute by-type wiring elsewhere.
+- **Verified live** (docker profile, fresh Postgres + Redis): a dealt hand now writes
+  `truholdem:game:state:<id>` to Redis immediately, and the value carries the re-exposed `deck` (44 cards for a
+  4-handed pre-flop) and `version` — i.e. the Phase-2 deck/version hot-state serialization actually runs now.
+  Full backend suite green (1102, 0 failures) — no regression.
+- Also removed an illegal `spring.profiles.active=prod` line from `application-prod.properties` (a
+  profile-specific resource may not set it; Spring Boot 2.4+ fails fast — the `prod` profile could never boot).
+  Activate prod via `SPRING_PROFILES_ACTIVE=prod`.
+
 ### 🔧 Aggregate engine migration — Phase B: deterministic-deck showdown golden test
 - Added a package-private `PokerGame.useFixedDeck(List<Card>)` test seam (null in production → no behaviour
   change; `shuffleDeck()` deals from the fixed order when set). `PokerGameDeterministicShowdownTest` uses it to

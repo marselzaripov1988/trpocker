@@ -8,9 +8,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
@@ -23,8 +21,12 @@ import com.truholdem.service.cluster.StaleOwnershipException;
 import com.truholdem.service.cluster.TableOwnershipService;
 
 @Component
+// Gated solely by the explicit feature switch. A previous @ConditionalOnBean(RedisConnectionFactory)
+// guard silently disabled hot-state in production: this @Component is evaluated during component scan,
+// before Spring Boot's RedisAutoConfiguration registers the connection factory, so the guard never
+// matched on a real boot (it only matched in tests that declare RedisConnectionFactory as a user @Bean).
+// The redis starter is always on the classpath, so the factory is always auto-configured when needed.
 @ConditionalOnProperty(name = "app.game.hot-state-enabled", havingValue = "true")
-@ConditionalOnBean(RedisConnectionFactory.class)
 public class RedisGameStateStore {
 
     static final String KEY_PREFIX = "truholdem:game:state:";
