@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 📊 Grafana dashboard for the new reliability/money metrics
+- New auto-provisioned `docker/grafana/dashboards/reliability-money.json` ("TruHoldem - Reliability & Money",
+  uid `truholdem-reliability`), six rows over the metrics added above: **Hot-state** (enabled vs active status,
+  writes vs failures, fence rejections), **Cluster correctness** (forward requests/failures, takeovers, fence
+  rejections, optimistic-lock conflicts), **Realtime** (single-writer timeouts/rejections/dedup, active chains,
+  local WS sessions, the WS cluster published/received/forwarded bridge), **Persistence** (`gamePersistExecutor`
+  queue depth + active threads), **Wallet** (free deposit addresses by asset, withdrawals in flight, 1h failures),
+  and **Redis** (redis_exporter: up, memory, connected clients). Verified by booting Grafana 13 against the repo's
+  provisioning — the dashboard imports cleanly (26 panels) and all five dashboards load.
+
 ### 🐞 Fix broken `CacheDown` alert (Redis was never actually monitored)
 - The `redis` Prometheus scrape job targeted `redis:6379` — the RESP protocol port, not an HTTP `/metrics`
   endpoint — so `up{job="redis"}` was permanently 0 and the `CacheDown` alert was meaningless (and there was no
