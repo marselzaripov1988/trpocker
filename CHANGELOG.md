@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚨 Wire up Alertmanager (routing, grouping, inhibition)
+- Prometheus was evaluating the 35 alert rules but had no `alerting:` target and no Alertmanager — alerts fired
+  into the void (visible only in the Prometheus UI, notifying nobody). Added:
+  - **`monitoring/alertmanager.yml`** — routes by severity (`critical`/`page` → on-call/pager receiver,
+    `warning` → team-chat receiver), `group_by: [alertname, service]`, 4h `repeat_interval`, and three
+    **inhibition** rules: `CacheDown` (Redis down) suppresses its symptom alerts (hot-state / fencing / WS bridge /
+    forwarding) so one page replaces a storm; a `critical` suppresses the matching `warning`; and
+    `DepositAddressPoolCritical` suppresses `DepositAddressPoolLow` for the same asset. Receivers use placeholder
+    webhook URLs with commented Slack/PagerDuty/e-mail examples to fill in.
+  - **`monitoring/prometheus.yml`** — `alerting.alertmanagers` → `alertmanager:9093`.
+  - **`docker-compose.yml`** + **`docker-compose.pyramid-prod.yml`** — `alertmanager` service (pinned
+    `prom/alertmanager:v0.27.0`); also mounted the previously-missing `alerts.yml` into the pyramid-prod
+    Prometheus so its rules actually load.
+- Validated `amtool check-config` (route + 3 inhibit rules + 3 receivers) and `promtool check config` (35 rules),
+  both compose files (`config --quiet`), and booted Prometheus + Alertmanager live — Prometheus discovers the
+  Alertmanager (`activeAlertmanagers: http://alertmanager:9093/api/v2/alerts`, 0 dropped) and AM reports healthy.
+
 ### 📊 Grafana dashboard for the new reliability/money metrics
 - New auto-provisioned `docker/grafana/dashboards/reliability-money.json` ("TruHoldem - Reliability & Money",
   uid `truholdem-reliability`), six rows over the metrics added above: **Hot-state** (enabled vs active status,

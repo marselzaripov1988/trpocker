@@ -123,7 +123,22 @@ services:
     networks:
       - truholdem-network
 
-  
+  # Routes the alerts Prometheus fires to receivers (Slack/PagerDuty/email), with grouping + inhibition.
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: truholdem-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - truholdem-network
+
+
   grafana:
     image: grafana/grafana:latest
     container_name: truholdem-grafana
@@ -192,6 +207,7 @@ volumes:
   postgres_data:
   redis_data:
   prometheus_data:
+  alertmanager_data:
   grafana_data:
   jaeger_data:
 

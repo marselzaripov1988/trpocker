@@ -9,8 +9,12 @@ global:
 rule_files:
   - /etc/prometheus/alerts.yml
 
-
-
+# Send fired alerts to Alertmanager (routing / grouping / inhibition / notifications). Without this, rules fire
+# in Prometheus but notify nobody.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
 
 
 
