@@ -42,16 +42,31 @@ npm run cap:sync
 npm run cap:ios   # opens Xcode
 ```
 
-## Desktop (Tauri)
+## Desktop — Windows / macOS / Linux (Tauri)
 
-Requires the [Rust toolchain](https://www.rust-lang.org/tools/install).
+The Tauri project is already scaffolded in **`src-tauri/`** (config, Rust entry, default icons, capabilities) and
+is committed — only `src-tauri/target` (Rust build output) is git-ignored. It bundles the **`native` Angular build**
+into a small native binary using the OS WebView (WebView2 on Windows).
+
+**Build prerequisites** (on the build machine — Tauri can only build for the host OS):
+- [Rust toolchain](https://www.rust-lang.org/tools/install) (`cargo`)
+- **Windows:** Microsoft C++ Build Tools (MSVC) + WebView2 runtime (preinstalled on Win10/11)
+- macOS: Xcode command-line tools · Linux: `webkit2gtk` + build essentials
 
 ```bash
 cd frontend
-npm i -D @tauri-apps/cli
-npx tauri init   # frontendDist = dist/texas-holdem-frontend, devUrl = http://localhost:4200
-npm run build:native && npx tauri build   # Win/macOS/Linux bundles
+npm run tauri:dev      # run the desktop app against the live dev server (http://localhost:4200)
+npm run tauri:build    # produce the installer for the host OS
 ```
+
+On **Windows**, `tauri:build` outputs to `src-tauri/target/release/bundle/`:
+- `nsis/TruHoldem_2.0.0_x64-setup.exe` (NSIS installer)
+- `msi/TruHoldem_2.0.0_x64_en-US.msi` (WiX installer)
+- plus the raw `TruHoldem.exe`.
+
+> `beforeBuildCommand` runs `npm run build:native`, so the web app is rebuilt with absolute API/WS URLs before
+> bundling. Set `API_BASE` in `environment.native.ts` (or replace the file in CI) to the deployed backend first.
+> For a code-signed installer, configure a signing certificate in `tauri.conf.json` (`bundle.windows.certificateThumbprint`).
 
 ## Gotchas
 
