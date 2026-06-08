@@ -48,8 +48,9 @@ import { TournamentListItem, TournamentStatus } from '../../model/tournament';
 
         <div class="info-item">
           <span class="info-label">Players</span>
-          <span class="info-value">
+          <span class="info-value" data-cy="tournament-fill">
             👥 {{ tournament().registeredCount }}/{{ tournament().maxPlayers }}
+            <span class="fill-percent">({{ fillPercentage() }}%)</span>
           </span>
         </div>
 
@@ -290,6 +291,11 @@ import { TournamentListItem, TournamentStatus } from '../../model/tournament';
 
     .fill-progress.almost-full {
       background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .fill-percent {
+      opacity: 0.75;
+      font-size: 0.85em;
     }
   `]
 })

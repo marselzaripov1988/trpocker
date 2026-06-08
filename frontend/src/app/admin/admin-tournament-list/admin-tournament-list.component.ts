@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AdminTournamentService } from '../services/admin-tournament.service';
 import { TournamentSummaryApi } from '../../model/tournament-list.mapper';
+import { TournamentFillBarComponent } from '../../shared/tournament-fill-bar/tournament-fill-bar.component';
 
 @Component({
   selector: 'app-admin-tournament-list',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, TournamentFillBarComponent],
   template: `
     <div class="admin-page" data-cy="admin-tournament-list">
       <header class="admin-header">
@@ -49,7 +50,13 @@ import { TournamentSummaryApi } from '../../model/tournament-list.mapper';
                     <td>{{ t.name }}</td>
                     <td><span class="badge">{{ t.type ?? '—' }}</span></td>
                     <td><span class="badge status">{{ t.status }}</span></td>
-                    <td>{{ t.registeredPlayers }} / {{ t.maxPlayers }}</td>
+                    <td style="min-width: 160px;">
+                      <app-tournament-fill-bar
+                        [registered]="t.registeredPlayers"
+                        [max]="t.maxPlayers"
+                        [compact]="true"
+                      />
+                    </td>
                     <td>{{ t.buyIn }}</td>
                     <td>
                       <a [routerLink]="['/admin/tournaments', t.id]" class="btn-link">Manage →</a>

@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { AdminTournamentService } from '../services/admin-tournament.service';
 import { TournamentDetailApi } from '../../model/tournament-detail.mapper';
+import { TournamentFillBarComponent } from '../../shared/tournament-fill-bar/tournament-fill-bar.component';
 
 @Component({
   selector: 'app-admin-tournament-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, TournamentFillBarComponent],
   template: `
     <div class="admin-page" data-cy="admin-tournament-detail">
       <header class="admin-header">
@@ -21,6 +22,12 @@ import { TournamentDetailApi } from '../../model/tournament-detail.mapper';
             {{ detail()!.registeredPlayers }} / {{ detail()!.maxPlayers }} registered ·
             {{ detail()!.playersRemaining }} remaining
           </p>
+          <div class="fill-bar-wrap" style="max-width: 320px; margin-top: 4px;">
+            <app-tournament-fill-bar
+              [registered]="detail()!.registeredPlayers"
+              [max]="detail()!.maxPlayers"
+            />
+          </div>
         }
       </header>
 
