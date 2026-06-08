@@ -272,12 +272,16 @@ period / first break) — it is **not** a cash-game mechanic.
       seated + no live hand). Verified by `CashGameWalletServiceIT` (4 cases) + `cash.service.spec` (endpoint wiring).
 
 ## TODO — UI / table polish
-- [ ] **Port Tier-1 table animations to `tournament-table`** — the winner glow + 🏆 badge, the per-seat
-      countdown bar (`.seat-timer`), and bet-as-chip pop were added to `game-table` only. `tournament-table`
-      renders its own seats inline (the two tables don't share a seat component), so mirror the same markup +
-      SCSS there, gated by the animations toggle + `prefers-reduced-motion`. Consider extracting a shared
-      `seat`/`player-plate` component to avoid the duplication.
+- [ ] **Port the table effects (Tier-1/2/3) to `tournament-table`** — winner glow + 🏆 badge, per-seat
+      countdown bar (`.seat-timer`), bet-as-chip pop, deal-from-centre, board flip, dealer drop, avatar pulse
+      ring, fold-to-muck, all-in flash/shove, felt + vignette were added to `game-table` only.
+      `tournament-table` renders its own seats inline (the two tables don't share a seat component), so mirror
+      the markup + SCSS there, gated by the animations toggle + `prefers-reduced-motion`. Best done by first
+      extracting a shared `seat`/`player-plate` component so the effects live in one place.
 - [x] **Tier-2 (done)** — `game-table`: cards deal in from table centre, the board reveals per street
       (flop/turn/river) with a staggered flip, and the dealer button animates to its new seat each hand.
-- [ ] **Tier-3 (optional)** — fold → cards slide to the muck; all-in → stack shove; pulse ring around the
-      active player's avatar; felt texture / vignette on the table background.
+- [x] **Tier-3 (done)** — `game-table`: fold → cards slide to the muck; all-in → plate flash + bet-chip shove;
+      pulsing gold ring around the active player's avatar; richer felt + edge vignette on the table background.
+- [ ] **Tier-3 extras (optional)** — pot-push (chips travel to the winning seat on showdown); count-up of the
+      pot / winner-stack numbers; floating action labels ("Raise $X / Check / Fold") off `lastAction`; confetti
+      on a final-table win.
