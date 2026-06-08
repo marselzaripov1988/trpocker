@@ -156,6 +156,15 @@ export const routes: Routes = [
     title: 'Admin — Federated Pyramids',
   },
   {
+    path: 'admin/cash',
+    loadComponent: () =>
+      import('./admin/admin-cash/admin-cash.component').then(
+        (m) => m.AdminCashComponent
+      ),
+    canActivate: [adminGuard],
+    title: 'Admin — Cash tables',
+  },
+  {
     path: 'federations/:id',
     loadComponent: () =>
       import('./federation/federation-view/federation-view.component').then(
