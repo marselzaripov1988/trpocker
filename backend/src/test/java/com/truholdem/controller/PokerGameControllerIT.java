@@ -340,7 +340,7 @@ class PokerGameControllerIT {
             request.setAmount(0);
 
             testGame.getPlayers().get(0).setFolded(true);
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.FOLD), eq(0)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.FOLD), eq(0)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -358,7 +358,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.CHECK);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.CHECK), eq(0)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.CHECK), eq(0)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -375,7 +375,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.CALL);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.CALL), eq(0)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.CALL), eq(0)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -394,7 +394,7 @@ class PokerGameControllerIT {
 
             testGame.setCurrentBet(50);
             testGame.setCurrentPot(80);
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.BET), eq(50)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.BET), eq(50)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -414,7 +414,7 @@ class PokerGameControllerIT {
             request.setAmount(100);
 
             testGame.setCurrentBet(100);
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.RAISE), eq(100)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.RAISE), eq(100)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -432,7 +432,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.CHECK);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.CHECK), eq(0)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.CHECK), eq(0)))
                     .thenThrow(new IllegalArgumentException("Cannot check when facing a bet"));
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -449,7 +449,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.FOLD);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.FOLD), eq(0)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.FOLD), eq(0)))
                     .thenThrow(new IllegalStateException("It's not this player's turn"));
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -467,7 +467,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.FOLD);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(nonExistentGameId), eq(playerId), any(), anyInt()))
+            when(pokerGameService.playerAct(eq(nonExistentGameId), any(), eq(playerId), any(), anyInt()))
                     .thenThrow(new NoSuchElementException("Game not found"));
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", nonExistentGameId, playerId)
@@ -485,7 +485,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.FOLD);
             request.setAmount(0);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(nonExistentPlayerId), any(), anyInt()))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(nonExistentPlayerId), any(), anyInt()))
                     .thenThrow(new NoSuchElementException("Player not found"));
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, nonExistentPlayerId)
@@ -532,7 +532,7 @@ class PokerGameControllerIT {
             request.setAction(PlayerAction.BET);
             request.setAmount(5000);
 
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.BET), eq(5000)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.BET), eq(5000)))
                     .thenThrow(new IllegalArgumentException("Bet amount exceeds available chips"));
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)
@@ -551,7 +551,7 @@ class PokerGameControllerIT {
 
             testGame.getPlayers().get(0).setAllIn(true);
             testGame.getPlayers().get(0).setChips(0);
-            when(pokerGameService.playerAct(eq(gameId), eq(playerId), eq(PlayerAction.BET), eq(980)))
+            when(pokerGameService.playerAct(eq(gameId), any(), eq(playerId), eq(PlayerAction.BET), eq(980)))
                     .thenReturn(testGame);
 
             mockMvc.perform(post(BASE_URL + "/{gameId}/player/{playerId}/action", gameId, playerId)

@@ -1,9 +1,13 @@
 package com.truholdem.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.truholdem.config.AppProperties;
 import com.truholdem.config.TestSecurityConfig;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import com.truholdem.dto.*;
 import com.truholdem.model.*;
+import com.truholdem.service.GameAuthorizationService;
+import com.truholdem.service.HoleCardSanitizer;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.TournamentTableGameService;
 import com.truholdem.exception.ResourceNotFoundException;
@@ -34,10 +38,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(TournamentController.class)
 @ActiveProfiles("test")
 @Import(TestSecurityConfig.class)
+@EnableConfigurationProperties(AppProperties.class)
 @DisplayName("TournamentController Integration Tests")
 class TournamentControllerIT {
 
-    private static final String BASE_URL = "/api/tournaments";
+    // The controller is @ApiV1Config, so ApiVersionConfig prefixes it with "/v1" -> "/v1/tournaments" (visible in the
+    // @WebMvcTest slice). MockMvc does NOT apply server.servlet.context-path (=/api). The old "/api/tournaments"
+    // matched neither, so every request fell through to a NoResourceFoundException -> 500.
+    private static final String BASE_URL = "/v1/tournaments";
 
     @Autowired
     private MockMvc mockMvc;
@@ -50,6 +58,17 @@ class TournamentControllerIT {
 
     @MockitoBean
     private TournamentTableGameService tableGameService;
+
+    // The @WebMvcTest slice only loads the web layer, so every TournamentController constructor dependency must be
+    // mocked or the context fails to start (which previously cascaded into "context failure threshold exceeded"
+    // errors on all 31 tests). AppProperties is NOT mocked — it is provided as a real, properties-bound bean via
+    // @EnableConfigurationProperties so the auto-detected JwtAuthenticationFilter (which reads app.jwt.* in its
+    // constructor) can start.
+    @MockitoBean
+    private HoleCardSanitizer holeCardSanitizer;
+
+    @MockitoBean
+    private GameAuthorizationService authorizationService;
 
     private Tournament testTournament;
     private UUID tournamentId;
@@ -98,6 +117,8 @@ class TournamentControllerIT {
                 "Test Tournament", 100, 100);
             
             when(tournamentService.createTournament(any())).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(post(BASE_URL)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -118,6 +139,8 @@ class TournamentControllerIT {
                 "Quick SNG", 50);
             
             when(tournamentService.createTournament(any())).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(post(BASE_URL)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -133,6 +156,8 @@ class TournamentControllerIT {
                 "Rebuy Madness", 50, 200);
             
             when(tournamentService.createTournament(any())).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(post(BASE_URL)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -340,6 +365,8 @@ class TournamentControllerIT {
                 playerId, "TestPlayer");
             
             when(tournamentService.getTournament(tournamentId)).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(post(BASE_URL + "/{id}/register", tournamentId)
                     .contentType(MediaType.APPLICATION_JSON)
@@ -378,7 +405,7 @@ class TournamentControllerIT {
             mockMvc.perform(post(BASE_URL + "/{id}/register", tournamentId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
         }
 
         @Test
@@ -397,7 +424,7 @@ class TournamentControllerIT {
                 .when(tournamentService).unregisterPlayer(any(), any());
 
             mockMvc.perform(delete(BASE_URL + "/{id}/register/{playerId}", tournamentId, playerId))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
         }
     }
 
@@ -411,6 +438,8 @@ class TournamentControllerIT {
         @DisplayName("Should start tournament - returns 200")
         void startTournament_ValidRequest_Returns200() throws Exception {
             when(tournamentService.getTournament(tournamentId)).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(post(BASE_URL + "/{id}/start", tournamentId))
                 .andExpect(status().isOk())
@@ -426,7 +455,7 @@ class TournamentControllerIT {
                 .when(tournamentService).startTournament(tournamentId);
 
             mockMvc.perform(post(BASE_URL + "/{id}/start", tournamentId))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
         }
 
         @Test
@@ -436,7 +465,7 @@ class TournamentControllerIT {
                 .when(tournamentService).startTournament(tournamentId);
 
             mockMvc.perform(post(BASE_URL + "/{id}/start", tournamentId))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
         }
     }
 
@@ -528,6 +557,10 @@ class TournamentControllerIT {
             UUID gameId = UUID.randomUUID();
             game.setId(gameId);
             when(tableGameService.getOrStartTableHand(tournamentId, tableId)).thenReturn(game);
+            // The controller returns the viewer-aware sanitized projection; HoleCardSanitizer is mocked, so stub it
+            // to produce a JSON body carrying the game id.
+            when(holeCardSanitizer.sanitize(any(), any()))
+                .thenReturn(objectMapper.createObjectNode().put("id", gameId.toString()));
 
             mockMvc.perform(post(BASE_URL + "/{id}/tables/{tableId}/hand", tournamentId, tableId))
                 .andExpect(status().isOk())
@@ -554,6 +587,8 @@ class TournamentControllerIT {
         @DisplayName("Should get blind info - returns 200")
         void getBlindInfo_ValidTournament_Returns200() throws Exception {
             when(tournamentService.getTournament(tournamentId)).thenReturn(testTournament);
+            when(tournamentService.getTournamentDetail(any()))
+                .thenReturn(TournamentDetailResponse.from(testTournament));
 
             mockMvc.perform(get(BASE_URL + "/{id}/blinds", tournamentId))
                 .andExpect(status().isOk())
@@ -598,7 +633,7 @@ class TournamentControllerIT {
             mockMvc.perform(post(BASE_URL + "/{id}/rebuy", tournamentId)
                     .contentType(MediaType.APPLICATION_JSON)
                     .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
         }
 
         @Test
@@ -622,7 +657,7 @@ class TournamentControllerIT {
         when(reg.getCurrentChips()).thenReturn(chips);
         when(reg.getStatus()).thenReturn(RegistrationStatus.PLAYING);
         when(reg.getFinishPosition()).thenReturn(null);
-        when(reg.getPrizeWon()).thenReturn(null);
+        when(reg.getPrizeWon()).thenReturn(0);
         when(reg.getRebuysUsed()).thenReturn(0);
         when(reg.getAddOnsUsed()).thenReturn(0);
         when(reg.getBountiesCollected()).thenReturn(0);
