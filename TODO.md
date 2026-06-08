@@ -249,3 +249,23 @@ shard and in the final; mechanics first, money later.
 - [ ] On-chain/AML screening (Chainalysis/Elliptic) on the deposit + withdrawal paths.
 - [ ] Per-coordinator metrics (broadcast latency, reconcile lag, pending-confirmations gauge).
 - [ ] Decide on 4-eyes (2-of-N moderator approval) — intentionally NOT done; revisit if compliance requires.
+
+## TODO — tournament add-on (+ cash top-up)
+Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
+`requestRebuy` effect + lobby "Rebuy" button). **Add-on is modelled but not wired**: `Tournament.addOnAmount` /
+`TournamentRegistration.getAddOnsUsed()` / `getTotalAddOns()` feed the prize-pool maths and the builder has
+`.addOn(amount)`, but there is **no endpoint and no service method**, so a player cannot actually take one.
+Add-on is a tournament-only concept (a one-time extra-chip purchase, usually offered at the end of the rebuy
+period / first break) — it is **not** a cash-game mechanic.
+- [ ] **Backend** — `TournamentService.processAddOn(tournamentId, playerId)`: validate it's an add-on-enabled
+      tournament + the add-on window is open + not already used; grant `addOnAmount` chips, increment
+      `addOnsUsed`. Mirror `processRebuy` (IllegalState → 409, ResourceNotFound → 404).
+- [ ] **REST** — `POST /v1/tournaments/{id}/add-on` (`AddOnRequest{playerId}` → `AddOnResponse` with
+      `newChipCount` / `addOnsUsed`), `@WebMvcTest` coverage in `TournamentControllerIT`.
+- [ ] **Frontend** — `TournamentStore.requestAddOn` effect + an "Add-on" button/info in the tournament lobby
+      (only when add-on-enabled + window open), by exact analogy with the rebuy slice. Surface `addOnsUsed`
+      on `TournamentPlayer` (the leaderboard entry already carries it).
+- [ ] **Cash top-up (separate, also missing)** — the cash analog is *top-up* (re-buy chips up to the max
+      buy-in between hands), NOT add-on. Today cash only has `/sit` (buy-in) + `/leave` (cash-out). If wanted:
+      `CashGameWalletService.topUp` (debit wallet, raise `CashSeat` stack up to maxBuyIn, ledger `CASH_BUYIN`,
+      apply between hands only) + `POST /cash/tables/{id}/top-up` + a cash-table "Add chips" button.
