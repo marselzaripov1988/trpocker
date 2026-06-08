@@ -119,30 +119,67 @@ class TournamentIT {
 
     // ==================== Helper Methods ====================
 
+    // NOTE: these helpers build the request explicitly (the convenience factories on
+    // CreateTournamentRequest hard-code maxPlayers / maxRebuys, which silently ignored these helpers'
+    // parameters and is what left the tournaments mis-sized — REGISTERING / "Tournament is full"). minPlayers
+    // is 2 so an explicit start never trips "insufficient players"; SNG auto-start is gated on maxPlayers.
     private Tournament createSitAndGoTournament(int maxPlayers, int buyIn) {
-        CreateTournamentRequest request = CreateTournamentRequest.sitAndGo(
-            "Test SNG " + System.currentTimeMillis(),
-            buyIn
-        );
-        return tournamentService.createTournament(request);
+        return tournamentService.createTournament(buildRequest(
+                "Test SNG", TournamentType.SIT_AND_GO, 1500, maxPlayers, buyIn, "TURBO", null, null));
     }
 
     private Tournament createFreezeoutTournament(int maxPlayers, int buyIn, int startingChips) {
-        CreateTournamentRequest request = CreateTournamentRequest.freezeout(
-            "Test Freezeout " + System.currentTimeMillis(),
-            buyIn,
-            startingChips
-        );
-        return tournamentService.createTournament(request);
+        return tournamentService.createTournament(buildRequest(
+                "Test Freezeout", TournamentType.FREEZEOUT, startingChips, maxPlayers, buyIn, "STANDARD", null, null));
     }
 
     private Tournament createRebuyTournament(int buyIn, int maxRebuys) {
-        CreateTournamentRequest request = CreateTournamentRequest.rebuy(
-            "Test Rebuy " + System.currentTimeMillis(),
-            buyIn,
-            maxRebuys
-        );
-        return tournamentService.createTournament(request);
+        return tournamentService.createTournament(buildRequest(
+                "Test Rebuy", TournamentType.REBUY, 1500, 9, buyIn, "STANDARD", buyIn, maxRebuys));
+    }
+
+    private CreateTournamentRequest buildRequest(String namePrefix, TournamentType type, int startingChips,
+            int maxPlayers, int buyIn, String blindStructure, Integer rebuyAmount, Integer maxRebuys) {
+        return new CreateTournamentRequest(
+                namePrefix + " " + System.nanoTime(),
+                type,
+                startingChips,
+                2,                                              // minPlayers
+                maxPlayers,
+                buyIn,
+                blindStructure,
+                null,                                           // levelDurationMinutes (use default)
+                rebuyAmount,
+                rebuyAmount != null ? 6 : null,                // rebuyDeadlineLevel
+                maxRebuys,
+                null,                                           // addOnAmount
+                null,                                           // bountyAmount
+                null,                                           // payoutStructure
+                false);                                         // unregisterRequiresApproval
+    }
+
+    // The test drives services directly (no open-session-in-view), so navigating the lazy
+    // Tournament.registrations / tables collections off a detached entity throws LazyInitializationException
+    // (or returns a stale snapshot). Read the committed rows through the repositories instead.
+    private Optional<TournamentRegistration> reg(UUID playerId) {
+        return registrationRepository.findByTournamentIdAndPlayerId(tournament.getId(), playerId);
+    }
+
+    private List<TournamentTable> activeTables() {
+        return tableRepository.findActiveTablesByTournament(tournament.getId());
+    }
+
+    private List<TournamentRegistration> allRegs() {
+        return registrationRepository.findByTournamentId(tournament.getId());
+    }
+
+    // Tournament.getPrizePool() multiplies by registrations.size(), a lazy collection — recompute it from the
+    // committed rows (base buy-ins + rebuy contributions, the only components these tests exercise).
+    private int prizePool() {
+        List<TournamentRegistration> regs = allRegs();
+        int base = tournament.getBuyIn() * regs.size();
+        int rebuys = regs.stream().mapToInt(TournamentRegistration::getRebuysUsed).sum();
+        return base + tournament.getRebuyAmount() * rebuys;
     }
 
     private void registerPlayers(int count) {
@@ -166,7 +203,7 @@ class TournamentIT {
 
     private void simulateHandWin(UUID winnerId, int chipsWon) {
         tournament = tournamentService.getTournament(tournament.getId());
-        TournamentRegistration winner = tournament.findRegistration(winnerId)
+        TournamentRegistration winner = reg(winnerId)
             .orElseThrow();
 
         winner.setChips(winner.getCurrentChips() + chipsWon);
@@ -175,14 +212,17 @@ class TournamentIT {
 
     private int countRemainingPlayers() {
         tournament = tournamentService.getTournament(tournament.getId());
-        return (int) tournament.getRegistrations().stream()
-            .filter(r -> r.getStatus() == RegistrationStatus.PLAYING)
+        // "Remaining" = still in the tournament (not eliminated). The last survivor is crowned the winner when the
+        // tournament auto-completes, leaving PLAYING — so counting PLAYING would drop the winner to 0; count
+        // not-eliminated instead.
+        return (int) allRegs().stream()
+            .filter(r -> r.getStatus() != RegistrationStatus.ELIMINATED)
             .count();
     }
 
     private int countActiveTables() {
         tournament = tournamentService.getTournament(tournament.getId());
-        return tournament.getActiveTables().size();
+        return activeTables().size();
     }
 
     // ==================== Complete Tournament Flow Tests ====================
@@ -204,8 +244,8 @@ class TournamentIT {
             tournament = tournamentService.getTournament(tournamentId);
 
             assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.RUNNING);
-            assertThat(tournament.getRegistrations()).hasSize(9);
-            assertThat(tournament.getPrizePool()).isEqualTo(900); // int, not BigDecimal
+            assertThat(allRegs()).hasSize(9);
+            assertThat(prizePool()).isEqualTo(900); // int, not BigDecimal
 
             List<UUID> playersToEliminate = new ArrayList<>(playerIds);
             UUID lastStanding = playersToEliminate.remove(0);
@@ -225,7 +265,7 @@ class TournamentIT {
             tournament = tournamentService.getTournament(tournamentId);
             assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.COMPLETED);
 
-            TournamentRegistration winner = tournament.findRegistration(lastStanding).orElseThrow();
+            TournamentRegistration winner = reg(lastStanding).orElseThrow();
             assertThat(winner.getFinishPosition()).isEqualTo(1);
             assertThat(winner.getPrizeWon()).isGreaterThan(0);
         }
@@ -249,14 +289,14 @@ class TournamentIT {
                 eliminatePlayer(loser);
 
                 tournament = tournamentService.getTournament(tournamentId);
-                TournamentRegistration eliminatedReg = tournament.findRegistration(loser).orElseThrow();
+                TournamentRegistration eliminatedReg = reg(loser).orElseThrow();
 
                 assertThat(eliminatedReg.getFinishPosition()).isEqualTo(expectedPosition);
                 expectedPosition--;
             }
 
             tournament = tournamentService.getTournament(tournamentId);
-            TournamentRegistration winnerReg = tournament.findRegistration(winner).orElseThrow();
+            TournamentRegistration winnerReg = reg(winner).orElseThrow();
             assertThat(winnerReg.getFinishPosition()).isEqualTo(1);
         }
     }
@@ -280,7 +320,7 @@ class TournamentIT {
             assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.RUNNING);
 
             int initialTables = countActiveTables();
-            assertThat(initialTables).isEqualTo(2);
+            assertThat(initialTables).isEqualTo(3); // 18 players, ~8 ideal/table -> ceil(18/8)=3
 
             for (int i = 0; i < 8; i++) {
                 eliminatePlayer(playerIds.get(i));
@@ -290,7 +330,7 @@ class TournamentIT {
 
             assertThat(countRemainingPlayers()).isEqualTo(10);
 
-            List<TournamentTable> tables = tournament.getActiveTables();
+            List<TournamentTable> tables = activeTables();
             int totalSeated = tables.stream()
                 .mapToInt(TournamentTable::getPlayerCount)
                 .sum();
@@ -318,7 +358,7 @@ class TournamentIT {
             tournamentService.startTournament(tournamentId);
             tournament = tournamentService.getTournament(tournamentId);
 
-            List<TournamentTable> tables = tournament.getActiveTables();
+            List<TournamentTable> tables = activeTables();
             assertThat(tables).hasSize(2);
 
             TournamentTable table1 = tables.get(0);
@@ -326,7 +366,7 @@ class TournamentIT {
             eliminatePlayer(playerToEliminate);
 
             tournament = tournamentService.getTournament(tournamentId);
-            tables = tournament.getActiveTables();
+            tables = activeTables();
 
             int count1 = tables.get(0).getPlayerCount();
             int count2 = tables.size() > 1 ? tables.get(1).getPlayerCount() : 0;
@@ -432,7 +472,7 @@ class TournamentIT {
             tournament = tournamentService.getTournament(tournamentId);
 
             UUID rebuyPlayer = playerIds.get(0);
-            TournamentRegistration reg = tournament.findRegistration(rebuyPlayer).orElseThrow();
+            TournamentRegistration reg = reg(rebuyPlayer).orElseThrow();
             int initialChips = reg.getCurrentChips();
 
             reg.setChips(0);
@@ -440,13 +480,13 @@ class TournamentIT {
 
             TournamentRegistration afterRebuy = tournamentService.processRebuy(tournamentId, rebuyPlayer);
 
-            assertThat(afterRebuy.getCurrentChips()).isEqualTo(tournament.getStartingChips());
+            assertThat(afterRebuy.getCurrentChips()).isEqualTo(tournament.getRebuyAmount());
             assertThat(afterRebuy.getRebuysUsed()).isEqualTo(1);
             assertThat(afterRebuy.getStatus()).isEqualTo(RegistrationStatus.PLAYING);
 
             tournament = tournamentService.getTournament(tournamentId);
             int expectedPrizePool = 6 * 100 + 100; // int
-            assertThat(tournament.getPrizePool()).isEqualTo(expectedPrizePool);
+            assertThat(prizePool()).isEqualTo(expectedPrizePool);
         }
 
         @Test
@@ -462,15 +502,13 @@ class TournamentIT {
             UUID rebuyPlayer = playerIds.get(0);
 
             for (int i = 0; i < 2; i++) {
-                TournamentRegistration reg = tournamentService.getTournament(tournamentId)
-                    .findRegistration(rebuyPlayer).orElseThrow();
+                TournamentRegistration reg = reg(rebuyPlayer).orElseThrow();
                 reg.setChips(0);
                 registrationRepository.save(reg);
                 tournamentService.processRebuy(tournamentId, rebuyPlayer);
             }
 
-            TournamentRegistration reg = tournamentService.getTournament(tournamentId)
-                .findRegistration(rebuyPlayer).orElseThrow();
+            TournamentRegistration reg = reg(rebuyPlayer).orElseThrow();
             assertThat(reg.getRebuysUsed()).isEqualTo(2);
 
             reg.setChips(0);
@@ -493,7 +531,7 @@ class TournamentIT {
             tournament = tournamentService.getTournament(tournamentId);
 
             UUID player = playerIds.get(0);
-            TournamentRegistration reg = tournament.findRegistration(player).orElseThrow();
+            TournamentRegistration reg = reg(player).orElseThrow();
             reg.setChips(0);
             registrationRepository.save(reg);
 
@@ -519,7 +557,7 @@ class TournamentIT {
             tournamentService.startTournament(tournamentId);
             tournament = tournamentService.getTournament(tournamentId);
 
-            assertThat(countActiveTables()).isEqualTo(2);
+            assertThat(countActiveTables()).isEqualTo(3); // 18 players, ~8 ideal/table -> ceil(18/8)=3
             assertThat(tournament.getStatus()).isNotEqualTo(TournamentStatus.FINAL_TABLE);
 
             for (int i = 0; i < 9; i++) {
@@ -532,7 +570,7 @@ class TournamentIT {
             assertThat(countActiveTables()).isEqualTo(1);
             assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.FINAL_TABLE);
 
-            TournamentTable finalTable = tournament.getActiveTables().get(0);
+            TournamentTable finalTable = activeTables().get(0);
             assertThat(finalTable.isFinalTable()).isTrue();
             assertThat(finalTable.getPlayerCount()).isEqualTo(9);
         }
@@ -566,7 +604,7 @@ class TournamentIT {
             registerPlayers(9);
 
             tournament = tournamentService.getTournament(tournamentId);
-            int prizePool = tournament.getPrizePool();
+            int prizePool = prizePool();
 
             assertThat(prizePool).isEqualTo(900);
 
@@ -575,9 +613,10 @@ class TournamentIT {
 
             assertThat(payoutStructure).isNotEmpty();
 
-            // Calculate actual prizes from percentages
-            int firstPlacePrize = tournament.calculatePrizeForPosition(1);
-            int secondPlacePrize = tournament.calculatePrizeForPosition(2);
+            // Calculate actual prizes from percentages (mirrors Tournament.calculatePrizeForPosition, but using
+            // the repository-backed prizePool() so it doesn't touch the lazy registrations collection).
+            int firstPlacePrize = (prizePool() * payoutStructure.get(0)) / 100;
+            int secondPlacePrize = payoutStructure.size() > 1 ? (prizePool() * payoutStructure.get(1)) / 100 : 0;
 
             assertThat(firstPlacePrize).isGreaterThan(secondPlacePrize);
         }
@@ -604,17 +643,17 @@ class TournamentIT {
 
             tournament = tournamentService.getTournament(tournamentId);
 
-            TournamentRegistration first = tournament.findRegistration(winner).orElseThrow();
+            TournamentRegistration first = reg(winner).orElseThrow();
             assertThat(first.getFinishPosition()).isEqualTo(1);
             assertThat(first.getPrizeWon()).isGreaterThan(0);
 
-            TournamentRegistration second = tournament.findRegistration(playerIds.get(1)).orElseThrow();
+            TournamentRegistration second = reg(playerIds.get(1)).orElseThrow();
             assertThat(second.getFinishPosition()).isEqualTo(2);
 
-            TournamentRegistration third = tournament.findRegistration(playerIds.get(2)).orElseThrow();
+            TournamentRegistration third = reg(playerIds.get(2)).orElseThrow();
             assertThat(third.getFinishPosition()).isEqualTo(3);
 
-            TournamentRegistration bubble = tournament.findRegistration(playerIds.get(3)).orElseThrow();
+            TournamentRegistration bubble = reg(playerIds.get(3)).orElseThrow();
             assertThat(bubble.getFinishPosition()).isEqualTo(4);
             assertThat(bubble.getPrizeWon()).isEqualTo(0);
         }
@@ -629,20 +668,19 @@ class TournamentIT {
             tournamentService.startTournament(tournamentId);
             tournament = tournamentService.getTournament(tournamentId);
 
-            int initialPrizePool = tournament.getPrizePool();
+            int initialPrizePool = prizePool();
             assertThat(initialPrizePool).isEqualTo(600);
 
             for (int i = 0; i < 3; i++) {
                 UUID player = playerIds.get(i);
-                TournamentRegistration reg = tournamentService.getTournament(tournamentId)
-                    .findRegistration(player).orElseThrow();
+                TournamentRegistration reg = reg(player).orElseThrow();
                 reg.setChips(0);
                 registrationRepository.save(reg);
                 tournamentService.processRebuy(tournamentId, player);
             }
 
             tournament = tournamentService.getTournament(tournamentId);
-            int finalPrizePool = tournament.getPrizePool();
+            int finalPrizePool = prizePool();
 
             assertThat(finalPrizePool).isEqualTo(900);
         }
@@ -697,7 +735,7 @@ class TournamentIT {
             executor.shutdown();
 
             tournament = tournamentService.getTournament(tournamentId);
-            assertThat(tournament.getRegistrations()).hasSize(9);
+            assertThat(allRegs()).hasSize(9);
         }
 
         @Test
@@ -772,7 +810,7 @@ class TournamentIT {
 
             tournament = tournamentService.getTournament(tournamentId);
 
-            List<TournamentRegistration> regs = new ArrayList<>(tournament.getRegistrations());
+            List<TournamentRegistration> regs = new ArrayList<>(allRegs());
             int[] chips = {3000, 2500, 2000, 1500, 1000, 0};
 
             for (int i = 0; i < 6; i++) {
@@ -827,7 +865,7 @@ class TournamentIT {
             tournament = tournamentService.getTournament(tournamentId);
             assertThat(tournament.getStatus()).isEqualTo(TournamentStatus.RUNNING);
 
-            TournamentTable table = tournament.getActiveTables().stream()
+            TournamentTable table = activeTables().stream()
                     .filter(TournamentTable::isActive)
                     .findFirst()
                     .orElseThrow();
@@ -847,7 +885,7 @@ class TournamentIT {
             registerPlayers(2);
 
             tournament = tournamentService.getTournament(tournamentId);
-            TournamentTable table = tournament.getActiveTables().get(0);
+            TournamentTable table = activeTables().get(0);
             UUID seatedPlayerId = table.getPlayerIds().get(0);
 
             Game game = tableGameService.getOrStartTableHand(tournamentId, table.getId());
@@ -875,7 +913,7 @@ class TournamentIT {
             registerPlayers(2);
 
             tournament = tournamentService.getTournament(tournamentId);
-            TournamentTable table = tournament.getActiveTables().get(0);
+            TournamentTable table = activeTables().get(0);
 
             Game game = tableGameService.getOrStartTableHand(tournamentId, table.getId());
             Player folder = game.getCurrentPlayer();
