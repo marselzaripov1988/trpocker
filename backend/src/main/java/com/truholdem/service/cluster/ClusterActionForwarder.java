@@ -12,6 +12,9 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.dto.PlayerActionRequest;
 import com.truholdem.model.PlayerAction;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 /**
  * Phase 5 cross-node routing: forwards a player action over HTTP to the node that owns the table.
  *
@@ -29,12 +32,22 @@ public class ClusterActionForwarder {
     private final RestClient restClient;
     private final TableOwnershipService ownership;
     private final AppProperties appProperties;
+    private final Counter forwardRequests;
+    private final Counter forwardFailures;
 
     public ClusterActionForwarder(RestClient clusterRestClient, TableOwnershipService ownership,
-            AppProperties appProperties) {
+            AppProperties appProperties, MeterRegistry meterRegistry) {
         this.restClient = clusterRestClient;
         this.ownership = ownership;
         this.appProperties = appProperties;
+        this.forwardRequests = Counter.builder("truholdem.cluster.forward.requests")
+                .description("Player actions forwarded over HTTP to the owning node (cross-node routing).")
+                .register(meterRegistry);
+        this.forwardFailures = Counter.builder("truholdem.cluster.forward.failures")
+                .description("Cross-node action forwards that failed because the owner was unreachable "
+                        + "(unknown address / connect / timeout / 5xx). A non-zero rate breaks multiplayer "
+                        + "across nodes — alert on it. (Game-level 4xx rejections are not counted here.)")
+                .register(meterRegistry);
     }
 
     /**
@@ -43,8 +56,10 @@ public class ClusterActionForwarder {
      */
     public void forward(String ownerInstanceId, UUID gameId, UUID commandId, UUID playerId,
             PlayerAction action, int amount) {
+        forwardRequests.increment();
         String baseUrl = ownership.baseUrlFor(ownerInstanceId);
         if (baseUrl == null || baseUrl.isBlank()) {
+            forwardFailures.increment();
             throw new ClusterForwardException("Unknown address for owner node " + ownerInstanceId
                     + " of game " + gameId);
         }
@@ -70,6 +85,7 @@ public class ClusterActionForwarder {
         } catch (Exception e) {
             // Connection refused / timeout / 5xx: the owner is unreachable or broken; the caller may
             // re-claim the table once and process locally.
+            forwardFailures.increment();
             throw new ClusterForwardException("Failed to forward action for game " + gameId
                     + " to owner " + ownerInstanceId + " (" + url + ")", e);
         }

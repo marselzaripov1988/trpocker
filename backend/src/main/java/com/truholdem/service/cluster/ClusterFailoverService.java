@@ -15,6 +15,9 @@ import com.truholdem.service.GameHandLifecycleService;
 import com.truholdem.service.GameTurnTimeoutService;
 import com.truholdem.service.PokerGameService;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 /**
  * Phase 5 failover takeover: periodically scans the cluster's active-table set and takes over any table
  * whose owner has died (its Redis lease expired, so it has no current owner). On takeover this node
@@ -40,18 +43,24 @@ public class ClusterFailoverService {
     private final PokerGameService pokerGameService;
     private final GameTurnTimeoutService turnTimeoutService;
     private final GameHandLifecycleService handLifecycleService;
+    private final Counter takeovers;
 
     public ClusterFailoverService(
             AppProperties appProperties,
             TableOwnershipService ownership,
             @Lazy PokerGameService pokerGameService,
             GameTurnTimeoutService turnTimeoutService,
-            GameHandLifecycleService handLifecycleService) {
+            GameHandLifecycleService handLifecycleService,
+            MeterRegistry meterRegistry) {
         this.appProperties = appProperties;
         this.ownership = ownership;
         this.pokerGameService = pokerGameService;
         this.turnTimeoutService = turnTimeoutService;
         this.handLifecycleService = handLifecycleService;
+        this.takeovers = Counter.builder("truholdem.cluster.takeovers")
+                .description("Orphaned tables this node took over after the previous owner died. Occasional is "
+                        + "normal (a node restart); a sustained rate signals cluster instability / flapping nodes.")
+                .register(meterRegistry);
     }
 
     /** Scan twice per lease so an orphaned table is taken over within roughly one lease TTL of the death. */
@@ -89,6 +98,7 @@ public class ClusterFailoverService {
         // true between hands. A genuinely-over game is already removed from the active set by the
         // next-hand path (which releases when there are too few players to continue).
 
+        takeovers.increment();
         log.info("Took over orphaned table {} (previous owner gone); resuming timers", gameId);
         // Both are state-guarded internally, so exactly the applicable one acts:
         //  - in-progress hand → re-arm the current player's turn timer;

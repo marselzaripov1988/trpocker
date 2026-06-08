@@ -22,4 +22,8 @@ public interface WithdrawalRequestRepository extends JpaRepository<WithdrawalReq
     List<WithdrawalRequest> findByStatusInOrderByCreatedAtAsc(Collection<WithdrawalStatus> statuses);
 
     List<WithdrawalRequest> findByUserIdAndAssetAndCreatedAtAfter(UUID userId, CryptoAsset asset, Instant after);
+
+    long countByStatus(WithdrawalStatus status);
+
+    long countByStatusIn(Collection<WithdrawalStatus> statuses);
 }

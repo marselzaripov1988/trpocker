@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.truholdem.model.Game;
 import com.truholdem.repository.GameRepository;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 @Service
 public class AsyncGamePersistService {
 
@@ -22,14 +25,21 @@ public class AsyncGamePersistService {
     private final GameRepository gameRepository;
     private final ObjectProvider<RedisGameStateStore> redisStore;
     private final AsyncGamePersistService self;
+    private final Counter optimisticLockConflicts;
 
     public AsyncGamePersistService(
             GameRepository gameRepository,
             ObjectProvider<RedisGameStateStore> redisStore,
-            @Lazy AsyncGamePersistService self) {
+            @Lazy AsyncGamePersistService self,
+            MeterRegistry meterRegistry) {
         this.gameRepository = gameRepository;
         this.redisStore = redisStore;
         this.self = self;
+        this.optimisticLockConflicts = Counter.builder("truholdem.persist.optimistic_lock.conflicts")
+                .description("Async PostgreSQL mirror writes superseded by a newer write (optimistic-lock "
+                        + "conflict). A low rate is expected (Redis is authoritative, PG lags); a sustained high "
+                        + "rate signals real write contention — single-writer / routing not serializing.")
+                .register(meterRegistry);
     }
 
     @Async("gamePersistExecutor")
@@ -47,6 +57,7 @@ public class AsyncGamePersistService {
             // Hot-state Redis is the authoritative live state; PostgreSQL is a lagging mirror. A concurrent mirror
             // write (e.g. a hand-end finalize racing the result-delay transition) already advanced the row —
             // benign, the next boundary write re-persists the latest state. Expected, so logged quietly.
+            optimisticLockConflicts.increment();
             logger.debug("Async DB persist for game {} superseded by a newer write — skipping", game.getId());
         } catch (Exception e) {
             logger.error("Async persist failed for game {}", game.getId(), e);

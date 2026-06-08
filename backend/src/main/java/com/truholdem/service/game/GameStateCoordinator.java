@@ -40,6 +40,7 @@ public class GameStateCoordinator {
     private final AppProperties appProperties;
     private final Counter hotStateWrites;
     private final Counter hotStateWriteFailures;
+    private final Counter fenceRejections;
 
     public GameStateCoordinator(
             GameRepository gameRepository,
@@ -68,6 +69,10 @@ public class GameStateCoordinator {
         Gauge.builder("truholdem.hotstate.active", this, c -> c.isHotStateActive() ? 1.0 : 0.0)
                 .description("1 if Redis hot-state is actually wired and serving writes, else 0. If enabled=1 "
                         + "but active=0, the hot-state beans failed to wire — Redis is silently bypassed.")
+                .register(meterRegistry);
+        this.fenceRejections = Counter.builder("truholdem.cluster.fence.rejections")
+                .description("Fenced hot-state writes rejected because another node took ownership of the table "
+                        + "(StaleOwnershipException). A sustained rate signals ownership thrash / split-brain.")
                 .register(meterRegistry);
     }
 
@@ -145,6 +150,7 @@ public class GameStateCoordinator {
             return true;
         } catch (StaleOwnershipException e) {
             // Correctness, not infrastructure: the new owner must win. Propagate so this stale node aborts.
+            fenceRejections.increment();
             throw e;
         } catch (DataAccessException e) {
             hotStateWriteFailures.increment();

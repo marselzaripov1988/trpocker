@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔔 Observability: alerts across realtime, cluster, persistence & wallet
+- Closed the alerting gaps for this system's domain-specific failure modes (the generic infra alerts only covered
+  HTTP/JVM/DB-pool). 12 new rules in `docker/prometheus/alerts.yml` (`promtool check rules` → 35 rules), plus the
+  metrics that back them:
+  - **Realtime** (`truholdem-realtime`): `TableCommandTimeouts` / `TableCommandRejections` (single-writer queue —
+    frozen/overloaded tables) on existing `poker_table_command_*`; `WsClusterBridgeStalled` (per-instance:
+    publishes but receives no cross-node events → clients miss live updates). *(Did not alert on
+    `events.dropped` — that counter is normal echo/dedup suppression, not a fault.)*
+  - **Cluster correctness** (`truholdem-cluster`) — new counters + rules: `ClusterForwardFailures`
+    (`truholdem.cluster.forward.{requests,failures}` in `ClusterActionForwarder` — owner unreachable, cross-node
+    multiplayer broken), `ClusterFenceRejections` (`truholdem.cluster.fence.rejections` from the
+    `StaleOwnershipException` path — ownership thrash / split-brain), `FrequentFailoverTakeovers`
+    (`truholdem.cluster.takeovers` in `ClusterFailoverService`), `HighOptimisticLockConflicts`
+    (`truholdem.persist.optimistic_lock.conflicts` in `AsyncGamePersistService`, alert thresholded high since a
+    low rate is expected).
+  - **Persistence** (`truholdem-persistence`): `GamePersistQueueBacklog` — `gamePersistExecutor` now returns the
+    concrete `ThreadPoolTaskExecutor` so Spring Boot exposes `executor_queued_tasks{name="gamePersistExecutor"}`.
+  - **Wallet / money** (`truholdem-wallet`) — new read-only `WalletMetrics` component (isolated from the money
+    paths; gauges only): `DepositAddressPoolLow` / `…Critical` per asset (gated on `assigned>0` so unused assets
+    never false-fire), `WithdrawalsBacklog` (in-flight pipeline stuck), `WithdrawalFailuresRising`
+    (`increase()` of FAILED). Added `WithdrawalRequestRepository.countByStatus(In)`.
+- New metric injections are constructor-only (`MeterRegistry`); affected unit tests updated. Full backend suite
+  green; gauges are defensive (a scrape-time DB error yields `NaN`, never breaks `/actuator/prometheus`).
+
 ### 🔔 Hot-state alerting (Prometheus)
 - Two `truholdem-hotstate` alert rules in `docker/prometheus/alerts.yml` close the observability gap the
   silent-disable bug exposed (and that the graceful-degradation change widened — a failed Redis write no longer

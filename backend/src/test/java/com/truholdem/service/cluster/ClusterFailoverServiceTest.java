@@ -23,6 +23,8 @@ import com.truholdem.service.GameHandLifecycleService;
 import com.truholdem.service.GameTurnTimeoutService;
 import com.truholdem.service.PokerGameService;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("ClusterFailoverService — take over orphaned tables")
@@ -48,7 +50,8 @@ class ClusterFailoverServiceTest {
         props.getCluster().setOwnershipEnabled(true);
         props.getCluster().setTakeoverEnabled(true);
         failover = new ClusterFailoverService(
-                props, ownership, pokerGameService, turnTimeoutService, handLifecycleService);
+                props, ownership, pokerGameService, turnTimeoutService, handLifecycleService,
+                new SimpleMeterRegistry());
     }
 
     @Test

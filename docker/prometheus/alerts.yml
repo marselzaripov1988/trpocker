@@ -325,3 +325,193 @@ groups:
           summary: "Redis hot-state writes are failing"
           description: "Game hot-state is degrading to PostgreSQL-only ({{ $value | printf \"%.2f\" }} failures/s). Player actions are preserved via the Postgres fallback, but cross-node hot-state sharing is broken — check Redis connectivity and latency."
           runbook_url: "https://runbooks.truholdem.com/hot-state-write-failures"
+
+  # Live-table integrity: the per-table single-writer (serializes commands for one table) and the cross-node
+  # WebSocket event bridge. Failures here freeze tables or stop clients seeing updates — without surfacing as 5xx.
+  - name: truholdem-realtime
+    rules:
+
+      # Commands timing out in the single-writer queue means a table's processing chain is stalled — the hand
+      # freezes for every seat at that table.
+      - alert: TableCommandTimeouts
+        expr: |
+          rate(poker_table_command_timeouts_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Single-writer command timeouts — a table may be frozen"
+          description: "{{ $value | printf \"%.2f\" }} table commands/s are timing out in the single-writer queue. A table's processing chain is stalled — the hand is frozen for every seat. Check for a blocked persist / DB latency / a hung chain."
+          runbook_url: "https://runbooks.truholdem.com/table-command-timeouts"
+
+      # Commands rejected because the single-writer queue is full = sustained overload; player actions are dropped.
+      - alert: TableCommandRejections
+        expr: |
+          rate(poker_table_command_rejections_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Single-writer command rejections (queue full)"
+          description: "{{ $value | printf \"%.2f\" }} table commands/s are being rejected (single-writer queue full). The node is overloaded and dropping player actions — scale out or raise queue capacity."
+          runbook_url: "https://runbooks.truholdem.com/table-command-rejections"
+
+      # Per-instance: this node is still publishing game events to Redis but receiving none back, so its pub/sub
+      # subscription is dead — clients connected to this node stop getting live updates from the rest of the
+      # cluster. (Never fires single-node-without-cluster: then nothing is published either.)
+      - alert: WsClusterBridgeStalled
+        expr: |
+          rate(websocket_cluster_events_published_total[5m]) > 0
+          and
+          rate(websocket_cluster_events_received_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "WebSocket cluster event bridge stalled on {{ $labels.instance }}"
+          description: "This node publishes game events to Redis but receives none back — its pub/sub subscription is broken. Clients on this node are not seeing live updates from other nodes. Check Redis pub/sub and the RedisGameEventBroadcaster subscriber."
+          runbook_url: "https://runbooks.truholdem.com/ws-cluster-bridge-stalled"
+
+  # Cluster correctness (Phase 5): cross-node action forwarding, fencing/ownership, and failover takeovers. These
+  # signals were previously uninstrumented; without them a multi-node cluster can break multiplayer or thrash
+  # ownership with no alert.
+  - name: truholdem-cluster
+    rules:
+
+      # The owning node is unreachable, so a player's action cannot be forwarded to it. Multiplayer across nodes
+      # is broken for the affected tables. (Game-level 4xx rejections from a reachable owner are NOT counted.)
+      - alert: ClusterForwardFailures
+        expr: |
+          rate(truholdem_cluster_forward_failures_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Cross-node action forwarding is failing"
+          description: "{{ $value | printf \"%.2f\" }} action forwards/s are failing (owner node unreachable). Players on non-owner nodes cannot act on those tables. Check node-to-node connectivity, the node registry, and the owning node's health."
+          runbook_url: "https://runbooks.truholdem.com/cluster-forward-failures"
+
+      # Fenced writes rejected because another node holds a newer ownership token — i.e. two nodes briefly both
+      # think they own a table. A sustained rate means ownership is thrashing (split-brain risk).
+      - alert: ClusterFenceRejections
+        expr: |
+          rate(truholdem_cluster_fence_rejections_total[5m]) > 0
+        for: 3m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Ownership fencing rejections — possible split-brain"
+          description: "{{ $value | printf \"%.2f\" }} fenced writes/s are being rejected because ownership moved to another node. Sustained rejections mean ownership is thrashing — check Redis lease TTL, GC pauses, and clock skew across nodes."
+          runbook_url: "https://runbooks.truholdem.com/cluster-fence-rejections"
+
+      # Occasional takeover is normal (a node restart). A burst means nodes are dying/flapping repeatedly.
+      - alert: FrequentFailoverTakeovers
+        expr: |
+          increase(truholdem_cluster_takeovers_total[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Frequent failover takeovers — cluster instability"
+          description: "{{ $value | printf \"%.0f\" }} table takeovers in 15m on {{ $labels.instance }}. Nodes are dying or flapping repeatedly — check pod restarts, lease TTL, and node health."
+          runbook_url: "https://runbooks.truholdem.com/frequent-failover-takeovers"
+
+      # PostgreSQL mirror is the lagging copy of the Redis-authoritative live state, so a low optimistic-lock
+      # conflict rate is expected. A sustained high rate means real write contention — the single-writer or
+      # cross-node routing is not serializing writes to a table.
+      - alert: HighOptimisticLockConflicts
+        expr: |
+          rate(truholdem_persist_optimistic_lock_conflicts_total[10m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Elevated optimistic-lock conflicts on game persistence"
+          description: "{{ $value | printf \"%.2f\" }} conflicts/s persisting games to PostgreSQL (sustained). Beyond the expected low background rate this points to concurrent writers for one table — check single-writer routing / cluster ownership."
+          runbook_url: "https://runbooks.truholdem.com/high-optimistic-lock-conflicts"
+
+  # Async game-persist executor: a backlog means PostgreSQL mirror writes are falling behind the live game. At
+  # capacity (512) new persists are rejected and that hand's PG mirror lags until the next boundary write.
+  - name: truholdem-persistence
+    rules:
+
+      - alert: GamePersistQueueBacklog
+        expr: |
+          executor_queued_tasks{name="gamePersistExecutor"} > 400
+        for: 2m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Async game-persist queue backing up"
+          description: "{{ $value | printf \"%.0f\" }} tasks queued in gamePersistExecutor (capacity 512). PostgreSQL mirror writes are falling behind — check DB write latency / pool saturation before the queue fills and persists are dropped."
+          runbook_url: "https://runbooks.truholdem.com/game-persist-queue-backlog"
+
+  # Wallet (real money). Read-only gauges over the money tables. Highest business impact: a dry deposit-address
+  # pool blocks new deposits, a backed-up payout pipeline strands withdrawals, and rising failures mean payouts
+  # are breaking on-chain.
+  - name: truholdem-wallet
+    rules:
+
+      # The deposit-address pool for an in-use asset is nearly empty — new users will not get a deposit address.
+      # Gated on assigned>0 so it never fires for an asset that was never imported/used.
+      - alert: DepositAddressPoolLow
+        expr: |
+          truholdem_wallet_deposit_pool_free < 20
+          and
+          truholdem_wallet_deposit_pool_assigned > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Deposit-address pool low for {{ $labels.asset }}"
+          description: "Only {{ $value | printf \"%.0f\" }} free {{ $labels.asset }} deposit addresses remain. Import more before the pool runs dry and new deposits cannot be assigned an address."
+          runbook_url: "https://runbooks.truholdem.com/deposit-address-pool-low"
+
+      - alert: DepositAddressPoolCritical
+        expr: |
+          truholdem_wallet_deposit_pool_free < 5
+          and
+          truholdem_wallet_deposit_pool_assigned > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Deposit-address pool nearly empty for {{ $labels.asset }}"
+          description: "Only {{ $value | printf \"%.0f\" }} free {{ $labels.asset }} deposit addresses remain — imminent exhaustion. Import addresses now."
+          runbook_url: "https://runbooks.truholdem.com/deposit-address-pool-low"
+
+      # Withdrawals piling up in the in-flight pipeline (approval / broadcast). The payout path is stuck.
+      - alert: WithdrawalsBacklog
+        expr: |
+          truholdem_wallet_withdrawals_pending > 50
+        for: 30m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Withdrawal pipeline backing up"
+          description: "{{ $value | printf \"%.0f\" }} withdrawals are in flight (awaiting approval/broadcast/confirmation) for 30m+. Check the moderator approval queue and the broadcasting/provider path."
+          runbook_url: "https://runbooks.truholdem.com/withdrawals-backlog"
+
+      # Rising count of FAILED withdrawals — payouts are breaking at broadcast / on-chain (each triggers a reversal).
+      - alert: WithdrawalFailuresRising
+        expr: |
+          increase(truholdem_wallet_withdrawals_failed[1h]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Withdrawals are failing"
+          description: "{{ $value | printf \"%.0f\" }} withdrawals moved to FAILED in the last hour. Payouts are breaking at broadcast / on-chain — check the wallet provider, gas/fees, and node connectivity."
+          runbook_url: "https://runbooks.truholdem.com/withdrawal-failures"

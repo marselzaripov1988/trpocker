@@ -26,6 +26,8 @@ import org.springframework.web.client.RestClient;
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.PlayerAction;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("ClusterActionForwarder — HTTP forward to the owner node")
@@ -48,7 +50,7 @@ class ClusterActionForwarderTest {
         appProperties.getCluster().setSharedSecret("s3cret");
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        forwarder = new ClusterActionForwarder(builder.build(), ownership, appProperties);
+        forwarder = new ClusterActionForwarder(builder.build(), ownership, appProperties, new SimpleMeterRegistry());
     }
 
     @Test
