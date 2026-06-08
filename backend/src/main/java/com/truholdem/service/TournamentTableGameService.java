@@ -106,6 +106,8 @@ public class TournamentTableGameService {
                     registration.getCurrentChips(),
                     isBotName(registration.getPlayerName()));
             info.setPlayerId(playerId);
+            // Tournaments map seats back to registrations by the player's id, so keep it stable (= registration id).
+            info.setUseStableId(true);
             players.add(info);
         }
         if (players.size() < 2) {

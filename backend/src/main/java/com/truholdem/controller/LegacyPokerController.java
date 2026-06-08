@@ -281,6 +281,9 @@ public class LegacyPokerController {
         for (PlayerInfo info : playersInfo) {
             if (!info.isBot() && info.getPlayerId() == null) {
                 info.setPlayerId(ownerId);
+                // ownership only — the player row keeps a fresh per-game id so a repeat /poker/start by the same
+                // user doesn't clash on players_pkey (single-player isn't a tournament, no stable seat id needed).
+                info.setUseStableId(false);
                 break;
             }
         }

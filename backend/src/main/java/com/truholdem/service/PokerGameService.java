@@ -154,10 +154,14 @@ public class PokerGameService {
                 PlayerInfo info = playersInfo.get(i);
                 Player player = new Player(info.getName(), info.getStartingChips(), info.isBot());
                 if (info.getPlayerId() != null) {
-                    player.setId(info.getPlayerId());
-                    // Tournament registration uses the account UUID as playerId.
+                    // Tie ownership to the user (non-bots) via userId. Only reuse the id as the player PK when
+                    // asked (tournaments need a stable seat id to map back to registrations); single-player keeps
+                    // a fresh per-game id so a second /poker/start by the same user doesn't clash on players_pkey.
                     if (!info.isBot()) {
                         player.setUserId(info.getPlayerId());
+                    }
+                    if (info.isUseStableId()) {
+                        player.setId(info.getPlayerId());
                     }
                 }
                 player.setSeatPosition(i);
@@ -1469,9 +1473,11 @@ public class PokerGameService {
         for (int i = 0; i < playersInfo.size() && i < players.size(); i++) {
             PlayerInfo info = playersInfo.get(i);
             if (info.getPlayerId() != null) {
-                players.get(i).setId(info.getPlayerId());
                 if (!info.isBot()) {
                     players.get(i).setUserId(info.getPlayerId());
+                }
+                if (info.isUseStableId()) {
+                    players.get(i).setId(info.getPlayerId());
                 }
             }
         }

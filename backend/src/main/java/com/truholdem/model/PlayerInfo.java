@@ -22,8 +22,16 @@ public class PlayerInfo {
     @JsonProperty("isBot")
     private boolean isBot;
 
-    /** Optional stable id (e.g. tournament registration player id). */
+    /** Optional id to tie this seat to: used as the owner's userId (non-bots), and — only when
+     *  {@link #useStableId} — as the player row's primary key. Tournaments set a stable id (registration player
+     *  id); single-player passes the user id for ownership only, so the player row gets a fresh per-game id and
+     *  repeated /poker/start calls don't clash on players_pkey. */
     private UUID playerId;
+
+    /** When true (default), {@link #playerId} is also used as the player's primary key (tournaments need a stable
+     *  id to map seats back to registrations). Single-player sets this false so the human seat gets a fresh
+     *  per-game id (its userId still carries ownership), avoiding a players_pkey clash on a repeat /poker/start. */
+    private boolean useStableId = true;
 
     public PlayerInfo() {
     }
@@ -40,6 +48,14 @@ public class PlayerInfo {
 
     public void setPlayerId(UUID playerId) {
         this.playerId = playerId;
+    }
+
+    public boolean isUseStableId() {
+        return useStableId;
+    }
+
+    public void setUseStableId(boolean useStableId) {
+        this.useStableId = useStableId;
     }
 
     public String getName() {
