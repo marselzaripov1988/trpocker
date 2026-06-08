@@ -2,11 +2,12 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { AvatarComponent } from '../shared/avatar/avatar.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, AvatarComponent],
   template: `
     <div class="home-container" data-cy="home-page">
       <div class="hero-section">
@@ -20,7 +21,9 @@ import { AuthService } from '../services/auth.service';
       <div class="cta-section" data-cy="cta-section">
         @if (isLoggedIn) {
           <div class="welcome-back" data-cy="welcome-message">
+            <app-avatar [value]="currentAvatar" [size]="48" data-cy="home-avatar" />
             <p>Welcome back, {{ currentUsername }}!</p>
+            <a routerLink="/settings" class="edit-avatar-link" data-cy="edit-avatar-link">Change avatar</a>
           </div>
           <div class="action-buttons" data-cy="action-buttons">
             <button class="btn-primary" data-cy="new-game-btn" (click)="navigateToLobby()">
@@ -127,7 +130,21 @@ import { AuthService } from '../services/auth.service';
       font-size: 1.25rem;
       margin-bottom: 1.5rem;
       color: #10b981;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
+
+    .welcome-back p { margin: 0; }
+
+    .edit-avatar-link {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      text-decoration: underline;
+    }
+    .edit-avatar-link:hover { color: #fff; }
 
     .action-buttons, .auth-buttons {
       display: flex;
@@ -244,6 +261,10 @@ export class HomeComponent {
 
   get currentUsername(): string {
     return this.authService.getCurrentUserValue()?.username ?? 'Player';
+  }
+
+  get currentAvatar(): string {
+    return this.authService.getCurrentUserValue()?.avatarUrl ?? '';
   }
 
   navigateToLobby(): void {

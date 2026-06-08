@@ -14,6 +14,14 @@ export interface User {
   roles: string[];
   totalGamesPlayed: number;
   totalWinnings: number;
+  avatarUrl?: string;
+}
+
+export interface ProfileUpdate {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
 }
 
 export interface LoginRequest {
@@ -132,6 +140,18 @@ export class AuthService {
 
   getCurrentUser(): Observable<User> {
     return this.http.get<User>('/api/v1/users/profile')
+      .pipe(
+        tap(user => {
+          this.currentUserSubject.next(user);
+          this.storeUser(user);
+        }),
+        catchError(this.handleError)
+      );
+  }
+
+  /** Update the authenticated user's profile (e.g. avatar) and refresh the cached current user. */
+  updateProfile(update: ProfileUpdate): Observable<User> {
+    return this.http.put<User>('/api/v1/users/profile', update)
       .pipe(
         tap(user => {
           this.currentUserSubject.next(user);

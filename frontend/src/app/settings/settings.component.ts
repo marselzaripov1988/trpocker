@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { SoundService, SoundEffect } from '../services/sound.service';
+import { AuthService } from '../services/auth.service';
+import { AvatarComponent } from '../shared/avatar/avatar.component';
 
 interface GameSettings {
   
@@ -25,10 +27,62 @@ interface GameSettings {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, AvatarComponent],
   template: `
     <div class="settings-container" data-cy="settings-page">
       <h2 data-cy="settings-title">⚙️ Settings</h2>
+
+      <!-- Profile / Avatar -->
+      <section class="settings-section" data-cy="avatar-settings-section">
+        <h3>🙂 Avatar</h3>
+        <div class="setting-item avatar-editor">
+          <div class="avatar-current">
+            <app-avatar [value]="selectedAvatar" [size]="72" data-cy="avatar-current-preview" />
+            <span class="avatar-current-label">Your avatar</span>
+          </div>
+          <div class="avatar-choices">
+            <span class="setting-label">Pick a preset</span>
+            <div class="avatar-presets" data-cy="avatar-presets">
+              @for (preset of avatarPresets; track preset) {
+                <button
+                  type="button"
+                  class="avatar-preset"
+                  [class.selected]="selectedAvatar === preset"
+                  (click)="selectAvatar(preset)"
+                  [attr.aria-label]="'Select avatar ' + preset"
+                  [attr.data-cy]="'avatar-preset-' + preset"
+                >{{ preset }}</button>
+              }
+            </div>
+            <label class="avatar-url-label">
+              <span class="setting-label">…or an image URL</span>
+              <input
+                type="url"
+                [(ngModel)]="customAvatarUrl"
+                (input)="selectAvatar(customAvatarUrl)"
+                placeholder="https://example.com/me.png"
+                data-cy="avatar-url-input"
+              />
+            </label>
+            <div class="avatar-actions">
+              <button
+                type="button"
+                class="btn-save-avatar"
+                [disabled]="avatarSaving"
+                (click)="saveAvatar()"
+                data-cy="avatar-save-btn"
+              >{{ avatarSaving ? 'Saving…' : 'Save avatar' }}</button>
+              @if (selectedAvatar) {
+                <button type="button" class="btn-clear-avatar" [disabled]="avatarSaving"
+                        (click)="selectAvatar('')" data-cy="avatar-clear-btn">Clear</button>
+              }
+              @if (avatarMessage) {
+                <span class="avatar-message" data-cy="avatar-message">{{ avatarMessage }}</span>
+              }
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Sound Settings -->
       <section class="settings-section" data-cy="sound-settings-section">
@@ -443,11 +497,48 @@ interface GameSettings {
         &:hover { background: rgba(255, 255, 255, 0.2); }
       }
     }
+
+    .avatar-editor { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+    .avatar-current { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .avatar-current-label { font-size: 0.75rem; opacity: 0.7; }
+    .avatar-choices { flex: 1 1 240px; display: flex; flex-direction: column; gap: 10px; }
+    .setting-label { font-size: 0.8rem; opacity: 0.8; display: block; margin-bottom: 4px; }
+    .avatar-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+    .avatar-preset {
+      width: 44px; height: 44px; font-size: 24px; line-height: 1; cursor: pointer;
+      border-radius: 50%; border: 2px solid transparent; background: rgba(255, 255, 255, 0.08);
+      display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .avatar-preset:hover { background: rgba(255, 255, 255, 0.16); }
+    .avatar-preset.selected { border-color: #ffd700; background: rgba(255, 215, 0, 0.15); }
+    .avatar-url-label input {
+      width: 100%; padding: 8px 10px; border-radius: 8px; color: #fff;
+      background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .avatar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .btn-save-avatar {
+      padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
+      background: #ffd700; color: #1a1a1a;
+    }
+    .btn-save-avatar:disabled { opacity: 0.6; cursor: default; }
+    .btn-clear-avatar {
+      padding: 8px 14px; border-radius: 8px; cursor: pointer; color: #fff;
+      background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .avatar-message { font-size: 0.85rem; opacity: 0.9; }
   `]
 })
 export class SettingsComponent implements OnInit, OnDestroy {
   private soundService = inject(SoundService);
+  private auth = inject(AuthService);
   private destroy$ = new Subject<void>();
+
+  // Avatar editor
+  readonly avatarPresets = ['🦊', '🐼', '🐲', '🦁', '🐯', '🐸', '🦅', '🐺', '🦈', '🐙', '🤠', '🥷', '🧙', '👑'];
+  selectedAvatar = '';
+  customAvatarUrl = '';
+  avatarSaving = false;
+  avatarMessage = '';
 
   soundEnabled = true;
   soundVolume = 0.5;
@@ -494,8 +585,40 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.soundVolume = settings.volume;
     });
 
-    
+
     this.loadGameSettings();
+
+    // Seed the avatar editor from the current user and keep it in sync.
+    this.auth.currentUser$.pipe(takeUntil(this.destroy$)).subscribe(user => {
+      const avatar = user?.avatarUrl ?? '';
+      this.selectedAvatar = avatar;
+      this.customAvatarUrl = /^(https?:\/\/|data:)/i.test(avatar) ? avatar : '';
+    });
+  }
+
+  selectAvatar(value: string): void {
+    this.selectedAvatar = (value ?? '').trim();
+    this.avatarMessage = '';
+  }
+
+  saveAvatar(): void {
+    if (this.avatarSaving) {
+      return;
+    }
+    this.avatarSaving = true;
+    this.avatarMessage = '';
+    this.auth.updateProfile({ avatarUrl: this.selectedAvatar }).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: () => {
+        this.avatarSaving = false;
+        this.avatarMessage = '✓ Saved';
+      },
+      error: () => {
+        this.avatarSaving = false;
+        this.avatarMessage = '✗ Could not save avatar';
+      }
+    });
   }
 
   ngOnDestroy(): void {
