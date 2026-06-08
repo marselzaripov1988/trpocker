@@ -19,6 +19,8 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.repository.GameRepository;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GameStateService Tests")
 class GameStateServiceTest {
@@ -49,7 +51,8 @@ class GameStateServiceTest {
         lenient().when(redisStore.getIfAvailable()).thenReturn(redisGameStateStore);
         lenient().when(redisStore.getObject()).thenReturn(redisGameStateStore);
         lenient().when(asyncPersistService.getIfAvailable()).thenReturn(null);
-        gameStateService = new GameStateService(gameRepository, redisStore, asyncPersistService, appProperties);
+        gameStateService = new GameStateService(
+                gameRepository, redisStore, asyncPersistService, appProperties, new SimpleMeterRegistry());
     }
 
     @Test

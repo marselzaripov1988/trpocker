@@ -3,6 +3,7 @@ package com.truholdem.service.game;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,10 +20,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.repository.GameRepository;
+import com.truholdem.service.cluster.StaleOwnershipException;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("GameStateCoordinator Tests")
@@ -59,7 +64,7 @@ class GameStateCoordinatorTest {
         lenient().when(asyncPersistService.getIfAvailable()).thenReturn(null);
         lenient().when(gameConfig.isAsyncPersistEnabled()).thenReturn(false);
         coordinator = new GameStateCoordinator(
-                gameRepository, redisStore, asyncPersistService, appProperties);
+                gameRepository, redisStore, asyncPersistService, appProperties, new SimpleMeterRegistry());
     }
 
     @Test
@@ -229,5 +234,42 @@ class GameStateCoordinatorTest {
         assertThat(result).isSameAs(game);
         verify(gameRepository).save(game);
         verify(redisGameStateStore).save(game);
+    }
+
+    @Test
+    @DisplayName("afterPlayerAction degrades to PostgreSQL when the Redis hot-state write fails (action not lost)")
+    void afterPlayerAction_degradesToPostgresOnRedisFailure() {
+        // Hot state on: a failed Redis write must short-circuit the deferral and still persist to PostgreSQL
+        // rather than failing the player's move. (isPersistOnHandEndOnly is never consulted once the hot-state
+        // write fails — hotStateOk=false short-circuits the deferral check.)
+        when(gameConfig.isHotStateEnabled()).thenReturn(true);
+        doThrow(new DataAccessResourceFailureException("redis down")).when(redisGameStateStore).save(any());
+        when(gameRepository.save(any(Game.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Game game = new Game();
+        game.setId(UUID.randomUUID());
+
+        Game result = coordinator.afterPlayerAction(game);
+
+        assertThat(result).isSameAs(game);
+        verify(redisGameStateStore).save(game);
+        verify(gameRepository).save(game); // fell back to PostgreSQL — the action survives the Redis outage
+    }
+
+    @Test
+    @DisplayName("a fenced-write rejection (StaleOwnershipException) propagates — never swallowed as degradation")
+    void hotStateSave_propagatesStaleOwnership() {
+        // A stale-ownership rejection is a correctness signal (another node owns the table now), not a transient
+        // infra blip — it must abort the action, not silently fall back to a local PostgreSQL write.
+        when(gameConfig.isHotStateEnabled()).thenReturn(true);
+        UUID gameId = UUID.randomUUID();
+        doThrow(new StaleOwnershipException(gameId)).when(redisGameStateStore).save(any());
+
+        Game game = new Game();
+        game.setId(gameId);
+
+        assertThatThrownBy(() -> coordinator.afterPlayerAction(game))
+                .isInstanceOf(StaleOwnershipException.class);
+        verify(gameRepository, never()).save(any());
     }
 }

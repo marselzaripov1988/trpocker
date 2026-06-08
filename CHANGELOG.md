@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🛡️ Hot-state resilience: graceful degradation + write-failure metric
+- A Redis **infrastructure** failure on a hot-state write (Redis unreachable / timed out → a Spring
+  `DataAccessException`) no longer propagates into gameplay (which would 500 the player's action). `GameStateCoordinator`
+  now catches it, increments `truholdem.hotstate.write.failures`, logs a WARN, and **falls back to a PostgreSQL
+  write** so the action survives the Redis outage. Successful writes increment `truholdem.hotstate.writes`, so an
+  operator can alert on the failure rate / a sudden drop to zero (the signal the silent-disable bug lacked).
+- A `StaleOwnershipException` (fenced-write rejection — the token shows another node now owns the table) is a
+  **correctness** signal and is deliberately *not* swallowed: it propagates so the stale node aborts rather than
+  clobbering the new owner's state. Serialization errors (`IllegalStateException`) also still propagate — they are
+  real defects, not transient infra blips.
+- New `GameStateCoordinatorTest` cases pin both behaviours (degrade-to-Postgres on `DataAccessException`; propagate
+  `StaleOwnershipException`). Full backend suite green.
+
 ### 🐞 Pre-prod fix: Redis hot-state was silently disabled in production
 - **Root cause:** `GameStateRedisConfig` and `RedisGameStateStore` carried
   `@ConditionalOnProperty(app.game.hot-state-enabled=true)` **and** `@ConditionalOnBean(RedisConnectionFactory)`.

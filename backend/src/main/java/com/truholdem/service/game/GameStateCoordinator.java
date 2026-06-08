@@ -7,14 +7,27 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataAccessException;
 
 import com.truholdem.config.AppProperties;
 import com.truholdem.model.Game;
 import com.truholdem.repository.GameRepository;
+import com.truholdem.service.cluster.StaleOwnershipException;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Coordinates game reads/writes between Redis (hot path) and PostgreSQL (milestones).
  * Used by {@link GameStateService} as the core persistence routing layer.
+ *
+ * <p>Hot-state writes degrade gracefully: an <b>infrastructure</b> failure of the Redis write (Redis
+ * unreachable / timed out → a {@link DataAccessException}) is counted on the
+ * {@code truholdem.hotstate.write.failures} meter, logged, and swallowed so the player's action is still
+ * persisted to PostgreSQL rather than failing with a 500. A {@link StaleOwnershipException} (a <i>correctness</i>
+ * signal — the fencing token shows another node now owns the table) is never swallowed: it propagates so the
+ * stale owner stops mutating. Serialization bugs ({@code IllegalStateException}) also propagate — they are real
+ * defects, not transient infra blips.
  */
 public class GameStateCoordinator {
 
@@ -24,16 +37,26 @@ public class GameStateCoordinator {
     private final ObjectProvider<RedisGameStateStore> redisStore;
     private final ObjectProvider<AsyncGamePersistService> asyncPersistService;
     private final AppProperties appProperties;
+    private final Counter hotStateWrites;
+    private final Counter hotStateWriteFailures;
 
     public GameStateCoordinator(
             GameRepository gameRepository,
             ObjectProvider<RedisGameStateStore> redisStore,
             ObjectProvider<AsyncGamePersistService> asyncPersistService,
-            AppProperties appProperties) {
+            AppProperties appProperties,
+            MeterRegistry meterRegistry) {
         this.gameRepository = gameRepository;
         this.redisStore = redisStore;
         this.asyncPersistService = asyncPersistService;
         this.appProperties = appProperties;
+        this.hotStateWrites = Counter.builder("truholdem.hotstate.writes")
+                .description("Successful Redis hot-state writes (game state cached as authoritative live state).")
+                .register(meterRegistry);
+        this.hotStateWriteFailures = Counter.builder("truholdem.hotstate.write.failures")
+                .description("Redis hot-state writes that failed on an infrastructure error and fell back to "
+                        + "PostgreSQL. A non-zero rate means the cluster hot-state is degraded — alert on it.")
+                .register(meterRegistry);
     }
 
     public Game load(UUID gameId) {
@@ -47,7 +70,7 @@ public class GameStateCoordinator {
         return gameRepository.findById(gameId)
                 .map(game -> {
                     if (isHotStateActive()) {
-                        redisStore.getObject().save(game);
+                        tryHotStateSave(game);
                     }
                     return game;
                 })
@@ -58,10 +81,10 @@ public class GameStateCoordinator {
      * After a player action while the hand is still in progress.
      */
     public Game afterPlayerAction(Game game) {
-        if (isHotStateActive()) {
-            redisStore.getObject().save(game);
-        }
-        if (shouldDeferPostgresWrite()) {
+        boolean hotStateOk = !isHotStateActive() || tryHotStateSave(game);
+        // Defer the PostgreSQL write only when the hand state is safely held in Redis. If the hot-state write
+        // failed (degraded), we must persist to PostgreSQL now so the action is not lost.
+        if (hotStateOk && shouldDeferPostgresWrite()) {
             return game;
         }
         return gameRepository.save(game);
@@ -73,7 +96,7 @@ public class GameStateCoordinator {
     public Game persistFull(Game game) {
         if (shouldAsyncPersist(game)) {
             if (isHotStateActive()) {
-                redisStore.getObject().save(game);
+                tryHotStateSave(game);
             }
             asyncPersistService.getObject().persistAsync(game);
             logger.debug("Queued async PostgreSQL persist for game {}", game.getId());
@@ -81,7 +104,7 @@ public class GameStateCoordinator {
         }
         Game saved = gameRepository.save(game);
         if (isHotStateActive()) {
-            redisStore.getObject().save(saved);
+            tryHotStateSave(saved);
         }
         return saved;
     }
@@ -90,9 +113,33 @@ public class GameStateCoordinator {
     public Game persistFullSync(Game game) {
         Game saved = gameRepository.save(game);
         if (isHotStateActive()) {
-            redisStore.getObject().save(saved);
+            tryHotStateSave(saved);
         }
         return saved;
+    }
+
+    /**
+     * Writes the game to the Redis hot-state store, degrading gracefully on an infrastructure failure.
+     *
+     * @return {@code true} if the hot-state write succeeded; {@code false} if it failed on a transient Redis
+     *         infrastructure error (counted + logged) — the caller must then ensure a PostgreSQL write.
+     * @throws StaleOwnershipException if the fenced write was rejected (another node owns the table now) — this
+     *         is a correctness signal and is never swallowed.
+     */
+    private boolean tryHotStateSave(Game game) {
+        try {
+            redisStore.getObject().save(game);
+            hotStateWrites.increment();
+            return true;
+        } catch (StaleOwnershipException e) {
+            // Correctness, not infrastructure: the new owner must win. Propagate so this stale node aborts.
+            throw e;
+        } catch (DataAccessException e) {
+            hotStateWriteFailures.increment();
+            logger.warn("Hot-state Redis write failed for game {} — falling back to PostgreSQL "
+                    + "(cluster hot-state degraded): {}", game.getId(), e.toString());
+            return false;
+        }
     }
 
     private boolean isHotStateActive() {
