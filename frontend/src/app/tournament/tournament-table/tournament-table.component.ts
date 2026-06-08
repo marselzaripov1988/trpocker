@@ -67,9 +67,15 @@ import { WebSocketService } from '../../services/websocket.service';
         </div>
       }
 
+      @if (isEliminated() && spectating()) {
+        <div class="spectating-banner" data-cy="spectating-banner" role="status">
+          👁️ Spectating — opponents' hole cards stay hidden. Use ← Exit to leave.
+        </div>
+      }
+
       <!-- Main Game Area -->
       <main class="game-area">
-        @if (isEliminated()) {
+        @if (isEliminated() && !spectating()) {
           <div class="eliminated-overlay" data-cy="eliminated-overlay">
             <div class="eliminated-content">
               <span class="eliminated-icon">💀</span>
@@ -270,6 +276,16 @@ import { WebSocketService } from '../../services/websocket.service';
       min-height: 100vh;
       background: linear-gradient(135deg, #0d1b2a 0%, #1b2838 50%, #0d1b2a 100%);
       color: #fff;
+    }
+
+    .spectating-banner {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 0.5rem 1rem;
+      background: rgba(59, 130, 246, 0.15);
+      border-bottom: 1px solid rgba(59, 130, 246, 0.35);
+      color: #93c5fd;
+      font-weight: 600;
     }
 
     .tournament-header {
@@ -759,6 +775,10 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   readonly averageStack = computed(() => this.tournamentVm().averageStack);
   readonly myRank = computed(() => this.tournamentVm().myRank);
   readonly isEliminated = computed(() => this.tournamentVm().isEliminated);
+  /** True once an eliminated player chooses to keep watching: the elimination overlay is dismissed and the
+   * (server-sanitized — opponents' hole cards masked) table stays visible read-only. */
+  readonly spectating = signal(false);
+
   readonly myPlayerId = computed(() => this.tournamentVm().myPlayer?.id ?? '');
   readonly myFinishPosition = computed(() => this.tournamentVm().myPlayer?.finishPosition ?? 0);
   readonly myPrizeMoney = computed(() => this.tournamentVm().myPlayer?.prizeMoney ?? 0);
@@ -969,8 +989,11 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   }
 
   
+  /** Eliminated player opts to keep watching: dismiss the elimination overlay and view the table read-only.
+   * No action controls are shown (gated on canPlayerAct && !isEliminated) and the server already masks
+   * opponents' hole cards for a viewer with no live seat. */
   watchTournament(): void {
-    // Placeholder for spectator mode - to be implemented
+    this.spectating.set(true);
   }
 
   exitTournament(): void {

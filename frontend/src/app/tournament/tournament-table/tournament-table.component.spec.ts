@@ -581,6 +581,34 @@ describe('TournamentTableComponent', () => {
     });
   });
 
+  describe('Spectator mode', () => {
+    const eliminate = () => {
+      vmSubject.next(createMockViewModel({
+        myPlayer: createMockPlayer({ id: 'me', isEliminated: true, finishPosition: 5 }),
+        isEliminated: true
+      }));
+      fixture.detectChanges();
+    };
+
+    it('offers a Watch button on the elimination overlay and is not spectating yet', () => {
+      eliminate();
+      expect(component.spectating()).toBe(false);
+      expect(fixture.nativeElement.querySelector('[data-cy="eliminated-overlay"]')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('[data-cy="spectating-banner"]')).toBeNull();
+    });
+
+    it('dismisses the overlay and shows the spectating banner after Watch', () => {
+      eliminate();
+
+      component.watchTournament();
+      fixture.detectChanges();
+
+      expect(component.spectating()).toBe(true);
+      expect(fixture.nativeElement.querySelector('[data-cy="eliminated-overlay"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-cy="spectating-banner"]')).toBeTruthy();
+    });
+  });
+
   
   
   
