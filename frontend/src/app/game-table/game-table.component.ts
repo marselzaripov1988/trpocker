@@ -54,6 +54,12 @@ export class GameTableComponent implements OnInit, OnDestroy {
     return this.avatarService.avatarFor(player.userId);
   }
 
+  /** True when the hand is over and this seat holds the winner — drives the winner glow + badge. */
+  isWinner(player: { name?: string }): boolean {
+    const winner = this.winnerName();
+    return this.isGameFinished() && !!winner && !!player.name && player.name === winner;
+  }
+
   private readonly destroy$ = new Subject<void>();
   private readonly decisionTimeLimitSeconds = 30;
   private turnCountdownTimer: ReturnType<typeof setInterval> | null = null;

@@ -1,4 +1,4 @@
-<div class="game-table" data-cy="poker-table">
+<div class="game-table" data-cy="poker-table" [class.animations-on]="animationsEnabled()">
 
 	
 	<div *ngIf="isLoading()" class="loading-overlay" data-cy="loading-overlay">
@@ -43,12 +43,16 @@
 		[class.active-turn]="isPlayerTurn(player)"
 		[class.folded]="player.folded"
 		[class.all-in]="player.isAllIn"
+		[class.winner]="isWinner(player)"
 		[attr.data-cy]="!player.isBot ? 'human-seat' : 'bot-seat-' + player.seatPosition"
 		[attr.data-player-name]="player.name"
 		[attr.aria-current]="isPlayerTurn(player) ? 'true' : null"
 		data-cy="player-seat">
 
-		
+
+		<div *ngIf="isWinner(player)" class="winner-badge" data-cy="winner-badge">🏆 Winner</div>
+
+
 		<div *ngIf="isDealer(i)" class="dealer-button" title="Dealer" data-cy="dealer-button">D</div>
 
 		
@@ -86,10 +90,14 @@
 				${{ player.chips }}
 			</div>
 			<div class="player-bet" *ngIf="player.betAmount > 0" data-cy="player-bet">
-				Bet: ${{ player.betAmount }}
+				<span class="bet-chip" [attr.data-amount]="player.betAmount">🪙</span>
+				<span class="bet-amount">${{ player.betAmount }}</span>
 			</div>
 			<div class="player-status" *ngIf="getPlayerStatus(player)" data-cy="player-status">
 				{{ getPlayerStatus(player) }}
+			</div>
+			<div *ngIf="isPlayerTurn(player) && !isGameFinished()" class="seat-timer" data-cy="seat-timer">
+				<i></i>
 			</div>
 		</div>
 	</div>
