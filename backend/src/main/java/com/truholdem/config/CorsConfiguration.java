@@ -27,7 +27,14 @@ public class CorsConfiguration implements WebMvcConfigurer {
                 "https://www.truholdem.porkolab.hu",
                 "http://truholdem.porkolab.hu",
                 "https://truholdem.porkolab.hu",
-                "http://localhost:4200"
+                "http://localhost:4200",
+                // Native shells (Capacitor / Tauri) load from these synthetic origins, not the backend's host.
+                "http://localhost",
+                "https://localhost",
+                "capacitor://localhost",
+                "ionic://localhost",
+                "tauri://localhost",
+                "https://tauri.localhost"
         };
 
         // Engedélyezett eredetek összegyűjtése, duplikációk kiszűrésével

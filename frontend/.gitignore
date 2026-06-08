@@ -43,3 +43,9 @@ Thumbs.db
 
 # E2E temp files
 .e2e-port
+
+# Native shells (run `npx cap add android|ios` / `tauri init` to materialize on a build machine
+# with the Android SDK / Xcode / Rust toolchain). Build outputs are never committed.
+/android
+/ios
+/src-tauri

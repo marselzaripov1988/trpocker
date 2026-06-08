@@ -58,19 +58,34 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     /**
-     * Gets allowed origins from configuration.
-     * Falls back to localhost origins if not configured.
+     * Native (Capacitor / Tauri) shells perform the SockJS handshake from these synthetic origins rather than the
+     * backend host. They are app-controlled schemes a browser cannot forge, so they are always allowed in addition
+     * to the configured web origins.
+     */
+    private static final String[] NATIVE_ORIGINS = {
+            "http://localhost", "https://localhost",
+            "capacitor://localhost", "ionic://localhost",
+            "tauri://localhost", "https://tauri.localhost"
+    };
+
+    /**
+     * Gets allowed origins from configuration (web origins) plus the always-allowed native-shell origins.
+     * Falls back to localhost origins if the web list is not configured.
      */
     private String[] getAllowedOrigins() {
         var origins = appProperties.getWebsocket().getAllowedOrigins();
+
+        java.util.LinkedHashSet<String> allowed = new java.util.LinkedHashSet<>();
         if (origins == null || origins.isEmpty()) {
             // Secure defaults - only localhost for development
-            return new String[]{"http://localhost:4200", "http://localhost:3000"};
+            allowed.add("http://localhost:4200");
+            allowed.add("http://localhost:3000");
+        } else {
+            // Filter out wildcard "*" for security
+            origins.stream().filter(origin -> !"*".equals(origin)).forEach(allowed::add);
         }
+        allowed.addAll(java.util.Arrays.asList(NATIVE_ORIGINS));
 
-        // Filter out wildcard "*" for security
-        return origins.stream()
-                .filter(origin -> !"*".equals(origin))
-                .toArray(String[]::new);
+        return allowed.toArray(new String[0]);
     }
 }
