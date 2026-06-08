@@ -1,6 +1,8 @@
 <div class="game-table" data-cy="poker-table" [class.animations-on]="animationsEnabled()">
 
-	
+	<app-confetti *ngIf="iWon() && animationsEnabled()" />
+
+
 	<div *ngIf="isLoading()" class="loading-overlay" data-cy="loading-overlay">
 		<div class="spinner"></div>
 		<span>Loading...</span>
@@ -20,7 +22,7 @@
 		</div>
 		<div class="pot-display" data-cy="pot-display">
 			<span class="label">Pot:</span>
-			<span class="value" data-cy="pot-value">${{ potSize() }}</span>
+			<span class="value" data-cy="pot-value">$<span [appCountUp]="potSize()"></span></span>
 		</div>
 		<div class="hand-number" *ngIf="game()?.handNumber" data-cy="hand-number">
 			<span class="label">Hand:</span>
@@ -51,6 +53,8 @@
 
 
 		<div *ngIf="isWinner(player)" class="winner-badge" data-cy="winner-badge">🏆 Winner</div>
+
+		<div *ngIf="actionLabelText(player) as label" class="action-label" data-cy="action-label">{{ label }}</div>
 
 
 		<div *ngIf="isDealer(i)" class="dealer-button" title="Dealer" data-cy="dealer-button">D</div>
@@ -88,7 +92,7 @@
 			</div>
 			<div class="player-chips" data-cy="player-chips">
 				<span class="chip-icon">💰</span>
-				${{ player.chips }}
+				$<span [appCountUp]="player.chips"></span>
 			</div>
 			<div class="player-bet" *ngIf="player.betAmount > 0" data-cy="player-bet">
 				<span class="bet-chip" [attr.data-amount]="player.betAmount">🪙</span>
@@ -104,6 +108,9 @@
 	</div>
 
 	
+	<div *ngIf="isGameFinished() && winnerSeat() !== null && animationsEnabled()"
+		[class]="'pot-push pot-push--seat-' + winnerSeat()" data-cy="pot-push">🪙</div>
+
 	<div class="community-cards" data-cy="community-cards" role="region" aria-label="Community Cards">
 		<div class="community-cards-label" *ngIf="communityCards().length > 0">Community Cards</div>
 		<div class="cards-container" data-cy="community-cards-container" role="list">

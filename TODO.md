@@ -282,6 +282,6 @@ period / first break) — it is **not** a cash-game mechanic.
       (flop/turn/river) with a staggered flip, and the dealer button animates to its new seat each hand.
 - [x] **Tier-3 (done)** — `game-table`: fold → cards slide to the muck; all-in → plate flash + bet-chip shove;
       pulsing gold ring around the active player's avatar; richer felt + edge vignette on the table background.
-- [ ] **Tier-3 extras (optional)** — pot-push (chips travel to the winning seat on showdown); count-up of the
-      pot / winner-stack numbers; floating action labels ("Raise $X / Check / Fold") off `lastAction`; confetti
-      on a final-table win.
+- [x] **Tier-3 extras (done)** — `game-table`: pot-push chip travels toward the winning seat; pot + stack
+      numbers count up (`CountUpDirective`); floating action labels ("Raise $X / Check / Fold") off `lastAction`;
+      confetti burst when the local player wins.

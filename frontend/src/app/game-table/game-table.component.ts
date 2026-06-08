@@ -21,6 +21,8 @@ import { SoundService } from '../services/sound.service';
 import { GameStore, GameViewModel, PlayerInfo } from '../store/game.store';
 import { PlayerAvatarService } from '../services/player-avatar.service';
 import { AvatarComponent } from '../shared/avatar/avatar.component';
+import { CountUpDirective } from '../directives/count-up.directive';
+import { ConfettiComponent } from '../shared/confetti/confetti.component';
 
 
 @Component({
@@ -28,7 +30,7 @@ import { AvatarComponent } from '../shared/avatar/avatar.component';
   standalone: true,
   templateUrl: './game-table.component.html',
   styleUrls: ['./game-table.component.scss'],
-  imports: [NgFor, NgIf, RaiseInputComponent, AvatarComponent],
+  imports: [NgFor, NgIf, RaiseInputComponent, AvatarComponent, CountUpDirective, ConfettiComponent],
   providers: [GameStore], 
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -58,6 +60,59 @@ export class GameTableComponent implements OnInit, OnDestroy {
   isWinner(player: { name?: string }): boolean {
     const winner = this.winnerName();
     return this.isGameFinished() && !!winner && !!player.name && player.name === winner;
+  }
+
+  /** The local player won this hand — triggers the confetti burst. */
+  readonly iWon = computed(() => {
+    const me = this.humanPlayer();
+    const w = this.winnerName();
+    return this.isGameFinished() && !!me && !!w && me.name === w;
+  });
+
+  /** Seat position (0–3) of the winner, for the pot-push direction; null if unknown. */
+  readonly winnerSeat = computed<number | null>(() => {
+    if (!this.isGameFinished()) {
+      return null;
+    }
+    const w = this.winnerName();
+    if (!w) {
+      return null;
+    }
+    const winner = this.sortedPlayers().find(p => p.name === w);
+    return winner ? winner.seatPosition : null;
+  });
+
+  // Floating action labels: flash the latest action over the acting seat, then fade after a moment.
+  private readonly _actionLabel = signal<{ playerId: string; text: string } | null>(null);
+  private actionLabelTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly _actionLabelSync = effect(() => {
+    const a = this.lastAction();
+    if (!a) {
+      return;
+    }
+    this._actionLabel.set({ playerId: a.playerId, text: this.actionText(a.type, a.amount) });
+    if (this.actionLabelTimer) {
+      clearTimeout(this.actionLabelTimer);
+    }
+    this.actionLabelTimer = setTimeout(() => this._actionLabel.set(null), 1600);
+  });
+
+  private actionText(type: string, amount?: number): string {
+    switch (type) {
+      case 'FOLD': return 'Fold';
+      case 'CHECK': return 'Check';
+      case 'CALL': return 'Call';
+      case 'BET': return amount ? `Bet $${amount}` : 'Bet';
+      case 'RAISE': return amount ? `Raise $${amount}` : 'Raise';
+      case 'ALL_IN': return 'All-in!';
+      default: return type;
+    }
+  }
+
+  /** The transient action label for this seat, or null. */
+  actionLabelText(player: { id?: string }): string | null {
+    const a = this._actionLabel();
+    return a && !!player.id && player.id === a.playerId ? a.text : null;
   }
 
   private readonly destroy$ = new Subject<void>();
@@ -176,6 +231,9 @@ export class GameTableComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearTurnTimer();
+    if (this.actionLabelTimer) {
+      clearTimeout(this.actionLabelTimer);
+    }
     this.destroy$.next();
     this.destroy$.complete();
   }

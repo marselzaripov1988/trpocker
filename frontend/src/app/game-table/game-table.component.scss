@@ -971,3 +971,59 @@
   }
   .game-table.animations-on .player.folded .player-cards { opacity: 0.4; transform: none; }
 }
+
+// ============================================
+// Tier-3 extras: floating action labels + pot-push to the winner
+// ============================================
+
+.action-label {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  z-index: 25;
+  transform: translateX(-50%);
+  padding: 2px 9px;
+  border-radius: 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+.game-table.animations-on .action-label {
+  animation: action-flash 1.6s ease-out forwards;
+}
+@keyframes action-flash {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
+// Pot chip travels from the table centre toward the winning seat, then fades.
+.pot-push {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  z-index: 6;
+  font-size: 1.7rem;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.game-table.animations-on .pot-push { animation: pot-push-fade 0.9s ease-in forwards; }
+.game-table.animations-on .pot-push--seat-0 { animation: pot-push-0 0.9s ease-in forwards; }
+.game-table.animations-on .pot-push--seat-1 { animation: pot-push-1 0.9s ease-in forwards; }
+.game-table.animations-on .pot-push--seat-2 { animation: pot-push-2 0.9s ease-in forwards; }
+.game-table.animations-on .pot-push--seat-3 { animation: pot-push-3 0.9s ease-in forwards; }
+@keyframes pot-push-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pot-push-0 { 0% { transform: translate(-50%, -50%); opacity: 1; } 100% { transform: translate(-50%, 38vh); opacity: 0; } }
+@keyframes pot-push-1 { 0% { transform: translate(-50%, -50%); opacity: 1; } 100% { transform: translate(-42vw, -50%); opacity: 0; } }
+@keyframes pot-push-2 { 0% { transform: translate(-50%, -50%); opacity: 1; } 100% { transform: translate(-50%, -40vh); opacity: 0; } }
+@keyframes pot-push-3 { 0% { transform: translate(-50%, -50%); opacity: 1; } 100% { transform: translate(40vw, -50%); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .game-table.animations-on .action-label { animation: none; }
+  .pot-push { display: none; }
+}
