@@ -249,15 +249,20 @@
 
   .card {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(-70px) scale(0.35) rotate(-7deg);
     animation: deal-in 0.5s ease-out forwards;
   }
 }
 
+// Card flies in from the table centre (above/inward) and settles into the row.
 @keyframes deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-70px) scale(0.35) rotate(-7deg);
+  }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1) rotate(0);
   }
 }
 
@@ -863,12 +868,40 @@
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
+// ============================================
+// Tier-2: board reveal per street + dealer-button drop-in
+// ============================================
+
+// Each community card flips from its back to its face as the street comes out (staggered with the deal-in).
+// backwards fill shows the back during the delay; the final 180deg matches the static .is-flipped state.
+.game-table.animations-on .community-cards .card-inner.is-flipped {
+  animation: board-flip 0.6s ease-out backwards;
+}
+@keyframes board-flip {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(180deg); }
+}
+
+// The dealer button "drops" onto its new seat each hand (it is re-created at the new seat via *ngIf).
+.game-table.animations-on .dealer-button {
+  animation: dealer-drop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes dealer-drop {
+  0%   { transform: translateY(-18px) scale(0.4) rotate(-90deg); opacity: 0; }
+  100% { transform: translateY(0) scale(1) rotate(0); opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .game-table.animations-on .player.winner .player-info,
   .game-table.animations-on .winner-badge,
   .game-table.animations-on .seat-timer i,
-  .game-table.animations-on .player-bet {
+  .game-table.animations-on .player-bet,
+  .game-table.animations-on .community-cards .card-inner.is-flipped,
+  .game-table.animations-on .dealer-button,
+  .game-table .community-cards .cards-container .card {
     animation: none;
   }
   .seat-timer i { transform: scaleX(1); }
+  .community-cards .card-inner.is-flipped { transform: rotateY(180deg); }
+  .community-cards .cards-container .card { opacity: 1; transform: none; }
 }

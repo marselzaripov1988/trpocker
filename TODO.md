@@ -270,3 +270,14 @@ period / first break) — it is **not** a cash-game mechanic.
       buy-in total), allowed only between hands (`currentGameId == null`). `POST /v1/cash/tables/{id}/top-up`
       (`TopUpRequest{amount}` → `SitDownResponse`) + an "＋ Add chips" control in the cash-table component (shown when
       seated + no live hand). Verified by `CashGameWalletServiceIT` (4 cases) + `cash.service.spec` (endpoint wiring).
+
+## TODO — UI / table polish
+- [ ] **Port Tier-1 table animations to `tournament-table`** — the winner glow + 🏆 badge, the per-seat
+      countdown bar (`.seat-timer`), and bet-as-chip pop were added to `game-table` only. `tournament-table`
+      renders its own seats inline (the two tables don't share a seat component), so mirror the same markup +
+      SCSS there, gated by the animations toggle + `prefers-reduced-motion`. Consider extracting a shared
+      `seat`/`player-plate` component to avoid the duplication.
+- [x] **Tier-2 (done)** — `game-table`: cards deal in from table centre, the board reveals per street
+      (flop/turn/river) with a staggered flip, and the dealer button animates to its new seat each hand.
+- [ ] **Tier-3 (optional)** — fold → cards slide to the muck; all-in → stack shove; pulse ring around the
+      active player's avatar; felt texture / vignette on the table background.

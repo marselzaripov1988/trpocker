@@ -111,7 +111,7 @@
 				[style.animation-delay.s]="0.3 + (0.1 * k)"
 				data-cy="community-card"
 				role="listitem">
-				<div class="card-inner is-flipped">
+				<div class="card-inner is-flipped" [style.animation-delay.s]="0.3 + (0.1 * k)">
 					<div class="card-front">
 						<img [src]="getCardImage(card)" [alt]="card.value + ' of ' + card.suit" class="card-image" />
 					</div>
