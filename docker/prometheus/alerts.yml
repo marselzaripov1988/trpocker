@@ -157,16 +157,20 @@ groups:
           summary: "Low cache hit rate"
           description: "Cache hit rate is {{ $value | printf \"%.1f\" }}% (threshold: 70%). This increases database load."
           
+      # Fires if the redis_exporter cannot reach Redis (redis_up==0) OR the exporter itself is unscrapeable
+      # (up==0, i.e. we have lost Redis visibility entirely). Previously scraped 6379 (the RESP port, not an
+      # HTTP metrics endpoint), so up{job="redis"} was always 0 and this alert was meaningless.
       - alert: CacheDown
         expr: |
-          up{job="redis"} == 0
+          redis_up == 0 or up{job="redis"} == 0
         for: 1m
         labels:
           severity: critical
           service: truholdem
         annotations:
           summary: "Redis cache is down"
-          description: "Redis is not responding. Application performance will be severely degraded."
+          description: "Redis is not responding (redis_up=0) or its exporter is unreachable. Hot-state, cluster ownership/fencing and caching are all degraded."
+          runbook_url: "https://runbooks.truholdem.com/cache-down"
 
       
       

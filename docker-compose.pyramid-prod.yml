@@ -76,6 +76,16 @@ services:
     networks:
       - pyramid-net
 
+  # Prometheus scrapes this (9121) for Redis metrics + redis_up, not the RESP port 6379.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    command: ["--redis.addr=redis://redis:6379"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - pyramid-net
+
   backend:
     build:
       context: ./backend

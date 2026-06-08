@@ -48,7 +48,9 @@ scrape_configs:
     scrape_interval: 15s
 
   
+  # Scrape the redis_exporter (HTTP /metrics on 9121), NOT the Redis RESP port 6379. The exporter exposes
+  # redis_up (1 when it can reach Redis) plus memory/clients/keyspace metrics.
   - job_name: 'redis'
     static_configs:
-      - targets: ['redis:6379']
+      - targets: ['redis-exporter:9121']
     scrape_interval: 15s

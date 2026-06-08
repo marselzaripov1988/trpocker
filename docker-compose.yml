@@ -35,6 +35,20 @@ services:
     networks:
       - truholdem-network
 
+  # Exposes Redis stats as Prometheus metrics. Prometheus scrapes THIS (9121), not the Redis RESP port (6379),
+  # which is not an HTTP /metrics endpoint — scraping 6379 directly is why up{job="redis"} was always 0.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.62.0
+    container_name: truholdem-redis-exporter
+    command: ["--redis.addr=redis://redis:6379"]
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - truholdem-network
+
   
   backend:
     build:

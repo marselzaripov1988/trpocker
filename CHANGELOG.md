@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🐞 Fix broken `CacheDown` alert (Redis was never actually monitored)
+- The `redis` Prometheus scrape job targeted `redis:6379` — the RESP protocol port, not an HTTP `/metrics`
+  endpoint — so `up{job="redis"}` was permanently 0 and the `CacheDown` alert was meaningless (and there was no
+  Redis monitoring at all). Added a `redis_exporter` service (`docker-compose.yml` and
+  `docker-compose.pyramid-prod.yml`, both of which mount the shared `monitoring/prometheus.yml`), repointed the
+  scrape job to `redis-exporter:9121`, and rewrote `CacheDown` to `redis_up == 0 or up{job="redis"} == 0` (Redis
+  unreachable, or the exporter itself is down → Redis visibility lost). Now also exposes real Redis metrics
+  (memory, clients, keyspace). `promtool` validated; both compose files validated.
+
 ### 🔔 Observability: alerts across realtime, cluster, persistence & wallet
 - Closed the alerting gaps for this system's domain-specific failure modes (the generic infra alerts only covered
   HTTP/JVM/DB-pool). 12 new rules in `docker/prometheus/alerts.yml` (`promtool check rules` → 35 rules), plus the
