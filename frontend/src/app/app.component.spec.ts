@@ -58,7 +58,8 @@ describe('AppComponent', () => {
     };
 
     authServiceMock = {
-      isAdmin: jest.fn().mockReturnValue(false)
+      isAdmin: jest.fn().mockReturnValue(false),
+      isAuthenticated: jest.fn().mockReturnValue(false)
     };
 
     await TestBed.configureTestingModule({
