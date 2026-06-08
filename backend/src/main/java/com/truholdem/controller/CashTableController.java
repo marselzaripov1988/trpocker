@@ -28,6 +28,7 @@ import com.truholdem.dto.CashTableResponse;
 import com.truholdem.dto.CashTableStateResponse;
 import com.truholdem.dto.SitDownRequest;
 import com.truholdem.dto.SitDownResponse;
+import com.truholdem.dto.TopUpRequest;
 import com.truholdem.model.CashChipScale;
 import com.truholdem.model.CashSeat;
 import com.truholdem.model.CashTable;
@@ -96,6 +97,17 @@ public class CashTableController {
         User user = (User) principal;
         CashSeat seat = cashGameService.sit(user.getId(), id, user.getUsername(), request.buyIn());
         return ResponseEntity.status(HttpStatus.CREATED).body(new SitDownResponse(
+                seat.getSeatNumber(), seat.getPlayerName(), seat.getStack(), seat.getStatus()));
+    }
+
+    @PostMapping("/{id}/top-up")
+    @Operation(summary = "Add chips to your active seat between hands (up to the table max buy-in)")
+    public ResponseEntity<SitDownResponse> topUp(@PathVariable UUID id,
+            @Valid @RequestBody TopUpRequest request, @AuthenticationPrincipal UserDetails principal) {
+        assertEnabled();
+        User user = (User) principal;
+        CashSeat seat = cashGameService.topUp(user.getId(), id, request.amount());
+        return ResponseEntity.ok(new SitDownResponse(
                 seat.getSeatNumber(), seat.getPlayerName(), seat.getStack(), seat.getStatus()));
     }
 

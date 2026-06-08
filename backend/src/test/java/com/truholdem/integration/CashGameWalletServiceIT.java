@@ -104,6 +104,59 @@ class CashGameWalletServiceIT {
     }
 
     @Test
+    @DisplayName("top-up debits the wallet and raises the seat's stack + buy-in total")
+    void topUpDebitsAndRaisesStack() {
+        UUID user = fundedUser("50");
+        bridge.buyIn(user, tableId, "Alice", new BigDecimal("10.00"));
+
+        CashSeat seat = bridge.topUp(user, tableId, new BigDecimal("5.00"));
+
+        assertThat(seat.getStack()).isEqualByComparingTo("15.00");
+        assertThat(seat.getBuyInTotal()).isEqualByComparingTo("15.00");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("35.00");
+    }
+
+    @Test
+    @DisplayName("a top-up that would exceed the table max buy-in is rejected and nothing changes")
+    void topUpBeyondMaxBuyInRejected() {
+        UUID user = fundedUser("50");
+        bridge.buyIn(user, tableId, "Alice", new BigDecimal("18.00"));
+
+        assertThatThrownBy(() -> bridge.topUp(user, tableId, new BigDecimal("5.00")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("max buy-in");
+
+        assertThat(cashSeatRepository.findByCashTableIdAndPlayerIdAndStatusNot(tableId, user, CashSeatStatus.LEFT)
+                .orElseThrow().getStack()).isEqualByComparingTo("18.00");
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("32.00");
+    }
+
+    @Test
+    @DisplayName("topping up without an active seat is rejected")
+    void topUpWithoutSeatRejected() {
+        UUID user = fundedUser("50");
+
+        assertThatThrownBy(() -> bridge.topUp(user, tableId, new BigDecimal("5.00")))
+                .isInstanceOf(java.util.NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("topping up during a live hand is rejected")
+    void topUpDuringLiveHandRejected() {
+        UUID user = fundedUser("50");
+        bridge.buyIn(user, tableId, "Alice", new BigDecimal("10.00"));
+        CashTable table = cashTableRepository.findById(tableId).orElseThrow();
+        table.setCurrentGameId(UUID.randomUUID());
+        cashTableRepository.save(table);
+
+        assertThatThrownBy(() -> bridge.topUp(user, tableId, new BigDecimal("5.00")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("live hand");
+
+        assertThat(walletService.balance(user, ASSET)).isEqualByComparingTo("40.00");
+    }
+
+    @Test
     @DisplayName("seats are assigned lowest-free; a player may hold only one live seat per table")
     void seatAssignmentAndSingleSeat() {
         UUID alice = fundedUser("50");

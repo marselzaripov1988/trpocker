@@ -77,6 +77,51 @@ public class CashGameWalletService {
     }
 
     /**
+     * Top up an active seat between hands: debit the wallet and add the chips to the player's stack, capped at the
+     * table's max buy-in. Allowed only while the table has no live hand (you cannot add chips to a stack that is
+     * in play). The wallet charge is idempotent on the seat id + the pre-top-up buy-in total, so a retried request
+     * that hasn't yet committed replays without double-charging, while a genuine second top-up gets a fresh key.
+     *
+     * @throws NoSuchElementException    the table does not exist, or the player holds no active seat there
+     * @throws IllegalStateException     the table is inactive or a hand is in progress
+     * @throws IllegalArgumentException  the amount is non-positive or would push the stack past the max buy-in
+     */
+    @Transactional
+    public CashSeat topUp(UUID userId, UUID tableId, BigDecimal amount) {
+        CashTable table = cashTableRepository.findById(tableId)
+                .orElseThrow(() -> new NoSuchElementException("Cash table not found: " + tableId));
+        if (!table.isActive()) {
+            throw new IllegalStateException("Cash table " + tableId + " is not active");
+        }
+        if (table.getCurrentGameId() != null) {
+            throw new IllegalStateException("Cannot top up during a live hand; wait until the hand finishes");
+        }
+        if (amount == null || amount.signum() <= 0) {
+            throw new IllegalArgumentException("Top-up amount must be positive");
+        }
+
+        CashSeat seat = liveSeat(userId, tableId)
+                .filter(s -> s.getStatus() == CashSeatStatus.ACTIVE)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No active seat for player " + userId + " at table " + tableId));
+
+        BigDecimal newStack = seat.getStack().add(amount);
+        if (newStack.compareTo(table.getMaxBuyIn()) > 0) {
+            throw new IllegalArgumentException("Top-up would exceed the table max buy-in " + table.getMaxBuyIn()
+                    + " (current stack " + seat.getStack() + " + " + amount + ")");
+        }
+
+        String key = topUpKey(seat.getId(), seat.getBuyInTotal());
+        seat.topUp(amount);
+        cashSeatRepository.save(seat);
+        walletService.chargeCashBuyIn(userId, table.getAsset(), amount, key);
+
+        log.info("User {} topped up {} {} at cash table {} seat {} -> stack {}",
+                userId, amount, table.getAsset(), tableId, seat.getSeatNumber(), seat.getStack());
+        return seat;
+    }
+
+    /**
      * Request to stand up: mark the seat {@code LEAVING} so the engine deals the player out and cashes them
      * out once the current hand finishes (see {@link #cashOut}). Between hands this is immediately followed by a
      * cash-out. No-op-safe: returns the seat in its (possibly already-leaving) state.
@@ -138,5 +183,9 @@ public class CashGameWalletService {
 
     private static String cashOutKey(UUID seatId) {
         return "cashout:" + seatId;
+    }
+
+    private static String topUpKey(UUID seatId, BigDecimal buyInTotalBefore) {
+        return "cashtopup:" + seatId + ":" + buyInTotalBefore.toPlainString();
     }
 }

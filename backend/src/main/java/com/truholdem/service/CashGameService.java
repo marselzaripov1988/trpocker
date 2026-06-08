@@ -249,6 +249,12 @@ public class CashGameService {
         return walletBridge.buyIn(userId, tableId, playerName, buyIn);
     }
 
+    /** Top up an active seat between hands (debit wallet, raise stack up to the table max buy-in). */
+    @Transactional
+    public CashSeat topUp(UUID userId, UUID tableId, BigDecimal amount) {
+        return walletBridge.topUp(userId, tableId, amount);
+    }
+
     @Transactional(readOnly = true)
     public List<CashTable> listActiveTables() {
         return cashTableRepository.findByActiveTrueOrderBySmallBlindAsc();

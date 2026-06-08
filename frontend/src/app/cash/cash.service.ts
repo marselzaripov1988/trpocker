@@ -33,6 +33,11 @@ export class CashService {
     return this.http.post<SitDownResult>(`${this.url}/${id}/sit`, { buyIn });
   }
 
+  /** Add chips to your active seat between hands (capped at the table's max buy-in). */
+  topUp(id: string, amount: number): Observable<SitDownResult> {
+    return this.http.post<SitDownResult>(`${this.url}/${id}/top-up`, { amount });
+  }
+
   /** Stand up (cash out now, or deferred to the end of the current hand). */
   leave(id: string): Observable<CashLeaveResult> {
     return this.http.post<CashLeaveResult>(`${this.url}/${id}/leave`, {});

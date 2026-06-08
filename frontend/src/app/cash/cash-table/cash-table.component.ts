@@ -68,6 +68,16 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
             <button class="btn" [disabled]="busy() || s.seats.length < 2" (click)="deal()" data-cy="deal-btn">
               Deal
             </button>
+            @if (mySeat()) {
+              <div class="topup" data-cy="cash-topup">
+                <span class="muted">Stack: {{ mySeat()!.stack }} / max {{ s.table.maxBuyIn }} {{ s.table.asset }}</span>
+                <input type="number" min="0" step="0.01" [(ngModel)]="topUpAmount"
+                       placeholder="amount" data-cy="topup-amount" />
+                <button class="btn" [disabled]="busy() || topUpAmount <= 0" (click)="topUp()" data-cy="topup-btn">
+                  ＋ Add chips
+                </button>
+              </div>
+            }
           </section>
         }
 
@@ -133,7 +143,12 @@ export class CashTableComponent implements OnInit {
     return !!h?.inProgress && h.currentActorName === this.myName();
   });
 
+  /** My seat at this table (if I'm seated), used to gate + label the between-hands top-up. */
+  readonly mySeat = computed(() =>
+    this.state()?.seats.find(s => s.playerName === this.myName()) ?? null);
+
   raiseAmount: number | null = null;
+  topUpAmount = 0;
   private id = '';
 
   ngOnInit(): void {
@@ -168,6 +183,27 @@ export class CashTableComponent implements OnInit {
         this.load();
       },
       error: () => { this.errorHandler.addError('Action rejected', 'It may not be your turn or the action is illegal.'); this.busy.set(false); this.load(); }
+    });
+  }
+
+  /** Add chips to my seat between hands (the backend caps it at the table's max buy-in). */
+  topUp(): void {
+    if (this.topUpAmount <= 0) {
+      return;
+    }
+    this.busy.set(true);
+    this.service.topUp(this.id, this.topUpAmount).subscribe({
+      next: seat => {
+        this.errorHandler.addSuccess('Chips added', `Stack is now ${seat.stack}`);
+        this.topUpAmount = 0;
+        this.busy.set(false);
+        this.load();
+      },
+      error: () => {
+        this.errorHandler.addError('Could not add chips',
+          'Check the amount (must be positive and keep you within the max buy-in) — only between hands.');
+        this.busy.set(false);
+      }
     });
   }
 

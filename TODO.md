@@ -265,7 +265,8 @@ period / first break) — it is **not** a cash-game mechanic.
 - [ ] **Frontend** — `TournamentStore.requestAddOn` effect + an "Add-on" button/info in the tournament lobby
       (only when add-on-enabled + window open), by exact analogy with the rebuy slice. Surface `addOnsUsed`
       on `TournamentPlayer` (the leaderboard entry already carries it).
-- [ ] **Cash top-up (separate, also missing)** — the cash analog is *top-up* (re-buy chips up to the max
-      buy-in between hands), NOT add-on. Today cash only has `/sit` (buy-in) + `/leave` (cash-out). If wanted:
-      `CashGameWalletService.topUp` (debit wallet, raise `CashSeat` stack up to maxBuyIn, ledger `CASH_BUYIN`,
-      apply between hands only) + `POST /cash/tables/{id}/top-up` + a cash-table "Add chips" button.
+- [x] **Cash top-up (done)** — the cash analog of an add-on: `CashGameWalletService.topUp` debits the wallet and
+      raises the seat's stack up to the table's max buy-in (ledger `CASH_BUYIN`, idempotent on seat id + pre-top-up
+      buy-in total), allowed only between hands (`currentGameId == null`). `POST /v1/cash/tables/{id}/top-up`
+      (`TopUpRequest{amount}` → `SitDownResponse`) + an "＋ Add chips" control in the cash-table component (shown when
+      seated + no live hand). Verified by `CashGameWalletServiceIT` (4 cases) + `cash.service.spec` (endpoint wiring).
