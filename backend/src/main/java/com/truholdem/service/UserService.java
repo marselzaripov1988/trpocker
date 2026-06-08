@@ -22,7 +22,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -111,6 +114,25 @@ public class UserService implements UserDetailsService {
     @Cacheable(value = "users", key = "#id")
     public Optional<User> findById(UUID id) {
         return userRepository.findById(id);
+    }
+
+    /**
+     * Avatars for a set of users (e.g. the players seated at a table), as a {@code userId → avatarUrl} map.
+     * Users without an avatar are omitted, so the caller falls back to a default glyph.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> getAvatars(Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> avatars = new HashMap<>();
+        for (User user : userRepository.findAllById(userIds)) {
+            String avatar = user.getAvatarUrl();
+            if (avatar != null && !avatar.isBlank()) {
+                avatars.put(user.getId(), avatar);
+            }
+        }
+        return avatars;
     }
 
     @Transactional(readOnly = true)

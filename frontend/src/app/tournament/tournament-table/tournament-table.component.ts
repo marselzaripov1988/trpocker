@@ -5,6 +5,7 @@ import {
   OnDestroy,
   ChangeDetectionStrategy,
   computed,
+  effect,
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -21,15 +22,18 @@ import { Player } from '../../model/player';
 import { UiStateService } from '../../services/ui-state.service';
 import { SoundService } from '../../services/sound.service';
 import { WebSocketService } from '../../services/websocket.service';
+import { PlayerAvatarService } from '../../services/player-avatar.service';
+import { AvatarComponent } from '../../shared/avatar/avatar.component';
 
 @Component({
   selector: 'app-tournament-table',
   standalone: true,
   imports: [
-    CommonModule, 
-    BlindTimerComponent, 
+    CommonModule,
+    BlindTimerComponent,
     TournamentLeaderboardComponent,
-    RaiseInputComponent
+    RaiseInputComponent,
+    AvatarComponent
   ],
   providers: [TournamentStore, GameStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -139,7 +143,11 @@ import { WebSocketService } from '../../services/websocket.service';
                 [attr.data-cy]="'player-seat-' + i"
               >
                 <div class="player-avatar">
-                  {{ player.isBot ? '🤖' : '👤' }}
+                  <app-avatar
+                    [value]="avatarValue(player)"
+                    [fallback]="player.isBot ? '🤖' : '👤'"
+                    [size]="44"
+                  />
                 </div>
                 <div class="player-info">
                   <span class="player-name">{{ player.name }}</span>
@@ -698,6 +706,7 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
   private readonly uiState = inject(UiStateService);
   private readonly soundService = inject(SoundService);
   private readonly wsService = inject(WebSocketService);
+  private readonly avatarService = inject(PlayerAvatarService);
 
   private readonly destroy$ = new Subject<void>();
   private readonly decisionTimeLimitSeconds = 30;
@@ -802,6 +811,21 @@ export class TournamentTableComponent implements OnInit, OnDestroy {
     }
     return this.tournamentVm().table?.players ?? [];
   });
+
+  /** Keep the avatar cache warm for everyone currently seated (humans only — bots have no user id). */
+  private readonly _avatarSync = effect(() => {
+    this.avatarService.ensure(this.tablePlayers().map(p => this.userIdOf(p)));
+  });
+
+  private userIdOf(player: unknown): string | undefined {
+    const p = player as { userId?: string; playerId?: string };
+    return p.userId ?? p.playerId;
+  }
+
+  /** Resolved avatar value for a seated player ('' → AvatarComponent shows the bot/person fallback). */
+  avatarValue(player: unknown): string {
+    return this.avatarService.avatarFor(this.userIdOf(player));
+  }
   readonly communityCards = computed(() => this.gameVm().communityCards);
   readonly potSize = computed(() => this.gameVm().potSize);
   readonly canPlayerAct = computed(() => this.gameVm().canPlayerAct);

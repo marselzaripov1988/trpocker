@@ -72,6 +72,11 @@
 
 		
 		<div class="player-info" data-cy="player-info">
+			<app-avatar
+				[value]="avatarValue(player)"
+				[fallback]="player.isBot ? '🤖' : '👤'"
+				[size]="40"
+				data-cy="player-avatar" />
 			<div class="player-name" data-cy="player-name">
 				{{ (player.name || 'Anonymous').replace('Bot', 'Bot ') }}
 				<span *ngIf="isPlayerTurn(player)" class="turn-indicator" data-cy="turn-indicator">⏱</span>

@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 
@@ -63,11 +64,21 @@ public class UserController {
     })
     public ResponseEntity<UserProfileDto> getCurrentUserProfile(@AuthenticationPrincipal UserDetails userDetails) {
         logger.info("Profile request for user: {}", userDetails.getUsername());
-        
+
         User user = (User) userDetails;
         UserProfileDto profile = userService.getUserProfile(user.getId());
-        
+
         return ResponseEntity.ok(profile);
+    }
+
+    @GetMapping("/avatars")
+    @Operation(
+        summary = "Get avatars for a set of users",
+        description = "Returns a userId → avatarUrl map for the given user ids (e.g. the players seated at a "
+            + "table). Users without an avatar are omitted."
+    )
+    public ResponseEntity<Map<UUID, String>> getAvatars(@RequestParam("ids") List<UUID> ids) {
+        return ResponseEntity.ok(userService.getAvatars(ids));
     }
 
     @GetMapping("/profile/{userId}")

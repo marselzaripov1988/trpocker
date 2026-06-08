@@ -6,6 +6,7 @@ import {
   inject,
   signal,
   computed,
+  effect,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -18,6 +19,8 @@ import { PlayerService } from '../services/player.service';
 import { UiStateService } from '../services/ui-state.service';
 import { SoundService } from '../services/sound.service';
 import { GameStore, GameViewModel, PlayerInfo } from '../store/game.store';
+import { PlayerAvatarService } from '../services/player-avatar.service';
+import { AvatarComponent } from '../shared/avatar/avatar.component';
 
 
 @Component({
@@ -25,7 +28,7 @@ import { GameStore, GameViewModel, PlayerInfo } from '../store/game.store';
   standalone: true,
   templateUrl: './game-table.component.html',
   styleUrls: ['./game-table.component.scss'],
-  imports: [NgFor, NgIf, RaiseInputComponent],
+  imports: [NgFor, NgIf, RaiseInputComponent, AvatarComponent],
   providers: [GameStore], 
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -39,6 +42,17 @@ export class GameTableComponent implements OnInit, OnDestroy {
   private readonly playerService = inject(PlayerService);
   private readonly soundService = inject(SoundService);
   private readonly router = inject(Router);
+  private readonly avatarService = inject(PlayerAvatarService);
+
+  /** Warm the avatar cache for everyone seated; AvatarComponent falls back to a glyph until they arrive. */
+  private readonly _avatarSync = effect(() => {
+    this.avatarService.ensure(this.sortedPlayers().map(p => (p as { userId?: string }).userId));
+  });
+
+  /** Resolved avatar value for a seated player ('' → AvatarComponent shows the bot/person fallback). */
+  avatarValue(player: { userId?: string }): string {
+    return this.avatarService.avatarFor(player.userId);
+  }
 
   private readonly destroy$ = new Subject<void>();
   private readonly decisionTimeLimitSeconds = 30;

@@ -12,6 +12,8 @@ export class Player {
 	isAllIn: boolean;
 	hasActed: boolean;
 	seatPosition: number;
+	/** Owning user id (null for bots); used to resolve the player's avatar. */
+	userId?: string;
 
 	constructor() {
 		this.id = '';
