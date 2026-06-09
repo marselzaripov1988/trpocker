@@ -1,13 +1,18 @@
-# Pyramid 10k — staging / load-test stack (multi-backend behind Traefik)
+# Pyramid 10k — staging / production stack (multi-backend behind Traefik, HTTPS via Let's Encrypt)
+#
+# Prereqs: a real DNS A/AAAA record for $PUBLIC_HOST pointing at this host, ports 80+443 open
+# (80 is needed for the ACME HTTP-01 challenge and the HTTP→HTTPS redirect).
 #
 # Usage:
-#   export JWT_SECRET=$(openssl rand -base64 48)
-#   export DB_PASSWORD=your-strong-password
-#   docker compose -f docker-compose.pyramid-prod.yml build
-#   docker compose -f docker-compose.pyramid-prod.yml up -d postgres pgbouncer redis traefik frontend
-#   docker compose -f docker-compose.pyramid-prod.yml up -d --scale backend=8
+#   cp .env.prod.example .env.prod   # then fill in PUBLIC_HOST, ACME_EMAIL, JWT_SECRET, DB_PASSWORD, …
+#   docker compose -f docker-compose.pyramid-prod.yml --env-file .env.prod build
+#   docker compose -f docker-compose.pyramid-prod.yml --env-file .env.prod up -d \
+#       postgres pgbouncer redis redis-exporter traefik frontend
+#   docker compose -f docker-compose.pyramid-prod.yml --env-file .env.prod up -d --scale backend=8
+#   # observability stack: add `--profile observability`
 #
-# API: http://localhost/api/...
+# App:  https://$PUBLIC_HOST/          API: https://$PUBLIC_HOST/api/...   WS: wss://$PUBLIC_HOST/ws
+# CI deploy can instead `pull` the GHCR images by setting BACKEND_IMAGE / FRONTEND_IMAGE (see .env.prod.example).
 
 services:
   postgres:
@@ -87,6 +92,8 @@ services:
       - pyramid-net
 
   backend:
+    # Default tag lets local `compose build` work; CI deploy sets BACKEND_IMAGE to a pushed GHCR tag and pulls it.
+    image: ${BACKEND_IMAGE:-truholdem-backend:local}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -96,9 +103,9 @@ services:
       DB_USERNAME: user
       DB_PASSWORD: ${DB_PASSWORD:-password}
       REDIS_HOST: redis
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
-      WEBSOCKET_ORIGINS: ${WEBSOCKET_ORIGINS:-http://localhost}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (openssl rand -base64 48)}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${PUBLIC_HOST}}
+      WEBSOCKET_ORIGINS: ${WEBSOCKET_ORIGINS:-https://${PUBLIC_HOST}}
       WEBSOCKET_CLUSTER_ENABLED: "true"
       JAVA_TOOL_OPTIONS: >-
         -Xms4g -Xmx12g
@@ -119,18 +126,26 @@ services:
       - pyramid-net
     labels:
       - traefik.enable=true
-      - traefik.http.routers.truholdem-api.rule=PathPrefix(`/api`)
-      - traefik.http.routers.truholdem-api.entrypoints=web
+      # REST — HTTPS only, cert from the `le` resolver; sticky cookie keeps a client on one node.
+      - traefik.http.routers.truholdem-api.rule=Host(`${PUBLIC_HOST:?PUBLIC_HOST is required for TLS}`) && PathPrefix(`/api`)
+      - traefik.http.routers.truholdem-api.entrypoints=websecure
+      - traefik.http.routers.truholdem-api.tls=true
+      - traefik.http.routers.truholdem-api.tls.certresolver=le
       - traefik.http.routers.truholdem-api.service=truholdem-api
       - traefik.http.services.truholdem-api.loadbalancer.server.port=8080
       - traefik.http.services.truholdem-api.loadbalancer.sticky.cookie=true
       - traefik.http.services.truholdem-api.loadbalancer.sticky.cookie.name=truholdem_route
-      - traefik.http.routers.truholdem-ws.rule=PathPrefix(`/ws`)
-      - traefik.http.routers.truholdem-ws.entrypoints=web
+      - traefik.http.services.truholdem-api.loadbalancer.sticky.cookie.secure=true
+      # WebSocket — same host, /ws prefix, HTTPS (wss); sticky so the STOMP session stays on its owner node.
+      - traefik.http.routers.truholdem-ws.rule=Host(`${PUBLIC_HOST}`) && PathPrefix(`/ws`)
+      - traefik.http.routers.truholdem-ws.entrypoints=websecure
+      - traefik.http.routers.truholdem-ws.tls=true
+      - traefik.http.routers.truholdem-ws.tls.certresolver=le
       - traefik.http.routers.truholdem-ws.service=truholdem-ws
       - traefik.http.services.truholdem-ws.loadbalancer.server.port=8080
       - traefik.http.services.truholdem-ws.loadbalancer.sticky.cookie=true
       - traefik.http.services.truholdem-ws.loadbalancer.sticky.cookie.name=truholdem_ws
+      - traefik.http.services.truholdem-ws.loadbalancer.sticky.cookie.secure=true
     deploy:
       resources:
         limits:
@@ -142,27 +157,44 @@ services:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.file.filename=/etc/traefik/pyramid-dynamic.yml
+      # :80 stays up for the ACME HTTP-01 challenge and to 301-redirect all plaintext to HTTPS.
       - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      # Let's Encrypt — HTTP-01 challenge over the web entrypoint; certs persisted to the named volume.
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?ACME_EMAIL is required for Let's Encrypt}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      # While testing DNS/cert issuance, uncomment the staging CA to dodge LE's strict prod rate limits:
+      # - --certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
       - --log.level=INFO
       - --accesslog=true
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./docker/traefik/pyramid-dynamic.yml:/etc/traefik/pyramid-dynamic.yml:ro
+      - pyramid_letsencrypt:/letsencrypt
     networks:
       - pyramid-net
 
   frontend:
+    image: ${FRONTEND_IMAGE:-truholdem-frontend:local}
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        API_URL: http://localhost/api
+        # Relative path → the SPA calls the same origin, so it works under HTTPS without hard-coding the host.
+        API_URL: /api
     labels:
       - traefik.enable=true
-      - traefik.http.routers.truholdem-web.rule=PathPrefix(`/`)
-      - traefik.http.routers.truholdem-web.entrypoints=web
+      - traefik.http.routers.truholdem-web.rule=Host(`${PUBLIC_HOST}`)
+      - traefik.http.routers.truholdem-web.entrypoints=websecure
+      - traefik.http.routers.truholdem-web.tls=true
+      - traefik.http.routers.truholdem-web.tls.certresolver=le
       - traefik.http.routers.truholdem-web.priority=1
       - traefik.http.services.truholdem-web.loadbalancer.server.port=80
     depends_on:
@@ -196,6 +228,7 @@ services:
 volumes:
   pyramid_pg_data:
   pyramid_redis_data:
+  pyramid_letsencrypt:   # Traefik ACME state (acme.json) — keep it; re-issuing on every deploy hits LE rate limits
 
 networks:
   pyramid-net:
