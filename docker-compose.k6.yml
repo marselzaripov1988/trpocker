@@ -37,6 +37,11 @@ services:
       SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
       SPRING_LIQUIBASE_ENABLED: "false"
       RATE_LIMIT_ENABLED: "false"
+      # Dev/CI only: seed an ADMIN so the k6 smoke can create + start tournaments (both are admin-gated).
+      APP_SEED_ADMIN_ENABLED: "true"
+      APP_SEED_ADMIN_USERNAME: "k6admin"
+      APP_SEED_ADMIN_PASSWORD: "K6AdminPass123!"
+      APP_SEED_ADMIN_EMAIL: "k6admin@k6.local"
     ports:
       - "8080:8080"
     depends_on:

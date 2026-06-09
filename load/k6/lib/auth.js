@@ -26,6 +26,15 @@ export function registerAndLogin(username) {
   };
 }
 
+/** Log in an existing account (e.g. the seeded admin) without registering it. */
+export function login(username, password) {
+  const api = apiBase();
+  const res = post(`${api}/auth/login`, { username, password }, null, { name: 'auth_login' });
+  checkOk(res, 'auth_login', [200]);
+  const body = parseJson(res);
+  return { token: body?.accessToken, username };
+}
+
 export function fetchProfile(token) {
   const api = apiBase();
   const res = get(`${api}/v1/users/profile`, token, { name: 'users_profile' });

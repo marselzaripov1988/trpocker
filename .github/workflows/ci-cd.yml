@@ -324,6 +324,9 @@ jobs:
           SCENARIO: smoke
           VUS: "4"
           SETUP_STAGGER_SECONDS: "0"
+          # Matches the seeded admin in docker-compose.k6.yml (create + start tournament are admin-gated).
+          K6_ADMIN_USER: k6admin
+          K6_ADMIN_PASSWORD: K6AdminPass123!
 
       - name: Upload k6 summary
         if: always()

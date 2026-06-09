@@ -10,7 +10,7 @@
  *   SETUP_STAGGER_SECONDS  delay between setup user registrations (default 13; use 0 in CI)
  */
 import { sleep } from 'k6';
-import { registerAndLogin, fetchProfile } from './lib/auth.js';
+import { registerAndLogin, fetchProfile, login } from './lib/auth.js';
 import {
   createTournament,
   registerForTournament,
@@ -25,6 +25,10 @@ const VUS = Number(__ENV.VUS || 4);
 const SCENARIO = (__ENV.SCENARIO || 'smoke').toLowerCase();
 const ACTION_ROUNDS = Number(__ENV.ACTION_ROUNDS || 30);
 const SETUP_STAGGER_SECONDS = Number(__ENV.SETUP_STAGGER_SECONDS ?? 13);
+// Creating + starting a tournament is ADMIN-gated; the smoke logs in as a seeded admin for those two calls
+// (players still self-register + play as normal users). The CI/k6 stack seeds this admin (docker-compose.k6.yml).
+const ADMIN_USER = __ENV.K6_ADMIN_USER || 'k6admin';
+const ADMIN_PASSWORD = __ENV.K6_ADMIN_PASSWORD || 'K6AdminPass123!';
 
 export const options = (() => {
   if (SCENARIO === 'load') {
@@ -79,11 +83,12 @@ export function setup() {
     players.push({ username, token: session.token });
   }
 
-  const tournamentId = createTournament(players[0].token, {
+  const admin = login(ADMIN_USER, ADMIN_PASSWORD);
+  const tournamentId = createTournament(admin.token, {
     name: `k6-${SCENARIO}-${runId}`,
     maxPlayers: VUS,
   });
-  return { tournamentId, players };
+  return { tournamentId, players, adminToken: admin.token };
 }
 
 export default function (data) {
@@ -102,10 +107,10 @@ export default function (data) {
 
   registerForTournament(token, tournamentId, userId, player.username);
 
-  // Last VU ensures start after all parallel registrations land.
+  // Last VU ensures start after all parallel registrations land. Start is admin-gated → use the admin token.
   if (__VU === VUS) {
     sleep(0.5);
-    tryStartTournament(token, tournamentId);
+    tryStartTournament(data.adminToken, tournamentId);
   }
 
   const running = waitForRunning(token, tournamentId);
