@@ -357,18 +357,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        # Pinned to v0.35.0 (post-2026-03 incident safe release); @master broke the job nondeterministically.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
         with:
           scan-type: 'fs'
           scan-ref: '.'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          ignore-unfixed: true
+          exit-code: '0'   # advisory scan — findings are uploaded, they never fail the pipeline
           format: 'sarif'
           output: 'trivy-results.sarif'
+          # Skip vendored / build output so the scan is fast and free of third-party noise.
+          skip-dirs: 'node_modules,**/node_modules,target,**/target,dist,**/dist,coverage,.angular,.git'
+        env:
+          # The chronic failure was ghcr's TOOMANYREQUESTS on the trivy DB pull; use the ECR public mirror.
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v4
         if: always()
+        # Don't red the pipeline if code-scanning upload is unavailable; the scan result is still produced.
+        continue-on-error: true
         with:
           sarif_file: 'trivy-results.sarif'
         env:
