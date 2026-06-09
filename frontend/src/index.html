@@ -6,6 +6,13 @@
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <!-- sockjs-client (loaded by the WebSocket service) references the Node `global`; map it to `window`
+       so its module initializes in the browser. Must run before the app bundle. -->
+  <script>
+    if (typeof window !== 'undefined' && typeof window.global === 'undefined') {
+      window.global = window;
+    }
+  </script>
 </head>
 <body>
   <app-root></app-root>
