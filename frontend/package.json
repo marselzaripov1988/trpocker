@@ -41,7 +41,7 @@
     "@capacitor/android": "^8.4.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/ios": "^8.4.0",
-    "@ngrx/component-store": "^20.1.0",
+    "@ngrx/component-store": "^21.1.1",
     "@ngrx/operators": "^20.1.0",
     "@stomp/stompjs": "^7.3.0",
     "bootstrap": "^5.3.3",
