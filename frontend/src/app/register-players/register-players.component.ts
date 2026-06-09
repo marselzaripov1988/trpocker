@@ -5,12 +5,10 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { PlayerService } from '../services/player.service';
 import { environment } from '../../environments/environment';
+import { PlayerInfo } from '../model/player-info';
 
-export interface PlayerInfo {
-  name: string;
-  startingChips: number;
-  isBot: boolean;
-}
+// Re-exported for backward compatibility with existing import sites.
+export type { PlayerInfo };
 
 @Component({
   selector: 'app-register-players',

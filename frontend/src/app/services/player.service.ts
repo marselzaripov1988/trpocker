@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { PlayerInfo } from '../register-players/register-players.component';
+import { PlayerInfo } from '../model/player-info';
 
 @Injectable({
   providedIn: 'root'
