@@ -6,11 +6,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
+import java.util.List;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truholdem.config.GameStateRedisConfig;
+import com.truholdem.domain.aggregate.PokerGame;
+import com.truholdem.domain.value.Chips;
+import com.truholdem.mapper.PokerGameMapper;
 import com.truholdem.model.Card;
 import com.truholdem.model.Game;
+import com.truholdem.model.GamePhase;
+import com.truholdem.model.HandLifecycleState;
 import com.truholdem.model.Player;
+import com.truholdem.model.PlayerAction;
+import com.truholdem.model.PlayerInfo;
 import com.truholdem.model.Suit;
 import com.truholdem.model.Value;
 
@@ -81,6 +90,66 @@ class HotStateGameSerializationTest {
         Game back = defaultMapper.readValue(defaultMapper.writeValueAsString(game), Game.class);
 
         assertThat(back.getVersion()).as("default mapper drops the @JsonIgnore version").isNull();
+    }
+
+    @Test
+    @DisplayName("per-player betting-round flags (hasActed/betAmount/…) survive the hot-state round-trip")
+    void hotStateMapperPreservesBettingRoundFlags() throws Exception {
+        Game game = sampleGame();
+        Player p = game.getPlayers().get(0);
+        p.setHasActed(true);
+        p.setBetAmount(40);
+        p.setTotalBetInRound(60);
+        p.setAllIn(true);
+
+        Player back = hotStateMapper.readValue(hotStateMapper.writeValueAsString(game), Game.class)
+                .getPlayers().get(0);
+
+        // Regression guard: Player.hasActed has a non-standard getter (hasActed(), not isHasActed/getHasActed),
+        // so before its explicit @JsonProperty it was silently dropped from this JSON. Every reload then reset it
+        // to false, isBettingRoundComplete() never fired, and the betting round never ended — the flop never came
+        // and players cycled forever. Every per-round flag must round-trip.
+        assertThat(back.hasActed()).as("hasActed must survive — its loss froze the betting round").isTrue();
+        assertThat(back.getBetAmount()).isEqualTo(40);
+        assertThat(back.getTotalBetInRound()).isEqualTo(60);
+        assertThat(back.isAllIn()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a full betting round survives per-action hot-state reconstitution → the flop is dealt")
+    void bettingRoundCompletesAcrossHotStateReconstitution() throws Exception {
+        // Replicates the live per-request cycle: act on the aggregate → apply to the Game entity → serialize to the
+        // hot-state JSON → read it back → reconstitute a fresh aggregate for the next action. This is the exact path
+        // the dropped hasActed lived on: in-memory captureState/reconstitute hid it (the flag survives in memory);
+        // only the JSON round-trip exposed it. With the flag lost this loop never leaves PRE_FLOP.
+        PokerGameMapper bridge = new PokerGameMapper();
+        PokerGame aggregate = PokerGame.create(List.of(
+                new PlayerInfo("Alice", 1000, false),
+                new PlayerInfo("Bob", 1000, false),
+                new PlayerInfo("Carol", 1000, false)), Chips.of(10), Chips.of(20));
+        aggregate.startNewHand();
+
+        Game game = new Game();
+        game.setId(aggregate.getId());
+        game.setHandLifecycleState(HandLifecycleState.IN_PROGRESS);
+
+        int guard = 0;
+        while (aggregate.getPhase() == GamePhase.PRE_FLOP && !aggregate.isFinished() && guard++ < 12) {
+            Player current = aggregate.getCurrentPlayer();
+            int toCall = aggregate.getCurrentBet().amount() - current.getBetAmount();
+            aggregate.executeAction(current.getId(),
+                    toCall > 0 ? PlayerAction.CALL : PlayerAction.CHECK, null);
+
+            // one REST-request boundary: persist aggregate → hot-state JSON → reload → reconstitute
+            bridge.applyToGame(aggregate, game);
+            game = hotStateMapper.readValue(hotStateMapper.writeValueAsString(game), Game.class);
+            aggregate = bridge.fromGame(game);
+        }
+
+        assertThat(aggregate.getPhase())
+                .as("pre-flop betting must complete across reconstitution and deal the flop")
+                .isEqualTo(GamePhase.FLOP);
+        assertThat(aggregate.getCommunityCards()).as("flop = 3 community cards").hasSize(3);
     }
 
     private static void setVersion(Game game, long version) throws Exception {

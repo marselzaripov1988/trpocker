@@ -564,11 +564,11 @@ class FullGameFlowIT {
 
                 refreshGame();
 
-                // Assert the bot actually took its turn — engine-agnostically. `hasActed` is NOT a reliable signal:
-                // when the bot's call/check completes the betting round the engine advances to the next street and
-                // resets every player's hasActed flag, so a freshly reloaded bot can legitimately show hasActed=false
-                // (and the aggregate engine reconstitutes fresh Player instances each load, so the pre-action `bot`
-                // reference is stale anyway). The action's *effect* is the robust proof: the bot folded, the hand
+                // Assert the bot actually took its turn via its *effect*, not its hasActed flag. hasActed does
+                // round-trip through hot-state now (see HotStateGameSerializationTest), but it is still not a valid
+                // turn signal here: completing the betting round advances the street and legitimately resets every
+                // player's hasActed to false, and the aggregate reconstitutes fresh Player instances each load so the
+                // pre-action `bot` reference is stale. The robust proof is the outcome: the bot folded, the hand
                 // ended (heads-up fold), or chips moved into the pot (call/raise).
                 Player botAfter = game.getPlayers().stream()
                         .filter(p -> p.getId().equals(botId))
