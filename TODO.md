@@ -285,3 +285,29 @@ period / first break) — it is **not** a cash-game mechanic.
 - [x] **Tier-3 extras (done)** — `game-table`: pot-push chip travels toward the winning seat; pot + stack
       numbers count up (`CountUpDirective`); floating action labels ("Raise $X / Check / Fold") off `lastAction`;
       confetti burst when the local player wins.
+
+## TODO — engine / domain refactor (defer to Phase G)
+Betting-round state is currently scattered across mutable fields on the `PokerGame` aggregate (`currentBet`,
+`minRaise`, `lastRaiseAmount`, `lastAggressorId`) **and** on each `Player` (`hasActed`, `betAmount`), mutated
+in many places (`executeCall/Bet/Raise/Check`, `resetForNewBettingRound`, `resetActionsForRaise`,
+`advancePhase`). Two production bugs were symptoms of this split state: `Player.hasActed` silently dropped from
+the Redis hot-state JSON (non-standard getter → never serialized → flop never came, players cycled forever),
+and the dead `actionsThisRound` counter that the mapper hardcoded to `0` (since removed). See
+`AGGREGATE_MIGRATION_PLAN.md` Phase G.
+- [ ] **Rich `Round` object (full stateful betting-round) — DEFERRED to Phase G.** A value/aggregate object
+      that **owns the per-player contributions** and answers `isComplete()` itself, instead of the aggregate
+      reaching into `Player.hasActed`/`betAmount` + `currentBet` + `lastAggressor`. Gives one source of truth,
+      atomic round reset (no half-reset bugs), and isolated testability. **Do NOT do it while two engines
+      coexist** (legacy + aggregate must stay byte-for-byte equal): it forces moving contribution state off
+      `Player`, and the flat JPA `Game`/`Player` + Redis-JSON persistence fights a rich object (new mapping =
+      new surface for the exact serialization bugs above). Natural moment: during Phase G, once `PokerGameService`
+      becomes a thin orchestrator over the aggregate and there is a single engine path.
+- [ ] **Cheap interim (optional, can do anytime):** extract the current `isBettingRoundComplete()` into a pure,
+      stateless policy `boolean isComplete(List<Player> active, int currentBet)` with its own unit tests for the
+      edge cases (BB option, all-in, 0-chip seat, raise re-open). Captures most of the testability win with
+      ~zero risk; does not touch persistence or the `Player` model. Was considered low-ROI for now — revisit if
+      betting-round completion bugs recur.
+- Removed in the cleanup that surfaced this (commit `refactor(game): drop dead betting-round counter…`): the
+  write-only `actionsThisRound` counter, `HandCompleted.totalActions`, `PokerGame.getCurrentBettingRound()`, and
+  the unused `domain.value.BettingRound` value object (a half-measure — it didn't own players, so it couldn't
+  decide completion). Re-introduce a *proper* owning `Round` per the first item above rather than restoring it.
