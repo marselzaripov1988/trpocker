@@ -37,6 +37,11 @@ public class Player implements Persistable<UUID> {
     @JsonProperty("isBot")
     private boolean isBot;
 
+    // The getter is hasActed() (not isHasActed/getHasActed), so Jackson won't auto-detect it. Annotate the field
+    // explicitly so this flag round-trips through the Redis hot-state JSON — otherwise it deserializes back to false
+    // every action, isBettingRoundComplete() never sees players as having acted, and the betting round never ends
+    // (the flop never comes, players cycle forever).
+    @JsonProperty("hasActed")
     private boolean hasActed;
 
     @JsonProperty("isAllIn")
