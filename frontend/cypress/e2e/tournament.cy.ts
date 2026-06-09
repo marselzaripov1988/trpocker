@@ -26,12 +26,15 @@ describe('Tournament Mode (mocked API)', () => {
     registeredPlayers: 4
   });
 
-  beforeEach(() => {
-    cy.window().then(win => {
-      win.localStorage.setItem('access_token', 'mock-jwt-token');
-      win.localStorage.setItem('user', JSON.stringify(mockUser));
-    });
+  // Seed auth BEFORE the app boots. Setting localStorage via cy.window() in beforeEach lands on about:blank
+  // (the pre-visit origin), so cy.visit then loads a token-less app. onBeforeLoad sets it on the real origin.
+  const seedAuth = (win: Window) => {
+    win.localStorage.setItem('access_token', 'mock-jwt-token');
+    win.localStorage.setItem('user', JSON.stringify(mockUser));
+  };
+  const visitAuthed = (url: string) => cy.visit(url, { onBeforeLoad: seedAuth });
 
+  beforeEach(() => {
     cy.intercept('GET', API_TOURNAMENTS, {
       body: [openTournament, runningTournament]
     }).as('getTournaments');
@@ -57,7 +60,7 @@ describe('Tournament Mode (mocked API)', () => {
 
   describe('Lobby', () => {
     beforeEach(() => {
-      cy.visit('/tournaments');
+      visitAuthed('/tournaments');
       cy.wait('@getTournaments');
     });
 
@@ -98,14 +101,14 @@ describe('Tournament Mode (mocked API)', () => {
 
     it('should show empty state when no tournaments', () => {
       cy.intercept('GET', API_TOURNAMENTS, { body: [] }).as('emptyTournaments');
-      cy.visit('/tournaments');
+      visitAuthed('/tournaments');
       cy.wait('@emptyTournaments');
       cy.get('[data-cy="tournament-list"]').should('be.visible');
     });
 
     it('should show error state on API failure', () => {
       cy.intercept('GET', API_TOURNAMENTS, { statusCode: 500 }).as('failedRequest');
-      cy.visit('/tournaments');
+      visitAuthed('/tournaments');
       cy.wait('@failedRequest');
       cy.get('[data-cy="error-message"]').should('be.visible');
       cy.get('[data-cy="retry-btn"]').should('be.visible');
@@ -114,7 +117,7 @@ describe('Tournament Mode (mocked API)', () => {
 
   describe('Registration lobby', () => {
     it('should show register button and lobby info', () => {
-      cy.visit(`/tournaments/${openTournament.id}`);
+      visitAuthed(`/tournaments/${openTournament.id}`);
       cy.wait('@getTournament');
       cy.get('[data-cy="tournament-lobby"]').should('be.visible');
       cy.get('[data-cy="tournament-name"]').should('contain.text', 'Sunday Million');
@@ -147,7 +150,7 @@ describe('Tournament Mode (mocked API)', () => {
         }
       }).as('startHand');
 
-      cy.visit(`/tournaments/${runningTournament.id}`);
+      visitAuthed(`/tournaments/${runningTournament.id}`);
       cy.wait('@getRunningDetail');
       cy.get('[data-cy="go-to-table-btn"]').click();
       cy.url().should('include', `/tournaments/${runningTournament.id}/play`);

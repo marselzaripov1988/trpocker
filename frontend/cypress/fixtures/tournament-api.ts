@@ -1,6 +1,9 @@
 /** Minimal API shapes for Cypress intercepts (matches backend v1). */
 
-export const API_TOURNAMENTS = '/api/v1/tournaments';
+// `**`-prefixed glob so cy.intercept matches the request's FULL URL (http://host/api/...) regardless of
+// origin/port. A bare '/api/...' path does NOT match the full URL in Cypress, so the request leaked to the
+// real backend → 401 → logout → redirect to /auth/login, and cy.wait('@get…') saw "no request ever occurred".
+export const API_TOURNAMENTS = '**/api/v1/tournaments';
 
 export function listSummaryItem(overrides: Record<string, unknown> = {}) {
   return {

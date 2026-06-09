@@ -206,6 +206,11 @@ jobs:
                 SPRING_JPA_HIBERNATE_DDL_AUTO: create-drop
                 SPRING_LIQUIBASE_ENABLED: "false"
                 RATE_LIMIT_ENABLED: "false"
+                # Dev/CI only: seed an ADMIN so the live tournament e2e can create + start tournaments.
+                APP_SEED_ADMIN_ENABLED: "true"
+                APP_SEED_ADMIN_USERNAME: "e2eadmin"
+                APP_SEED_ADMIN_PASSWORD: "E2eAdminPass123!"
+                APP_SEED_ADMIN_EMAIL: "e2eadmin@e2e.local"
               ports:
                 - "8080:8080"
               depends_on:
@@ -267,6 +272,9 @@ jobs:
           CYPRESS_BASE_URL: http://localhost:${{ env.FRONTEND_PORT }}
           CYPRESS_API_URL: http://localhost:8080/api
           CYPRESS_LIVE_TOURNAMENT: 'true'
+          # Seeded admin (docker-compose backend above) — the live spec creates/starts tournaments as admin.
+          CYPRESS_ADMIN_USER: e2eadmin
+          CYPRESS_ADMIN_PASSWORD: E2eAdminPass123!
 
       - name: Upload Cypress Screenshots
         if: failure()

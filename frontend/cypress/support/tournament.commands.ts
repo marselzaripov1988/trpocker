@@ -1,7 +1,18 @@
 const DEFAULT_PASSWORD = 'E2eTest123!';
+// Creating + starting a tournament is ADMIN-gated; the backend (docker-compose.e2e) seeds this admin.
+const ADMIN_USER = (): string => Cypress.env('ADMIN_USER') || 'e2eadmin';
+const ADMIN_PASSWORD = (): string => Cypress.env('ADMIN_PASSWORD') || 'E2eAdminPass123!';
 
 function apiBase(): string {
   return Cypress.env('API_URL') || 'http://localhost:8080/api';
+}
+
+function loginAdmin(): Cypress.Chainable<string> {
+  return cy.request({
+    method: 'POST',
+    url: `${apiBase()}/auth/login`,
+    body: { username: ADMIN_USER(), password: ADMIN_PASSWORD() }
+  }).then(res => res.body.accessToken as string);
 }
 
 function authHeaders(token: string): Record<string, string> {
@@ -80,10 +91,10 @@ Cypress.Commands.add(
 
     return cy.loginViaApi(`cypress_p1_${runId}`).then(player1 => {
       const api = apiBase();
-      return cy.request({
+      return loginAdmin().then(adminToken => cy.request({
         method: 'POST',
         url: `${api}/v1/tournaments`,
-        headers: authHeaders(player1.token),
+        headers: authHeaders(adminToken), // create is admin-only
         body: {
           name: `E2E SNG ${runId}`,
           type: 'SIT_AND_GO',
@@ -104,12 +115,20 @@ Cypress.Commands.add(
           body: { playerId: player1.userId, playerName: player1.username }
         });
 
-        return registerUser(`cypress_p2_${runId}`).then(player2 => {
+        return cy.loginViaApi(`cypress_p2_${runId}`).then(player2 => {
           cy.request({
             method: 'POST',
             url: `${api}/v1/tournaments/${tournamentId}/register`,
             headers: authHeaders(player2.token),
             body: { playerId: player2.userId, playerName: player2.username }
+          });
+
+          // Start is admin-only; best-effort (SIT_AND_GO may auto-start when full).
+          cy.request({
+            method: 'POST',
+            url: `${api}/v1/tournaments/${tournamentId}/start`,
+            headers: authHeaders(adminToken),
+            failOnStatusCode: false
           });
 
           const waitForRunning = (attempt = 0): Cypress.Chainable<string> => {
@@ -142,7 +161,7 @@ Cypress.Commands.add(
             });
           });
         });
-      });
+      }));
     });
   }
 );
