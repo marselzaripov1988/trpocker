@@ -93,7 +93,6 @@ public class PokerGameMapper {
                 game.getCurrentBet(),
                 game.getMinRaiseAmount(),
                 game.getLastRaiseAmount(),
-                0,
                 game.getLastAggressorId(),
                 game.getButtonSeatPosition(),
                 game.isDeadButton(),

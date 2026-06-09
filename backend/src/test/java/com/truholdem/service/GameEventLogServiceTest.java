@@ -70,7 +70,7 @@ class GameEventLogServiceTest {
         service.record(new HandCompleted(gameId, 3,
                 List.of(new HandCompleted.PotResult(p1, "Hero", Chips.of(120), "Pair", false)),
                 Map.of(p1, Chips.of(1100), p2, Chips.of(900)),
-                Duration.ofSeconds(45), 6, true));
+                Duration.ofSeconds(45), true));
 
         verify(repository, org.mockito.Mockito.times(3)).save(rowCaptor.capture());
         List<GameEventLog> rows = rowCaptor.getAllValues();
@@ -115,7 +115,7 @@ class GameEventLogServiceTest {
                 new PotAwarded(gameId, p1, "Hero", Chips.of(300), "Flush", Pot.PotType.MAIN),
                 new HandCompleted(gameId, 1,
                         List.of(new HandCompleted.PotResult(p1, "Hero", Chips.of(300), "Flush", false)),
-                        Map.of(p1, Chips.of(1300)), Duration.ofSeconds(30), 4, true),
+                        Map.of(p1, Chips.of(1300)), Duration.ofSeconds(30), true),
                 new PlayerEliminated(gameId, p2, "Villain", 2, Chips.of(0), 12));
 
         events.forEach(service::record);
@@ -132,7 +132,7 @@ class GameEventLogServiceTest {
                         Chips.of(20), GamePhase.PRE_FLOP, Chips.of(60), Chips.of(980))),
                 row(3, "HandCompleted", new HandCompleted(gameId, 5,
                         List.of(new HandCompleted.PotResult(p1, "Hero", Chips.of(120), "Pair", false)),
-                        Map.of(p1, Chips.of(1100)), Duration.ofSeconds(40), 5, true)));
+                        Map.of(p1, Chips.of(1100)), Duration.ofSeconds(40), true)));
         when(repository.findByGameIdAndHandNumberOrderBySeqNoAsc(gameId, 5)).thenReturn(stored);
 
         List<GameEventLogResponse> replay = service.eventsForHand(gameId, 5);

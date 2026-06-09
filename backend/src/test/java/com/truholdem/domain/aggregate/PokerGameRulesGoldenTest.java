@@ -73,7 +73,6 @@ class PokerGameRulesGoldenTest {
                 0,
                 BIG_BLIND.amount(),
                 BIG_BLIND.amount(),
-                0,
                 null,
                 buttonSeat,
                 false,

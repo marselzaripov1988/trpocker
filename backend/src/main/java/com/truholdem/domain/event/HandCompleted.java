@@ -31,23 +31,21 @@ public final class HandCompleted extends DomainEvent {
     private final List<PotResult> potResults;
     private final Map<UUID, Chips> playerChipsAfter;
     private final Duration handDuration;
-    private final int totalActions;
     private final boolean wentToShowdown;
 
-    
+
     public HandCompleted(UUID gameId, int handNumber, List<PotResult> potResults,
                          Map<UUID, Chips> playerChipsAfter, Duration handDuration,
-                         int totalActions, boolean wentToShowdown) {
+                         boolean wentToShowdown) {
         super(gameId);
         this.handNumber = handNumber;
-        this.potResults = potResults != null 
-                ? Collections.unmodifiableList(potResults) 
+        this.potResults = potResults != null
+                ? Collections.unmodifiableList(potResults)
                 : Collections.emptyList();
-        this.playerChipsAfter = playerChipsAfter != null 
-                ? Collections.unmodifiableMap(playerChipsAfter) 
+        this.playerChipsAfter = playerChipsAfter != null
+                ? Collections.unmodifiableMap(playerChipsAfter)
                 : Collections.emptyMap();
         this.handDuration = handDuration;
-        this.totalActions = totalActions;
         this.wentToShowdown = wentToShowdown;
     }
 
@@ -65,10 +63,6 @@ public final class HandCompleted extends DomainEvent {
 
     public Duration getHandDuration() {
         return handDuration;
-    }
-
-    public int getTotalActions() {
-        return totalActions;
     }
 
     public boolean wentToShowdown() {
@@ -119,11 +113,10 @@ public final class HandCompleted extends DomainEvent {
     @Override
     public String toString() {
         String showdownStr = wentToShowdown ? "showdown" : "no showdown";
-        return String.format("HandCompleted[hand=#%d, pot=%s, %s, %d actions, %ds]",
+        return String.format("HandCompleted[hand=#%d, pot=%s, %s, %ds]",
                 handNumber,
                 getTotalPotSize(),
                 showdownStr,
-                totalActions,
                 getHandDurationSeconds());
     }
 }

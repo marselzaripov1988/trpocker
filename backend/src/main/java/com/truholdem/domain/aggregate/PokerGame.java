@@ -4,7 +4,6 @@ import com.truholdem.domain.event.*;
 import com.truholdem.domain.exception.GameStateException;
 import com.truholdem.domain.exception.InvalidActionException;
 import com.truholdem.domain.exception.PlayerNotFoundException;
-import com.truholdem.domain.value.BettingRound;
 import com.truholdem.domain.value.Chips;
 import com.truholdem.domain.value.HandRanker;
 import com.truholdem.domain.value.Pot;
@@ -47,7 +46,6 @@ public class PokerGame {
     private int currentBet;
     private int minRaise;
     private int lastRaiseAmount;
-    private int actionsThisRound;
     private UUID lastAggressorId;
 
     
@@ -108,7 +106,6 @@ public class PokerGame {
         this.currentBet = 0;
         this.minRaise = bigBlind.amount();
         this.lastRaiseAmount = bigBlind.amount();
-        this.actionsThisRound = 0;
         this.buttonSeatPosition = 0;
         this.deadButton = false;
         this.potAmount = 0;
@@ -143,7 +140,6 @@ public class PokerGame {
         game.currentBet = state.currentBet();
         game.minRaise = state.minRaise();
         game.lastRaiseAmount = state.lastRaiseAmount();
-        game.actionsThisRound = state.actionsThisRound();
         game.lastAggressorId = state.lastAggressorId();
         game.buttonSeatPosition = state.buttonSeatPosition();
         game.deadButton = state.deadButton();
@@ -192,7 +188,6 @@ public class PokerGame {
                 currentBet,
                 minRaise,
                 lastRaiseAmount,
-                actionsThisRound,
                 lastAggressorId,
                 buttonSeatPosition,
                 deadButton,
@@ -276,7 +271,6 @@ public class PokerGame {
         currentBet = 0;
         minRaise = bigBlindAmount;
         lastRaiseAmount = bigBlindAmount;
-        actionsThisRound = 0;
         lastAggressorId = null;
         winnerName = null;
         winningHandDescription = null;
@@ -381,7 +375,6 @@ public class PokerGame {
         }
 
         player.setHasActed(true);
-        actionsThisRound++;
 
         
         raiseEvent(new PlayerActed(
@@ -650,15 +643,6 @@ public class PokerGame {
                 .collect(Collectors.toList());
     }
 
-    public BettingRound getCurrentBettingRound() {
-        return new BettingRound(
-                phase,
-                Chips.of(currentBet),
-                Chips.of(minRaise),
-                actionsThisRound,
-                lastAggressorId
-        );
-    }
 
     
     public List<DomainEvent> getDomainEvents() {
@@ -857,7 +841,6 @@ public class PokerGame {
         if (lastAggressorId != null) {
             findPlayerById(lastAggressorId).setHasActed(true);
         }
-        actionsThisRound = 1;
     }
 
     private void advancePhase() {
@@ -920,7 +903,6 @@ public class PokerGame {
 
     private void resetForNewBettingRound() {
         currentBet = 0;
-        actionsThisRound = 0;
         lastAggressorId = null;
 
         for (Player player : players) {
@@ -1144,7 +1126,6 @@ public class PokerGame {
                 potResults,
                 playerChipsAfter,
                 duration,
-                actionsThisRound,
                 wentToShowdown
         ));
 

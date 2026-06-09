@@ -632,18 +632,6 @@ class PokerGameTest {
             assertThrows(PlayerNotFoundException.class,
                     () -> game.findPlayerById(unknownId));
         }
-
-        @Test
-        @DisplayName("should return betting round state")
-        void shouldReturnBettingRoundState() {
-            PokerGame game = PokerGame.create(twoPlayers, SMALL_BLIND, BIG_BLIND);
-            game.startNewHand();
-
-            var bettingRound = game.getCurrentBettingRound();
-            assertNotNull(bettingRound);
-            assertEquals(GamePhase.PRE_FLOP, bettingRound.phase());
-            assertEquals(BIG_BLIND, bettingRound.currentBet());
-        }
     }
 
     

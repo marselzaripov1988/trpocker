@@ -32,7 +32,6 @@ public record PersistedGameState(
         int currentBet,
         int minRaise,
         int lastRaiseAmount,
-        int actionsThisRound,
         UUID lastAggressorId,
         int buttonSeatPosition,
         boolean deadButton,

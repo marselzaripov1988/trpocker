@@ -69,7 +69,7 @@ class StatisticsEventListenerTest {
         HandCompleted event = new HandCompleted(gameId, 1,
                 List.of(new HandCompleted.PotResult(playerId, "Hero", Chips.of(300), "Flush", false)),
                 Map.of(playerId, Chips.of(1300)),
-                Duration.ofSeconds(60), 9, true);
+                Duration.ofSeconds(60), true);
 
         listener.onHandCompleted(event);
 
@@ -83,7 +83,7 @@ class StatisticsEventListenerTest {
         HandCompleted event = new HandCompleted(gameId, 2,
                 List.of(new HandCompleted.PotResult(playerId, "Hero", Chips.of(120), null, false)),
                 Map.of(playerId, Chips.of(1120)),
-                Duration.ofSeconds(30), 4, false);
+                Duration.ofSeconds(30), false);
 
         listener.onHandCompleted(event);
 

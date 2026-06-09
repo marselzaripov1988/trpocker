@@ -346,12 +346,11 @@ class DomainEventsTest {
             );
 
             HandCompleted event = new HandCompleted(gameId, 1, results, chipsAfter,
-                    Duration.ofSeconds(120), 15, true);
+                    Duration.ofSeconds(120), true);
 
             assertEquals(1, event.getHandNumber());
             assertEquals(Chips.of(500), event.getTotalPotSize());
             assertTrue(event.wentToShowdown());
-            assertEquals(15, event.getTotalActions());
             assertEquals(120, event.getHandDurationSeconds());
         }
 
@@ -364,7 +363,7 @@ class DomainEventsTest {
             );
 
             HandCompleted event = new HandCompleted(gameId, 1, results, Map.of(),
-                    Duration.ofMinutes(2), 10, true);
+                    Duration.ofMinutes(2), true);
 
             assertTrue(event.isWinner(playerId));
             assertFalse(event.isWinner(player2Id));
@@ -381,7 +380,7 @@ class DomainEventsTest {
             );
 
             HandCompleted event = new HandCompleted(gameId, 1, results, Map.of(),
-                    Duration.ofMinutes(1), 8, true);
+                    Duration.ofMinutes(1), true);
 
             assertEquals(Chips.of(500), event.getPlayerWinnings(playerId));
             assertTrue(event.hadSidePots());
@@ -396,7 +395,7 @@ class DomainEventsTest {
             );
 
             HandCompleted event = new HandCompleted(gameId, 1, List.of(), chipsAfter,
-                    Duration.ofSeconds(90), 12, false);
+                    Duration.ofSeconds(90), false);
 
             assertEquals(Chips.of(1200), event.getPlayerChips(playerId));
             assertEquals(Chips.of(800), event.getPlayerChips(player2Id));
