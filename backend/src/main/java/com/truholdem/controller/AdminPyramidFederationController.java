@@ -130,13 +130,12 @@ public class AdminPyramidFederationController {
     }
 
     @PostMapping("/{id}/distribute")
-    @Operation(summary = "Distribute the guaranteed prize pool (expected buy-ins) — shardBps to the shard "
-            + "winners, the rest to the champion; for completed buy-up federations")
-    public ResponseEntity<FederationDetailResponse> distribute(@PathVariable UUID id,
-            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "3000") int shardBps) {
+    @Operation(summary = "Distribute the guaranteed prize pool (expected buy-ins) across the final table by "
+            + "finish position (champion-takes-most); for completed buy-up federations")
+    public ResponseEntity<FederationDetailResponse> distribute(@PathVariable UUID id) {
         assertEnabled();
-        federatedService.distributeFederationPrizes(id, shardBps);
-        log.info("Admin distributed prizes for federation {} (shardBps={})", id, shardBps);
+        federatedService.distributeFederationPrizes(id);
+        log.info("Admin distributed prizes for federation {}", id);
         return ResponseEntity.ok(federatedService.getFederationDetail(id));
     }
 

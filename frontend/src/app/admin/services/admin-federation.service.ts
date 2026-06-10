@@ -46,7 +46,7 @@ export class AdminFederationService {
     return this.http.post<FederationDetail>(`${this.url}/${id}/close-buyup`, {});
   }
 
-  distribute(id: string, shardBps: number): Observable<FederationDetail> {
-    return this.http.post<FederationDetail>(`${this.url}/${id}/distribute?shardBps=${shardBps}`, {});
+  distribute(id: string): Observable<FederationDetail> {
+    return this.http.post<FederationDetail>(`${this.url}/${id}/distribute`, {});
   }
 }

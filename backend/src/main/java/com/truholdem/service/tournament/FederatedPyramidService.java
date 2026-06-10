@@ -26,11 +26,13 @@ import com.truholdem.model.PyramidFederationRegistration;
 import com.truholdem.model.PyramidFederationShard;
 import com.truholdem.model.Tournament;
 import com.truholdem.model.TournamentFeeEntry;
+import com.truholdem.model.TournamentRegistration;
 import com.truholdem.repository.PyramidFederationRegistrationRepository;
 import com.truholdem.repository.PyramidFederationFinalBuyoutRepository;
 import com.truholdem.repository.PyramidFederationRepository;
 import com.truholdem.repository.PyramidFederationShardRepository;
 import com.truholdem.repository.TournamentFeeEntryRepository;
+import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.service.TournamentService;
 import com.truholdem.service.notification.TournamentNotificationService;
 import com.truholdem.service.tournament.PyramidTournamentService.PyramidRunResult;
@@ -62,6 +64,7 @@ public class FederatedPyramidService {
     private final WalletService walletService;
     private final TournamentWalletService tournamentWalletService;
     private final TournamentFeeEntryRepository feeEntryRepository;
+    private final TournamentRegistrationRepository tournamentRegistrationRepository;
     private final AppProperties.Tournament tournamentProperties;
     /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
     private final FederatedPyramidService self;
@@ -75,6 +78,7 @@ public class FederatedPyramidService {
             TournamentNotificationService notificationService, WalletService walletService,
             TournamentWalletService tournamentWalletService,
             TournamentFeeEntryRepository feeEntryRepository,
+            TournamentRegistrationRepository tournamentRegistrationRepository,
             AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
@@ -86,6 +90,7 @@ public class FederatedPyramidService {
         this.walletService = walletService;
         this.tournamentWalletService = tournamentWalletService;
         this.feeEntryRepository = feeEntryRepository;
+        this.tournamentRegistrationRepository = tournamentRegistrationRepository;
         this.tournamentProperties = appProperties.getTournament();
         this.self = self;
     }
@@ -537,19 +542,13 @@ public class FederatedPyramidService {
     }
 
     /**
-     * Pay out the prize pool ({@code registered × buyIn}): {@code federatedShardPrizeBps} of it is split
-     * equally among the shard winners (a qualifier prize), and the remainder goes to the grand champion (who,
-     * being a shard winner, also collects a qualifier). Rounding is absorbed into the champion's share so the
-     * payouts sum exactly to the pool. Idempotent via per-recipient award keys.
-     */
-    /**
      * Admin action (buy-up federations): distribute the prize pool once the federation is COMPLETED. The pool
      * is the <b>expected buy-ins</b> — a guaranteed pool of the full field ({@code shardCount × shardSize ×
-     * buyIn}), independent of actual fill / buy-out prices — and the admin chooses the share for the shard
-     * winners (the rest goes to the grand champion). Idempotent.
+     * buyIn}), independent of actual fill / buy-out prices — paid out across the final table by finish position
+     * (see {@link #payPool}). Idempotent.
      */
     @Transactional
-    public void distributeFederationPrizes(UUID federationId, int shardPrizeBps) {
+    public void distributeFederationPrizes(UUID federationId) {
         PyramidFederation federation = requireFederation(federationId);
         if (federation.getStatus() != FederationStatus.COMPLETED || federation.getChampionPlayerId() == null) {
             throw new IllegalStateException("Federation " + federationId + " is not completed");
@@ -557,10 +556,7 @@ public class FederatedPyramidService {
         if (!federation.isRealMoney()) {
             throw new IllegalStateException("Play-money federation has no prize pool");
         }
-        if (shardPrizeBps < 0 || shardPrizeBps > 10_000) {
-            throw new IllegalArgumentException("shardPrizeBps must be in [0, 10000]");
-        }
-        payPool(federation, federation.getChampionPlayerId(), expectedPool(federation), shardPrizeBps);
+        payPool(federation, federation.getChampionPlayerId(), expectedPool(federation));
     }
 
     /** The guaranteed prize pool from the expected buy-ins: the full field × the buy-in. */
@@ -572,45 +568,77 @@ public class FederatedPyramidService {
     private void distributePrizes(PyramidFederation federation, UUID championId) {
         long registered = registrationRepository.countByFederationId(federation.getId());
         payPool(federation, championId,
-                federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(registered)),
-                tournamentProperties.getFederatedShardPrizeBps());
+                federation.getCryptoBuyInAmount().multiply(BigDecimal.valueOf(registered)));
     }
 
     /**
-     * Pay {@code pool} out: {@code bps} of it split equally among the shard winners (a qualifier), the rest to
-     * the grand champion (who also collects a qualifier). Rounding is absorbed into the champion's share so the
-     * payouts sum exactly to the pool. Idempotent via per-recipient award keys.
+     * Pay out the net pool ({@code grossPool} less the organisation fee, ≤20%) with two combined logics, summing
+     * to exactly 100% of the net pool:
+     * <ol>
+     *   <li><b>Shard-winner qualifier</b> — each shard winner gets {@code federatedShardWinnerPpm} ppm of the
+     *       net pool (e.g. 1 ppm = 0.0001%).</li>
+     *   <li><b>Final-table places</b> — the non-champion final-table places split
+     *       {@code federatedFinalTablePlaceBps} (2nd, 3rd, …) + {@code federatedFinalTableRestBps} among the
+     *       rest (see {@link FederatedPrizeSplit}).</li>
+     * </ol>
+     * The grand champion takes the whole remainder (net − qualifiers − non-champion places), so the payouts sum
+     * exactly to the net pool and the champion absorbs all rounding. A final-table player who is also a shard
+     * winner collects both. When no final table is on record, only the qualifiers apply and the champion takes
+     * the rest. Idempotent via per-recipient award keys.
      */
-    private void payPool(PyramidFederation federation, UUID championId, BigDecimal grossPool, int bps) {
+    private void payPool(PyramidFederation federation, UUID championId, BigDecimal grossPool) {
         UUID federationId = federation.getId();
         CryptoAsset asset = federation.getCryptoBuyInAsset();
-        // House commission off the top: winners split the net pool, the fee is withheld (recorded as house
-        // revenue). With a 0% fee net == gross, so non-fee federations pay out exactly as before.
+        // Organisation fee off the top (≤20%): the field splits the net pool, the fee is withheld (recorded as
+        // house revenue). With a 0% fee net == gross.
         BigDecimal houseFee = federation.houseFeeOn(grossPool);
         BigDecimal pool = grossPool.subtract(houseFee);
         recordHouseFee(TournamentFeeEntry.SourceType.FEDERATION, federationId, asset, grossPool, houseFee,
                 federation.getFeeBasisPoints(), "fedfee:" + federationId);
-        BigDecimal shardPool = pool.multiply(BigDecimal.valueOf(bps)).divide(BigDecimal.valueOf(10_000));
+        BigDecimal paidOut = BigDecimal.ZERO;
+
+        // 1) Shard-winner qualifier — a flat ppm of the net pool to every shard winner.
+        BigDecimal perWinner = pool.multiply(BigDecimal.valueOf(tournamentProperties.getFederatedShardWinnerPpm()))
+                .divide(BigDecimal.valueOf(1_000_000), 18, RoundingMode.DOWN);
         List<PyramidFederationShard> completed =
                 shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED);
-        BigDecimal qualifier = completed.isEmpty() ? BigDecimal.ZERO
-                : shardPool.divide(BigDecimal.valueOf(completed.size()), 18, RoundingMode.DOWN);
-
-        BigDecimal paidToShards = BigDecimal.ZERO;
         for (PyramidFederationShard shard : completed) {
             UUID winner = shard.getWinnerPlayerId();
-            if (winner == null || qualifier.signum() <= 0) {
+            if (winner == null || perWinner.signum() <= 0) {
                 continue;
             }
-            walletService.awardPayout(winner, asset, qualifier, "fedqual:" + federationId + ":" + shard.getShardIndex());
-            paidToShards = paidToShards.add(qualifier);
+            walletService.awardPayout(winner, asset, perWinner, "fedqual:" + federationId + ":" + shard.getShardIndex());
+            paidOut = paidOut.add(perWinner);
         }
-        BigDecimal championPrize = pool.subtract(paidToShards);
+
+        // 2) Final-table places — the non-champion seats (2nd, 3rd, …) of the final tournament, by finish order.
+        List<TournamentRegistration> finalTable = federation.getFinalTournamentId() == null
+                ? List.of()
+                : tournamentRegistrationRepository.findTopFinishersByTournament(
+                        federation.getFinalTournamentId(), federation.getSeatsPerTable());
+        if (!finalTable.isEmpty()) {
+            List<BigDecimal> placeAwards = FederatedPrizeSplit.nonChampionAwards(pool, finalTable.size(),
+                    tournamentProperties.getFederatedFinalTablePlaceBps(),
+                    tournamentProperties.getFederatedFinalTableRestBps());
+            for (int i = 1; i < finalTable.size(); i++) { // i = finish position − 1; skip the champion (i == 0)
+                UUID playerId = finalTable.get(i).getPlayerId();
+                BigDecimal award = placeAwards.get(i - 1);
+                if (playerId == null || award.signum() <= 0) {
+                    continue;
+                }
+                walletService.awardPayout(playerId, asset, award, "fedplace:" + federationId + ":" + (i + 1));
+                paidOut = paidOut.add(award);
+            }
+        }
+
+        // 3) Champion takes the remainder (absorbs all rounding), so the payouts sum exactly to the net pool.
+        BigDecimal championPrize = pool.subtract(paidOut);
         if (championId != null && championPrize.signum() > 0) {
             walletService.awardPayout(championId, asset, championPrize, "fedchamp:" + federationId);
         }
-        log.info("Federation {} — paid out net pool {} {} (gross {}, house fee {}; {} to shard winners, {} to champion)",
-                federationId, pool, asset, grossPool, houseFee, paidToShards, championPrize);
+        log.info("Federation {} — paid net pool {} {} (gross {}, house fee {}; {} ×{} shard qualifiers, {} to other places, {} to champion)",
+                federationId, pool, asset, grossPool, houseFee, perWinner, completed.size(),
+                paidOut.subtract(perWinner.multiply(BigDecimal.valueOf(completed.size()))), championPrize);
     }
 
     /** Record a withheld house commission as revenue (idempotent on {@code key}; no-op for a zero fee). */

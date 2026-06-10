@@ -202,9 +202,11 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       route (moved to a top-level `/admin/federations` so the nav link resolves). eslint + `ng build` green.
 - [x] **7. Real money** — federation buy-in (`crypto_buy_in_amount`/`asset`, changeset 18); `register` charges
       via `WalletService.chargeBuyIn` (idempotent, rolls back if under-funded); `distributePrizes` on completion
-      pays the pool — `federated-shard-prize-bps` split among shard winners (qualifier) + remainder to the
-      champion (rounding absorbed into champion; sums to pool). Verified by `FederatedPyramidPrizeIT`
-      (exact balances + pool conservation).
+      pays the net pool with TWO combined logics summing to 100%: a flat per-shard-winner qualifier
+      (`federated-shard-winner-ppm`, default 1 ppm = 0.0001% each) + the final-table places
+      (`federated-final-table-place-bps` 2nd/3rd… + `…-rest-bps`, default 2%/1% + 1% split), with the grand
+      champion taking the remainder (absorbs rounding). Organisation fee (≤20%, `feeBasisPoints`) is withheld off
+      the top first. Verified by `FederatedPyramidPrizeIT` (both logics + pool conservation) + `FederatedPrizeSplitTest`.
 - [x] **8. Cluster/load verify** — `registerBotsBatch` + admin `register-bots` endpoint (enables wave load);
       node-group pinning balance verified (`FederatedPyramidNodeGroupIT`: 12 shards → 4/4/4 over 3 groups) +
       batch-fill tests; documented manual wave load on the scale cluster (`load/k6/README.md`). **Epic complete.**
@@ -221,10 +223,10 @@ shard and in the final; mechanics first, money later.
 - [x] **2. Final-level buy-up** — `buyFinalSeat` (close an empty shard for `shardSize × buyIn`, become its
       finalist) + `availableFinalSeats`; `PyramidFederationFinalBuyout` (changeset 20); barrier counts
       `completed + final-buyouts`; final seeded from winners + buyers. Verified by `FederatedFinalBuyoutIT`.
-- [x] **3. Admin prize distribution** — `distributeFederationPrizes(fedId, shardBps)` + admin endpoint
-      `POST …/distribute?shardBps=N`: pool = **expected buy-ins** (`shardCount × shardSize × buyIn`, guaranteed),
-      admin-chosen shard-winner share split among winners + remainder to champion (idempotent; shares one
-      `payPool` core with the plain auto-payout). Verified by `FederatedPyramidPayoutIT`.
+- [x] **3. Admin prize distribution** — `distributeFederationPrizes(fedId)` + admin endpoint
+      `POST …/distribute`: pool = **expected buy-ins** (`shardCount × shardSize × buyIn`, guaranteed), paid out
+      as a flat per-shard-winner qualifier (`federated-shard-winner-ppm`) + the rest to the champion (shares one
+      `payPool` core with the plain auto-payout). Idempotent. Verified by `FederatedPyramidPayoutIT`.
 - [x] **4a. REST** — admin `open-buyup` / `close-buyup` (+ existing `distribute`); player `final-seats` (GET) +
       `final-seats/{i}/buy`. DTOs `FinalSeatResponse`/`FinalSeatPurchaseResponse`. Verified by
       `FederatedBuyUpControllerIT`.
@@ -254,6 +256,16 @@ shard and in the final; mechanics first, money later.
 - [ ] On-chain/AML screening (Chainalysis/Elliptic) on the deposit + withdrawal paths.
 - [ ] Per-coordinator metrics (broadcast latency, reconcile lag, pending-confirmations gauge).
 - [ ] Decide on 4-eyes (2-of-N moderator approval) — intentionally NOT done; revisit if compliance requires.
+- [ ] **House-revenue admin page (frontend)** — surface `GET /api/v1/admin/wallet/house-revenue`
+      (`HouseRevenueResponse`: per-asset tournament-fee + cash-rake + total) in the admin UI, e.g. on the
+      wallet/admin dashboard. Backend + metric (`truholdem_wallet_house_revenue{asset,source}`) already exist;
+      this is the read-only view for operators.
+- [ ] **Operator/treasury withdrawal path for house revenue** — today the withheld fee/rake accrues in the
+      custodial treasury and is only *recorded* (`tournament_fee_entries` / `cash_rake_entries`); there is no
+      in-app way to move it out. Add an operator withdrawal flow (or a treasury sweep) so house revenue can be
+      paid out to the operator's address, reconciled against the recorded totals. Must NOT credit a user
+      `WalletAccount` (would inflate the solvency-monitor liabilities) — model it as a treasury/operator account
+      kept out of the `liabilities` sum, with its own audit trail.
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store

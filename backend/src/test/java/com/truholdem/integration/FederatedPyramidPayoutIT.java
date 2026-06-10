@@ -27,7 +27,8 @@ import com.truholdem.service.wallet.WalletService;
 
 /**
  * Buy-up federated pyramid slice 3: an admin distributes the guaranteed prize pool (the expected buy-ins,
- * {@code shardCount × shardSize × buyIn}) with an admin-chosen shard-winner share; the rest goes to the champion.
+ * {@code shardCount × shardSize × buyIn}) as a flat per-shard-winner qualifier (ppm of the pool) + the rest to
+ * the champion. With 2 shards, pool 160, no house fee and the default 1 ppm: each winner gets 0.00016.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -84,18 +85,18 @@ class FederatedPyramidPayoutIT {
     }
 
     @Test
-    @DisplayName("30% of the 160 pool → 24 per shard winner, remainder 112 → champion; idempotent")
+    @DisplayName("each shard winner gets the 1 ppm qualifier (0.00016), the champion takes the rest; idempotent")
     void distributesExpectedPool() {
-        federatedService.distributeFederationPrizes(federationId, 3000);
+        federatedService.distributeFederationPrizes(federationId);
 
-        // pool 160; shardPool 48 over 2 winners → qualifier 24; championPrize 160 − 48 = 112.
-        assertThat(walletService.balance(w0, ASSET)).isEqualByComparingTo("236"); // 100 + 24 + 112
-        assertThat(walletService.balance(w1, ASSET)).isEqualByComparingTo("124"); // 100 + 24
+        // pool 160; per-winner qualifier 1 ppm = 0.00016. w0 (champion) = 100 + 0.00016 + (160 - 0.00032).
+        assertThat(walletService.balance(w0, ASSET)).isEqualByComparingTo("259.99984");
+        assertThat(walletService.balance(w1, ASSET)).isEqualByComparingTo("100.00016");
 
         // Idempotent — a re-run pays nothing more (same award keys).
-        federatedService.distributeFederationPrizes(federationId, 3000);
-        assertThat(walletService.balance(w0, ASSET)).isEqualByComparingTo("236");
-        assertThat(walletService.balance(w1, ASSET)).isEqualByComparingTo("124");
+        federatedService.distributeFederationPrizes(federationId);
+        assertThat(walletService.balance(w0, ASSET)).isEqualByComparingTo("259.99984");
+        assertThat(walletService.balance(w1, ASSET)).isEqualByComparingTo("100.00016");
     }
 
     @Test
@@ -103,7 +104,7 @@ class FederatedPyramidPayoutIT {
     void rejectedBeforeCompletion() {
         PyramidFederation fresh = federatedService.createFederation(
                 "Fresh " + System.currentTimeMillis(), 8, 4, null, BUY_IN, ASSET, true);
-        assertThatThrownBy(() -> federatedService.distributeFederationPrizes(fresh.getId(), 3000))
+        assertThatThrownBy(() -> federatedService.distributeFederationPrizes(fresh.getId()))
                 .isInstanceOf(IllegalStateException.class);
     }
 }

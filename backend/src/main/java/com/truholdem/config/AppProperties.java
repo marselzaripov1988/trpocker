@@ -1210,17 +1210,45 @@ public class AppProperties {
         @Min(1)
         private int federatedNodeGroupCount = 1;
 
-        /** Federated pyramid (real money): basis points of the prize pool split equally among shard winners
-         * (the rest goes to the grand champion). 3000 = 30%. */
+        /** Federated pyramid (real money): the qualifier paid to EACH shard winner, in parts-per-million of the
+         * net prize pool (i.e. after the organisation fee), deducted from the champion's remainder. Default
+         * 1 ppm = 0.0001% of the pool per winner. The organisation fee itself is {@code feeBasisPoints} (≤20%). */
         @Min(0)
-        private int federatedShardPrizeBps = 3000;
+        private int federatedShardWinnerPpm = 1;
 
-        public int getFederatedShardPrizeBps() {
-            return federatedShardPrizeBps;
+        /** Federated pyramid (real money): per-place prize share (basis points of the net pool) for the
+         * non-champion FINAL-TABLE places — index 0 = 2nd place, 1 = 3rd, … Default {@code [300,100]} = 3% + 1%.
+         * The grand champion takes the remainder (pool − shard qualifiers − these places), so the pool always
+         * sums to 100%. Bound from a comma-separated property, e.g. {@code app.tournament.federated-final-table-place-bps=300,100}. */
+        private List<Integer> federatedFinalTablePlaceBps = List.of(300, 100);
+
+        /** Federated pyramid (real money): basis points of the net pool split equally among the remaining
+         * final-table players (those past {@code federatedFinalTablePlaceBps}). Default 100 = 1%. */
+        @Min(0)
+        private int federatedFinalTableRestBps = 100;
+
+        public int getFederatedShardWinnerPpm() {
+            return federatedShardWinnerPpm;
         }
 
-        public void setFederatedShardPrizeBps(int federatedShardPrizeBps) {
-            this.federatedShardPrizeBps = federatedShardPrizeBps;
+        public void setFederatedShardWinnerPpm(int federatedShardWinnerPpm) {
+            this.federatedShardWinnerPpm = federatedShardWinnerPpm;
+        }
+
+        public List<Integer> getFederatedFinalTablePlaceBps() {
+            return federatedFinalTablePlaceBps;
+        }
+
+        public void setFederatedFinalTablePlaceBps(List<Integer> federatedFinalTablePlaceBps) {
+            this.federatedFinalTablePlaceBps = federatedFinalTablePlaceBps;
+        }
+
+        public int getFederatedFinalTableRestBps() {
+            return federatedFinalTableRestBps;
+        }
+
+        public void setFederatedFinalTableRestBps(int federatedFinalTableRestBps) {
+            this.federatedFinalTableRestBps = federatedFinalTableRestBps;
         }
 
         public int getFederatedMaxConcurrentShards() {

@@ -98,8 +98,7 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
               <button class="btn" [disabled]="busy()" (click)="closeBuyUp()">Close buy-up + start</button>
             </div>
             <div class="row">
-              <input type="number" data-cy="fed-bps" [(ngModel)]="distributeBps" min="0" max="10000" />
-              <button class="btn" [disabled]="busy()" (click)="distribute()">Distribute prizes (shard bps)</button>
+              <button class="btn" [disabled]="busy()" (click)="distribute()">Distribute prizes (final table)</button>
             </div>
           </div>
         </section>
@@ -144,7 +143,6 @@ export class AdminFederationComponent {
   };
   scheduleAt = '';
   openShardIndex = 0;
-  distributeBps = 3000;
 
   readonly federation = signal<FederationDetail | null>(null);
   readonly busy = signal(false);
@@ -239,8 +237,8 @@ export class AdminFederationComponent {
       return;
     }
     this.busy.set(true);
-    this.service.distribute(f.id, this.distributeBps).subscribe({
-      next: detail => this.applied(detail, `distribute (${this.distributeBps} bps)`),
+    this.service.distribute(f.id).subscribe({
+      next: detail => this.applied(detail, 'distribute (final table)'),
       error: () => this.failed('distribute')
     });
   }
