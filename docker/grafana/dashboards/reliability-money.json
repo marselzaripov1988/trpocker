@@ -1184,6 +1184,142 @@
       "description": "Rising = payouts failing at broadcast / on-chain (each triggers a reversal)."
     },
     {
+      "type": "gauge",
+      "title": "Reserve-float coverage by asset",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "id": 27,
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "percent",
+          "min": 0,
+          "max": 120,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 85
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 * (truholdem_wallet_liabilities + truholdem_wallet_withdrawals_in_flight_amount) / (truholdem_wallet_reserve_float > 0)",
+          "range": true,
+          "refId": "A",
+          "legendFormat": "{{asset}}"
+        }
+      ],
+      "description": "User liabilities (Σ of all balances) + in-flight withdrawals as a % of the operator-declared on-chain reserve float (app.payments.reserve-float). >85% = warning, >100% = insolvency risk. No series for an asset whose float is unset (gauge NaN) - declare it to monitor."
+    },
+    {
+      "type": "timeseries",
+      "title": "Liabilities + in-flight vs reserve float (by asset)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "id": 28,
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "truholdem_wallet_liabilities + truholdem_wallet_withdrawals_in_flight_amount",
+          "range": true,
+          "refId": "A",
+          "legendFormat": "{{asset}} owed (liabilities + in-flight)"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "truholdem_wallet_reserve_float",
+          "range": true,
+          "refId": "B",
+          "legendFormat": "{{asset}} reserve float"
+        }
+      ],
+      "description": "The 'owed' line crossing above the 'reserve float' line for an asset means committed funds exceed custodied funds - freeze/throttle payouts and top up the treasury."
+    },
+    {
       "type": "row",
       "title": "Redis (via redis_exporter)",
       "collapsed": false,
@@ -1191,7 +1327,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 71
       },
       "id": 23,
       "panels": []
@@ -1207,7 +1343,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 61
+        "y": 72
       },
       "id": 24,
       "fieldConfig": {
@@ -1280,7 +1416,7 @@
         "h": 8,
         "w": 9,
         "x": 6,
-        "y": 61
+        "y": 72
       },
       "id": 25,
       "fieldConfig": {
@@ -1335,7 +1471,7 @@
         "h": 8,
         "w": 9,
         "x": 15,
-        "y": 61
+        "y": 72
       },
       "id": 26,
       "fieldConfig": {
@@ -1399,6 +1535,6 @@
   "timezone": "",
   "title": "TruHoldem - Reliability & Money",
   "uid": "truholdem-reliability",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

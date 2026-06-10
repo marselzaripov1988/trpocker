@@ -244,8 +244,13 @@ shard and in the final; mechanics first, money later.
       `saveAll` (batch) to cut DB round-trips under large-field load.
 
 ## TODO — cross-cutting / production-readiness
-- [ ] Live AWS-KMS-backed `KycKeyProvider` is done; add a **hot-float / treasury balance monitor + alert**
-      so withdrawals can't silently exceed available on-chain funds.
+- [x] Live AWS-KMS-backed `KycKeyProvider` is done; **hot-float / treasury balance monitor + alert** —
+      `WalletMetrics` now publishes per-asset `truholdem_wallet_liabilities` (Σ of all wallet balances),
+      `truholdem_wallet_withdrawals_in_flight_amount`, and the operator-declared
+      `truholdem_wallet_reserve_float` (`app.payments.reserve-float.<ASSET>`); Prometheus alerts
+      `WalletReserveFloatLow` (>85%) and `WalletInsolvencyRisk` (liabilities+in-flight > float) fire as they
+      approach/exceed the custodied float. Follow-up: auto-read the on-chain treasury balance (watch-only
+      providers) instead of the operator-declared float, so the reference is observed rather than configured.
 - [ ] On-chain/AML screening (Chainalysis/Elliptic) on the deposit + withdrawal paths.
 - [ ] Per-coordinator metrics (broadcast latency, reconcile lag, pending-confirmations gauge).
 - [ ] Decide on 4-eyes (2-of-N moderator approval) — intentionally NOT done; revisit if compliance requires.

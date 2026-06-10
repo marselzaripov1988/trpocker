@@ -126,6 +126,14 @@ public class AppProperties {
         /** Max total withdrawal amount per rolling 24h per user, keyed by asset name. No entry = no limit. */
         private Map<String, BigDecimal> maxWithdrawalPerDay = new HashMap<>();
 
+        /** Operator-declared custodied on-chain reserve float (hot+cold treasury) per asset name, e.g.
+         *  {@code USDT_TRC20 -> 50000}. The solvency monitor compares total user liabilities (Σ of all wallet
+         *  balances) plus in-flight withdrawals against this figure and alerts as they approach it. We cannot
+         *  reliably read the treasury balance from inside the app (keys are offline / addresses are watch-only),
+         *  so this is an operator input — keep it current. No entry for an asset = no reference: the liabilities
+         *  gauges still publish, but the float gauge reports NaN and the solvency alert stays dormant for it. */
+        private Map<String, BigDecimal> reserveFloat = new HashMap<>();
+
         /** Mandatory delay (minutes) between a withdrawal request and when it may be approved/executed — a
          *  fraud-detection window. 0 (default) disables it. Only meaningful with approval required. */
         private int withdrawalCoolingPeriodMinutes = 0;
@@ -282,6 +290,14 @@ public class AppProperties {
 
         public void setMaxWithdrawalPerDay(Map<String, BigDecimal> maxWithdrawalPerDay) {
             this.maxWithdrawalPerDay = maxWithdrawalPerDay;
+        }
+
+        public Map<String, BigDecimal> getReserveFloat() {
+            return reserveFloat;
+        }
+
+        public void setReserveFloat(Map<String, BigDecimal> reserveFloat) {
+            this.reserveFloat = reserveFloat;
         }
 
         public int getWithdrawalCoolingPeriodMinutes() {

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 💰 Wallet solvency / hot-float monitor + alert
+- The wallet `balance` is an internal custodial IOU ledger, **not** a mirror of on-chain funds — nothing read
+  the treasury balance, so winnings/payouts and withdrawals could grow past the coins actually custodied with
+  no signal. Closed that gap with a read-only solvency monitor (no money-path coupling):
+  - **`WalletMetrics`** — new per-asset gauges: `truholdem_wallet_liabilities` (Σ of *all* wallet balances for
+    the asset = what the platform owes), `truholdem_wallet_withdrawals_in_flight_amount` (committed-but-unsettled
+    payout amount), and `truholdem_wallet_reserve_float` (the operator-declared custodied float). All evaluate at
+    scrape time and degrade to `NaN` on a DB hiccup / unset config rather than a misleading `0`.
+  - **`app.payments.reserve-float.<ASSET>`** (`AppProperties.Payments.reserveFloat`) — operator input for the
+    custodied treasury float per asset (the app can't read it: keys are offline / addresses watch-only).
+  - **Repository sums** — `WalletAccountRepository.sumBalanceByAsset` and
+    `WithdrawalRequestRepository.sumAmountByAssetAndStatusIn` (`COALESCE(..,0)`, JPQL validated against Postgres).
+  - **Prometheus alerts** (`docker/prometheus/alerts.yml`, group `truholdem-wallet`): **`WalletReserveFloatLow`**
+    (warning, liabilities+in-flight > 85% of float for 10m) and **`WalletInsolvencyRisk`** (critical, > 100% for
+    2m). Both gated on `reserve_float > 0`, so they stay dormant for any asset whose float is not declared.
+- Verified: `WalletMetricsTest` (7 tests — gauge values, NaN-on-error, NaN-when-unset, non-terminal-status
+  filter), `WalletServiceIT` boots the context (JPQL parses), and `alerts.yml` parses (37 rules total).
+
 ### 🚨 Wire up Alertmanager (routing, grouping, inhibition)
 - Prometheus was evaluating the 35 alert rules but had no `alerting:` target and no Alertmanager — alerts fired
   into the void (visible only in the Prometheus UI, notifying nobody). Added:

@@ -519,3 +519,40 @@ groups:
           summary: "Withdrawals are failing"
           description: "{{ $value | printf \"%.0f\" }} withdrawals moved to FAILED in the last hour. Payouts are breaking at broadcast / on-chain — check the wallet provider, gas/fees, and node connectivity."
           runbook_url: "https://runbooks.truholdem.com/withdrawal-failures"
+
+      # Solvency / hot-float coverage. liabilities (Σ of all user balances) + in-flight withdrawals approach the
+      # operator-declared on-chain reserve float (app.payments.reserve-float). The wallet balance is an internal
+      # custodial IOU ledger, NOT a mirror of on-chain funds, so this is the guard that withdrawals + winnings
+      # cannot silently grow past the funds actually custodied. Both rules are gated on reserve_float>0, so they
+      # are dormant for any asset whose float the operator has not declared (gauge is NaN → NaN>0 is false).
+      - alert: WalletReserveFloatLow
+        expr: |
+          (
+            truholdem_wallet_liabilities + truholdem_wallet_withdrawals_in_flight_amount
+          ) / truholdem_wallet_reserve_float > 0.85
+          and
+          truholdem_wallet_reserve_float > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: truholdem
+        annotations:
+          summary: "Wallet reserve float running low for {{ $labels.asset }}"
+          description: "User liabilities + in-flight withdrawals are at {{ $value | printf \"%.0f%%\" }} of the declared on-chain reserve float for {{ $labels.asset }}. Top up the treasury hot/cold float (or raise app.payments.reserve-float if it under-states custodied funds) before withdrawals can exceed available coins."
+          runbook_url: "https://runbooks.truholdem.com/wallet-reserve-float"
+
+      - alert: WalletInsolvencyRisk
+        expr: |
+          (
+            truholdem_wallet_liabilities + truholdem_wallet_withdrawals_in_flight_amount
+          ) > truholdem_wallet_reserve_float
+          and
+          truholdem_wallet_reserve_float > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: truholdem
+        annotations:
+          summary: "Wallet liabilities exceed reserve float for {{ $labels.asset }}"
+          description: "User liabilities + in-flight withdrawals EXCEED the declared on-chain reserve float for {{ $labels.asset }} — the platform may be unable to honour all withdrawals. Freeze/throttle payouts, reconcile the treasury balance against this figure, and top up custodied funds."
+          runbook_url: "https://runbooks.truholdem.com/wallet-reserve-float"
