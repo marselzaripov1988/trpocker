@@ -9,6 +9,8 @@ import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.repository.TournamentTableRepository;
 
+import java.math.BigDecimal;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -188,9 +190,10 @@ class TournamentServiceTest {
         @DisplayName("should reject invalid player counts")
         void shouldRejectInvalidPlayerCounts() {
             CreateTournamentRequest request = new CreateTournamentRequest(
-                "Invalid", TournamentType.FREEZEOUT, 1500, 
-                10, 5, 
-                100, null, null, null, null, null, null, null, null, false);
+                "Invalid", TournamentType.FREEZEOUT, 1500,
+                10, 5,
+                100, null, null, null, null, null, null, null, null, false,
+                null, null, null);
             
             assertThatThrownBy(() -> tournamentService.createTournament(request))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -217,6 +220,45 @@ class TournamentServiceTest {
             assertThat(event).isInstanceOf(TournamentCreated.class);
             TournamentCreated created = (TournamentCreated) event;
             assertThat(created.getTournamentName()).isEqualTo("Test Tournament");
+        }
+
+        private CreateTournamentRequest realMoneyRequest(BigDecimal amount, CryptoAsset asset, Integer feeBps) {
+            return new CreateTournamentRequest("RM Tournament", TournamentType.FREEZEOUT, 1500, 2, 9, 0,
+                    "STANDARD", null, null, null, null, null, null, null, false, amount, asset, feeBps);
+        }
+
+        @Test
+        @DisplayName("should create a real-money standalone tournament with a crypto buy-in and fee")
+        void shouldCreateRealMoneyTournamentWithFee() {
+            when(tournamentRepository.save(any(Tournament.class))).thenAnswer(inv -> {
+                Tournament t = inv.getArgument(0);
+                setTournamentId(t, UUID.randomUUID());
+                return t;
+            });
+
+            Tournament result = tournamentService.createTournament(
+                    realMoneyRequest(new BigDecimal("20"), CryptoAsset.USDT_TRC20, 1000));
+
+            assertThat(result.isRealMoney()).isTrue();
+            assertThat(result.getCryptoBuyInAmount()).isEqualByComparingTo("20");
+            assertThat(result.getCryptoBuyInAsset()).isEqualTo(CryptoAsset.USDT_TRC20);
+            assertThat(result.getFeeBasisPoints()).isEqualTo(1000);
+        }
+
+        @Test
+        @DisplayName("should reject a crypto amount without an asset")
+        void shouldRejectCryptoAmountWithoutAsset() {
+            assertThatThrownBy(() -> tournamentService.createTournament(
+                    realMoneyRequest(new BigDecimal("20"), null, null)))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("should reject a fee on a play-money tournament")
+        void shouldRejectFeeWithoutRealMoney() {
+            assertThatThrownBy(() -> tournamentService.createTournament(
+                    realMoneyRequest(null, null, 1000)))
+                    .isInstanceOf(IllegalArgumentException.class);
         }
     }
     

@@ -1,5 +1,6 @@
 package com.truholdem.dto;
 
+import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.TournamentType;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 
@@ -54,7 +56,19 @@ public record CreateTournamentRequest(
     List<Integer> payoutStructure,
 
     /** When true, players cannot self-unregister / self-refund — cancellation is admin-only (default false). */
-    Boolean unregisterRequiresApproval
+    Boolean unregisterRequiresApproval,
+
+    /** Optional real-money crypto buy-in amount. With {@code cryptoBuyInAsset} set (and &gt; 0) the tournament
+     *  is real-money; null/zero = play-money. */
+    BigDecimal cryptoBuyInAmount,
+
+    /** Asset of the real-money buy-in; required (together with a positive amount) for a real-money tournament. */
+    CryptoAsset cryptoBuyInAsset,
+
+    /** House commission on the crypto prize pool, in basis points (0–2000 = 0–20%). null/0 = no fee. */
+    @Min(value = 0, message = "Fee cannot be negative")
+    @Max(value = 2000, message = "Fee cannot exceed 2000 bps (20%)")
+    Integer feeBasisPoints
 ) {
 
 
@@ -67,7 +81,8 @@ public record CreateTournamentRequest(
             9,
             buyIn,
             "TURBO",
-            null, null, null, null, null, null, null, false
+            null, null, null, null, null, null, null, false,
+            null, null, null
         );
     }
     
@@ -81,7 +96,8 @@ public record CreateTournamentRequest(
             maxPlayers,
             buyIn,
             "STANDARD",
-            null, null, null, null, null, null, null, false
+            null, null, null, null, null, null, null, false,
+            null, null, null
         );
     }
     
@@ -102,7 +118,8 @@ public record CreateTournamentRequest(
             buyIn * 2, 
             null,
             null,
-            false
+            false,
+            null, null, null
         );
     }
     
@@ -116,7 +133,8 @@ public record CreateTournamentRequest(
             maxPlayers,
             0,
             "STANDARD",
-            null, null, null, null, null, null, null, false
+            null, null, null, null, null, null, null, false,
+            null, null, null
         );
     }
 
@@ -132,7 +150,8 @@ public record CreateTournamentRequest(
             null, null, null, null, null,
             bountyAmount,
             null,
-            false
+            false,
+            null, null, null
         );
     }
 }

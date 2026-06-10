@@ -15,6 +15,11 @@ export interface CreateTournamentAdminRequest {
   buyIn: number;
   blindStructureType?: string;
   unregisterRequiresApproval?: boolean;
+  /** Optional real-money crypto buy-in (amount + asset both required to be real-money). */
+  cryptoBuyInAmount?: number | null;
+  cryptoBuyInAsset?: string | null;
+  /** House commission on the crypto prize pool, in basis points (0–2000 = 0–20%). 0/absent = no fee. */
+  feeBasisPoints?: number;
 }
 
 export interface PyramidRunResponse {

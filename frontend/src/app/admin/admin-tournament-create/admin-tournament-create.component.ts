@@ -69,6 +69,28 @@ import {
           </select>
         </label>
 
+        <fieldset class="money">
+          <legend>Real money (optional)</legend>
+          <div class="row">
+            <label>
+              Crypto buy-in amount
+              <input type="number" name="cryptoBuyInAmount" [(ngModel)]="form.cryptoBuyInAmount"
+                min="0" step="0.000001" data-cy="crypto-buyin" />
+            </label>
+            <label>
+              Asset
+              <input name="cryptoBuyInAsset" [(ngModel)]="form.cryptoBuyInAsset"
+                placeholder="USDT_TRC20" data-cy="crypto-asset" />
+            </label>
+          </div>
+          <label>
+            House fee % (0–20, on the crypto prize pool)
+            <input type="number" name="feePercent" [(ngModel)]="feePercent"
+              min="0" max="20" step="0.5" data-cy="tournament-fee" />
+          </label>
+          <p class="hint">Leave the amount blank for a play-money tournament. A fee only applies to a real-money pool.</p>
+        </fieldset>
+
         <label class="check">
           <input
             type="checkbox"
@@ -96,6 +118,9 @@ import {
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
     .form label.check { display: flex; align-items: flex-start; gap: 0.5rem; }
     .form label.check input { width: auto; margin-top: 0.15rem; }
+    .form fieldset.money { border: 1px solid #475569; border-radius: 8px; padding: 0.75rem 1rem 0.25rem; margin-bottom: 1rem; }
+    .form fieldset.money legend { color: #94a3b8; font-size: 0.8rem; padding: 0 0.4rem; }
+    .form .hint { color: #94a3b8; font-size: 0.75rem; margin: 0 0 0.75rem; }
     .btn-primary { background: #2563eb; color: #fff; border: none; padding: 0.65rem 1.25rem; border-radius: 8px; cursor: pointer; font-weight: 600; }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .alert.error { background: #7f1d1d; color: #fecaca; padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
@@ -117,8 +142,13 @@ export class AdminTournamentCreateComponent {
     maxPlayers: 9,
     buyIn: 100,
     blindStructureType: 'STANDARD',
-    unregisterRequiresApproval: false
+    unregisterRequiresApproval: false,
+    cryptoBuyInAmount: null,
+    cryptoBuyInAsset: null
   };
+
+  /** House fee as a %, converted to basis points on submit (10% → 1000 bps, capped at 20%). */
+  feePercent = 0;
 
   onSubmit(): void {
     if (this.form.type === 'SIT_AND_GO') {
@@ -127,6 +157,14 @@ export class AdminTournamentCreateComponent {
     if (this.form.type === 'PYRAMID') {
       this.form.maxPlayers = Math.max(this.form.maxPlayers, 10);
     }
+
+    // Normalise the real-money fields: a blank/zero amount is play-money (no asset, no fee).
+    const amount = Number(this.form.cryptoBuyInAmount) || 0;
+    const asset = (this.form.cryptoBuyInAsset || '').trim();
+    const realMoney = amount > 0 && asset.length > 0;
+    this.form.cryptoBuyInAmount = realMoney ? amount : null;
+    this.form.cryptoBuyInAsset = realMoney ? asset : null;
+    this.form.feeBasisPoints = realMoney ? Math.round((this.feePercent || 0) * 100) : 0;
 
     this.saving.set(true);
     this.error.set(null);

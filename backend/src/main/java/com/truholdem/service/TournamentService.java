@@ -829,6 +829,17 @@ public class TournamentService {
             throw new IllegalArgumentException(
                     "Maximum players cannot exceed " + tournamentProperties.getMaxPlayersLimit());
         }
+        // Real-money: a crypto buy-in needs BOTH a positive amount and an asset (XOR is rejected).
+        boolean hasAmount = request.cryptoBuyInAmount() != null && request.cryptoBuyInAmount().signum() > 0;
+        boolean hasAsset = request.cryptoBuyInAsset() != null;
+        if (hasAmount != hasAsset) {
+            throw new IllegalArgumentException(
+                    "A real-money tournament needs both a crypto buy-in amount (> 0) and an asset");
+        }
+        // The fee only makes sense on a real-money tournament (no crypto pool → nothing to take a cut of).
+        if (request.feeBasisPoints() != null && request.feeBasisPoints() > 0 && !hasAmount) {
+            throw new IllegalArgumentException("A tournament fee requires a real-money crypto buy-in");
+        }
     }
 
     private void validateCanRegister(Tournament tournament, UUID playerId, int registeredCount) {
@@ -909,7 +920,21 @@ public class TournamentService {
             builder.unregisterRequiresApproval(true);
         }
 
-        return builder.build();
+        if (request.feeBasisPoints() != null) {
+            builder.feeBasisPoints(request.feeBasisPoints()); // validates 0..2000
+        }
+
+        Tournament tournament = builder.build();
+
+        // Real-money entry: set the crypto buy-in (validated in validateCreateRequest). With a fee, the
+        // prize pool pays out net and the house cut is recorded on completion (TournamentWalletService).
+        if (request.cryptoBuyInAmount() != null && request.cryptoBuyInAmount().signum() > 0
+                && request.cryptoBuyInAsset() != null) {
+            tournament.setCryptoBuyInAmount(request.cryptoBuyInAmount());
+            tournament.setCryptoBuyInAsset(request.cryptoBuyInAsset());
+        }
+
+        return tournament;
     }
 
     private int calculateTableCount(int playerCount) {

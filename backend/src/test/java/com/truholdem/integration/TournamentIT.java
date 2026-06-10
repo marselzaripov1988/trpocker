@@ -155,7 +155,8 @@ class TournamentIT {
                 null,                                           // addOnAmount
                 null,                                           // bountyAmount
                 null,                                           // payoutStructure
-                false);                                         // unregisterRequiresApproval
+                false,                                          // unregisterRequiresApproval
+                null, null, null);                              // cryptoBuyInAmount / asset / feeBasisPoints
     }
 
     // The test drives services directly (no open-session-in-view), so navigating the lazy

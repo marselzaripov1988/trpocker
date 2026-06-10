@@ -22,15 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **House revenue is recorded**, mirroring the cash-table rake: a new `tournament_fee_entries` table
     (`TournamentFeeEntry`, a pure accounting record — **not** a wallet account, so it never inflates user
     liabilities or the solvency monitor). One idempotent row per paid-out pool (`tfee:<id>` / `fedfee:<id>`).
-  - **Admin UI** (`/admin/federation`): a “House fee % (0–20)” input on the create form (sent as basis
-    points), and the rate shown in the federation detail panel. `CreateFederationRequest.feeBasisPoints`
+  - **Admin UI**: a “House fee % (0–20)” input on both create forms (federation `/admin/federation` and the
+    **standalone tournament** `/admin/create`), sent as basis points, and the rate shown in the
+    federation detail panel. `CreateFederationRequest.feeBasisPoints` + `CreateTournamentRequest`
     (`@Min 0 @Max 2000`); `FederationDetailResponse` exposes it.
+  - **Standalone real-money tournaments** are now creatable directly: `CreateTournamentRequest` gained
+    `cryptoBuyInAmount` / `cryptoBuyInAsset` / `feeBasisPoints`, wired through `TournamentService` (a crypto
+    amount and asset are required together; a fee requires a real-money buy-in). The payout/recording path was
+    already shared, so these tournaments net the fee and record house revenue like the federation ones.
   - **DB**: Liquibase changeset 27 adds the two `fee_basis_points` columns (default 0) + the
     `tournament_fee_entries` table.
-- Verified: `TournamentFeeTest` (6 — pool math, reconciliation, 20% cap, play-money no-op), the fee path in
-  `TournamentWalletServiceIT` (net payout 36/21.6/14.4 of a 72 net pool + recorded 8 revenue + idempotent),
-  the federation/tournament payout ITs still green at fee 0, and a fresh-Postgres boot (Liquibase 27 applies +
-  Hibernate `validate` passes against the new schema).
+- Verified: `TournamentFeeTest` (6 — pool math, reconciliation, 20% cap, play-money no-op), `TournamentServiceTest`
+  (real-money create sets buy-in + fee; rejects amount-without-asset and fee-without-real-money), the fee path in
+  `TournamentWalletServiceIT` (standalone freezeout: net payout 36/21.6/14.4 of a 72 net pool + recorded 8 revenue
+  + idempotent), federation/tournament payout ITs still green at fee 0, full unit suite (1110) green, and a
+  fresh-Postgres boot (Liquibase 27 applies + Hibernate `validate` passes against the new schema).
 
 ### 💰 Wallet solvency / hot-float monitor + alert
 - The wallet `balance` is an internal custodial IOU ledger, **not** a mirror of on-chain funds — nothing read
