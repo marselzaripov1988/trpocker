@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏦 Tournament house commission (configurable fee up to 20%)
+- Real-money tournaments now support a **house commission** on the crypto prize pool, set by an admin at
+  creation (0–20%). Until now the full buy-in pool was paid out (no rake on tournaments); this adds the
+  monetisation seam without changing any existing tournament (default fee = 0 → byte-identical payouts).
+  - **`Tournament.feeBasisPoints`** (+ `PyramidFederation.feeBasisPoints`), 0–2000 bps, capped at
+    `Tournament.MAX_FEE_BASIS_POINTS` (20%) by the setters/builder. The fee is taken off the gross pool:
+    `cryptoGrossPool()` → `cryptoHouseFee()` (rounded DOWN, never short-changing winners) →
+    `cryptoPrizePool()` = gross − fee. `cryptoPrizeForPosition()` therefore distributes the **net** pool.
+  - **Both real-money payout paths** apply it: the standalone/child-tournament path
+    (`TournamentWalletService.payoutOnCompletion`) and the federation path
+    (`FederatedPyramidService.payPool`, covering the flat federation pool + buy-up final distribution).
+    Buy-up shard children inherit the federation's rate.
+  - **House revenue is recorded**, mirroring the cash-table rake: a new `tournament_fee_entries` table
+    (`TournamentFeeEntry`, a pure accounting record — **not** a wallet account, so it never inflates user
+    liabilities or the solvency monitor). One idempotent row per paid-out pool (`tfee:<id>` / `fedfee:<id>`).
+  - **Admin UI** (`/admin/federation`): a “House fee % (0–20)” input on the create form (sent as basis
+    points), and the rate shown in the federation detail panel. `CreateFederationRequest.feeBasisPoints`
+    (`@Min 0 @Max 2000`); `FederationDetailResponse` exposes it.
+  - **DB**: Liquibase changeset 27 adds the two `fee_basis_points` columns (default 0) + the
+    `tournament_fee_entries` table.
+- Verified: `TournamentFeeTest` (6 — pool math, reconciliation, 20% cap, play-money no-op), the fee path in
+  `TournamentWalletServiceIT` (net payout 36/21.6/14.4 of a 72 net pool + recorded 8 revenue + idempotent),
+  the federation/tournament payout ITs still green at fee 0, and a fresh-Postgres boot (Liquibase 27 applies +
+  Hibernate `validate` passes against the new schema).
+
 ### 💰 Wallet solvency / hot-float monitor + alert
 - The wallet `balance` is an internal custodial IOU ledger, **not** a mirror of on-chain funds — nothing read
   the treasury balance, so winnings/payouts and withdrawals could grow past the coins actually custodied with

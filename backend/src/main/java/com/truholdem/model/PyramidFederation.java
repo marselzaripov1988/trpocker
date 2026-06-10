@@ -73,6 +73,12 @@ public class PyramidFederation {
     @Column(name = "crypto_buy_in_asset", length = 32)
     private CryptoAsset cryptoBuyInAsset;
 
+    /** House commission on the federation's crypto prize pool, in basis points (e.g. 1000 = 10%), capped at
+     *  {@link com.truholdem.model.Tournament#MAX_FEE_BASIS_POINTS} (20%). 0 (default) = no fee. Inherited by
+     *  every child shard / final tournament so the cut applies on whichever pool actually pays out. */
+    @Column(name = "fee_basis_points", nullable = false)
+    private int feeBasisPoints = 0;
+
     /** Buy-up variant: each shard is a buy-up pyramid where players can buy guaranteed higher-level seats. */
     @Column(name = "buy_up_enabled", nullable = false)
     private boolean buyUpEnabled = false;
@@ -193,6 +199,29 @@ public class PyramidFederation {
 
     public void setCryptoBuyInAsset(CryptoAsset cryptoBuyInAsset) {
         this.cryptoBuyInAsset = cryptoBuyInAsset;
+    }
+
+    public int getFeeBasisPoints() {
+        return feeBasisPoints;
+    }
+
+    /** @throws IllegalArgumentException if the fee is negative or exceeds 20% (2000 bps). */
+    public void setFeeBasisPoints(int feeBasisPoints) {
+        if (feeBasisPoints < 0 || feeBasisPoints > Tournament.MAX_FEE_BASIS_POINTS) {
+            throw new IllegalArgumentException(
+                    "Federation fee must be between 0 and " + Tournament.MAX_FEE_BASIS_POINTS + " bps (20%)");
+        }
+        this.feeBasisPoints = feeBasisPoints;
+    }
+
+    /** House commission taken off a gross pool ({@code gross × feeBasisPoints / 10000}, rounded DOWN). ZERO
+     *  for a 0% fee. */
+    public BigDecimal houseFeeOn(BigDecimal grossPool) {
+        if (feeBasisPoints <= 0 || grossPool == null || grossPool.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return grossPool.multiply(BigDecimal.valueOf(feeBasisPoints))
+                .divide(BigDecimal.valueOf(10_000), 18, java.math.RoundingMode.DOWN);
     }
 
     public boolean isRealMoney() {

@@ -36,5 +36,6 @@
     <include file="db/changelog/24-wallet-cash-cashout-type.xml"/>
     <include file="db/changelog/25-cash-rake.xml"/>
     <include file="db/changelog/26-cash-table-current-game.xml"/>
+    <include file="db/changelog/27-tournament-fee.xml"/>
 
 </databaseChangeLog>

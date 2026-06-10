@@ -16,8 +16,10 @@ import com.truholdem.domain.event.TournamentCompleted;
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.PyramidBuyout;
 import com.truholdem.model.Tournament;
+import com.truholdem.model.TournamentFeeEntry;
 import com.truholdem.model.TournamentRegistration;
 import com.truholdem.repository.PyramidBuyoutRepository;
+import com.truholdem.repository.TournamentFeeEntryRepository;
 import com.truholdem.repository.TournamentRegistrationRepository;
 import com.truholdem.repository.TournamentRepository;
 import com.truholdem.service.TournamentService;
@@ -39,15 +41,17 @@ public class TournamentWalletService {
     private final TournamentRegistrationRepository registrationRepository;
     private final TournamentRepository tournamentRepository;
     private final PyramidBuyoutRepository buyoutRepository;
+    private final TournamentFeeEntryRepository feeEntryRepository;
 
     public TournamentWalletService(WalletService walletService, TournamentService tournamentService,
             TournamentRegistrationRepository registrationRepository, TournamentRepository tournamentRepository,
-            PyramidBuyoutRepository buyoutRepository) {
+            PyramidBuyoutRepository buyoutRepository, TournamentFeeEntryRepository feeEntryRepository) {
         this.walletService = walletService;
         this.tournamentService = tournamentService;
         this.registrationRepository = registrationRepository;
         this.tournamentRepository = tournamentRepository;
         this.buyoutRepository = buyoutRepository;
+        this.feeEntryRepository = feeEntryRepository;
     }
 
     /** Buy into a real-money tournament at its configured crypto fee (debit + register, atomically). */
@@ -151,6 +155,7 @@ public class TournamentWalletService {
         if (tournament == null || !tournament.isRealMoney()) {
             return 0;
         }
+        recordHouseFee(tournament);
         int credited = 0;
         for (TournamentCompleted.FinishResult finisher : finishers) {
             BigDecimal prize = tournament.cryptoPrizeForPosition(finisher.position());
@@ -169,6 +174,27 @@ public class TournamentWalletService {
             }
         }
         return credited;
+    }
+
+    /**
+     * Record the tournament's withheld house commission as revenue, once per tournament (idempotent on
+     * {@code tfee:<id>}). The fee is not moved — the prize pool the finishers split is already net of it (see
+     * {@link Tournament#cryptoPrizePool()}); this is the accounting record. No-op for a 0% fee.
+     */
+    private void recordHouseFee(Tournament tournament) {
+        BigDecimal fee = tournament.cryptoHouseFee();
+        if (fee.signum() <= 0) {
+            return;
+        }
+        String key = "tfee:" + tournament.getId();
+        if (feeEntryRepository.existsByIdempotencyKey(key)) {
+            return;
+        }
+        feeEntryRepository.save(new TournamentFeeEntry(
+                TournamentFeeEntry.SourceType.TOURNAMENT, tournament.getId(), tournament.getCryptoBuyInAsset(),
+                tournament.cryptoGrossPool(), fee, tournament.getFeeBasisPoints(), key));
+        log.info("Tournament {} — recorded house fee {} {} ({} bps of {})", tournament.getId(), fee,
+                tournament.getCryptoBuyInAsset(), tournament.getFeeBasisPoints(), tournament.cryptoGrossPool());
     }
 
     private static String buyInKey(UUID tournamentId, UUID userId) {

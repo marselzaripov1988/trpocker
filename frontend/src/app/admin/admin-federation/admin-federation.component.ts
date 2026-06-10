@@ -32,6 +32,8 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
             <input type="number" data-cy="fed-shard" [(ngModel)]="form.shardSize" min="2" /></label>
           <label>Registration deadline (optional, blank = indefinite)
             <input type="datetime-local" [(ngModel)]="form.deadline" /></label>
+          <label>House fee % (0–20, on the crypto prize pool)
+            <input type="number" data-cy="fed-fee" [(ngModel)]="form.feePercent" min="0" max="20" step="0.5" /></label>
           <label class="check">
             <input type="checkbox" data-cy="fed-buyup" [(ngModel)]="form.buyUpEnabled" />
             Buy-up (real-money seat buy-outs in shards + final)
@@ -59,6 +61,7 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
             <div><span>Shard size</span><strong>{{ f.shardSize }}</strong></div>
             <div><span>Seats/table</span><strong>{{ f.seatsPerTable }}</strong></div>
             <div><span>Registered</span><strong>{{ f.registeredPlayers }}</strong></div>
+            <div><span>House fee</span><strong>{{ (f.feeBasisPoints || 0) / 100 }}%</strong></div>
           </div>
           <div class="shardbar">
             <span class="chip pending">PENDING {{ f.shardsPending }}</span>
@@ -137,7 +140,7 @@ export class AdminFederationComponent {
 
   readonly form = {
     name: '', startingPlayers: 1000, shardSize: 100, deadline: '',
-    buyUpEnabled: false, buyInAmount: 0, buyInAsset: 'USDT_TRC20'
+    buyUpEnabled: false, buyInAmount: 0, buyInAsset: 'USDT_TRC20', feePercent: 0
   };
   scheduleAt = '';
   openShardIndex = 0;
@@ -149,7 +152,8 @@ export class AdminFederationComponent {
   canCreate(): boolean {
     return this.form.name.trim().length >= 3
       && this.form.startingPlayers >= this.form.shardSize
-      && this.form.shardSize >= 2;
+      && this.form.shardSize >= 2
+      && this.form.feePercent >= 0 && this.form.feePercent <= 20;
   }
 
   create(): void {
@@ -161,7 +165,9 @@ export class AdminFederationComponent {
       registrationDeadline: this.form.deadline ? new Date(this.form.deadline).toISOString() : null,
       buyUpEnabled: this.form.buyUpEnabled,
       buyInAmount: this.form.buyUpEnabled ? this.form.buyInAmount : null,
-      buyInAsset: this.form.buyUpEnabled ? this.form.buyInAsset : null
+      buyInAsset: this.form.buyUpEnabled ? this.form.buyInAsset : null,
+      // House commission %, sent as basis points (e.g. 10% → 1000 bps), capped at 20% (2000 bps).
+      feeBasisPoints: Math.round((this.form.feePercent || 0) * 100)
     }).subscribe({
       next: detail => {
         this.federation.set(detail);

@@ -20,6 +20,8 @@ export interface FederationDetail {
   finalScheduledStart?: string | null;
   finalTournamentId?: string | null;
   championPlayerId?: string | null;
+  /** House commission on the crypto prize pool, in basis points (0–2000 = 0–20%). */
+  feeBasisPoints: number;
   shardsPending: number;
   shardsRegistering: number;
   shardsReady: number;
@@ -38,4 +40,6 @@ export interface CreateFederationRequest {
   buyInAsset?: string | null;
   /** Buy-up variant: each shard is a buy-up pyramid (players can buy higher-level / final seats). */
   buyUpEnabled?: boolean;
+  /** House commission on the crypto prize pool, in basis points (0–2000 = 0–20%). 0/absent = no fee. */
+  feeBasisPoints?: number;
 }

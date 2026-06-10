@@ -18,6 +18,7 @@ public record FederationDetailResponse(
         Instant finalScheduledStart,
         UUID finalTournamentId,
         UUID championPlayerId,
+        int feeBasisPoints,
         int shardsPending,
         int shardsRegistering,
         int shardsReady,

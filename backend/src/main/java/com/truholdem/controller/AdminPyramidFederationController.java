@@ -59,7 +59,8 @@ public class AdminPyramidFederationController {
         PyramidFederation fed = federatedService.createFederation(
                 request.name(), request.startingPlayers(), request.shardSize(),
                 request.registrationDeadline(), request.buyInAmount(), request.buyInAsset(),
-                request.buyUpEnabled());
+                request.buyUpEnabled(),
+                request.feeBasisPoints() == null ? 0 : request.feeBasisPoints());
         log.info("Admin created federated pyramid {} ({} players / shard {})",
                 fed.getId(), request.startingPlayers(), request.shardSize());
         return ResponseEntity.status(HttpStatus.CREATED).body(federatedService.getFederationDetail(fed.getId()));

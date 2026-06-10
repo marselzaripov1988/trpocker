@@ -46,6 +46,9 @@ public class Tournament {
     private static final int MAX_PLAYERS_PER_TABLE = 9;
     private static final int MIN_PLAYERS_TO_START = 2;
 
+    /** Maximum house commission on a tournament's crypto prize pool: 2000 bps = 20%. */
+    public static final int MAX_FEE_BASIS_POINTS = 2000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
@@ -97,6 +100,12 @@ public class Tournament {
     @Enumerated(EnumType.STRING)
     @Column(name = "crypto_buy_in_asset", length = 32)
     private CryptoAsset cryptoBuyInAsset;
+
+    /** House commission on the crypto prize pool, in basis points (e.g. 1000 = 10%). Capped at
+     *  {@link #MAX_FEE_BASIS_POINTS} (20%). 0 (default) = no fee — the full pool is paid out, so existing
+     *  tournaments are unaffected. The fee is taken off the gross pool; the remainder is the prize pool. */
+    @Column(name = "fee_basis_points", nullable = false)
+    private int feeBasisPoints = 0;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
@@ -575,12 +584,33 @@ public class Tournament {
         return cryptoBuyInAmount != null && cryptoBuyInAmount.signum() > 0 && cryptoBuyInAsset != null;
     }
 
-    /** Crypto prize pool = crypto buy-in × number of registered players (ZERO for play-money). */
-    public BigDecimal cryptoPrizePool() {
+    /** Gross crypto pool = crypto buy-in × number of registered players (ZERO for play-money), before the
+     *  house fee. */
+    public BigDecimal cryptoGrossPool() {
         if (!isRealMoney()) {
             return BigDecimal.ZERO;
         }
         return cryptoBuyInAmount.multiply(BigDecimal.valueOf(registrations.size()));
+    }
+
+    /** House commission taken off the gross pool ({@code gross × feeBasisPoints / 10000}, rounded DOWN so the
+     *  prize pool is never short-changed). ZERO for play-money or a 0% fee. */
+    public BigDecimal cryptoHouseFee() {
+        if (!isRealMoney() || feeBasisPoints <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return cryptoGrossPool()
+                .multiply(BigDecimal.valueOf(feeBasisPoints))
+                .divide(BigDecimal.valueOf(10_000), 18, RoundingMode.DOWN);
+    }
+
+    /** Crypto prize pool actually paid out to players = gross pool minus the house fee (ZERO for play-money).
+     *  With the default 0% fee this equals the gross pool, so non-fee tournaments are unaffected. */
+    public BigDecimal cryptoPrizePool() {
+        if (!isRealMoney()) {
+            return BigDecimal.ZERO;
+        }
+        return cryptoGrossPool().subtract(cryptoHouseFee());
     }
 
     /** Crypto prize for a finishing position, by the payout structure (ZERO if play-money / out of money). */
@@ -608,6 +638,19 @@ public class Tournament {
 
     public void setCryptoBuyInAsset(CryptoAsset cryptoBuyInAsset) {
         this.cryptoBuyInAsset = cryptoBuyInAsset;
+    }
+
+    public int getFeeBasisPoints() {
+        return feeBasisPoints;
+    }
+
+    /** @throws IllegalArgumentException if the fee is negative or exceeds {@link #MAX_FEE_BASIS_POINTS} (20%). */
+    public void setFeeBasisPoints(int feeBasisPoints) {
+        if (feeBasisPoints < 0 || feeBasisPoints > MAX_FEE_BASIS_POINTS) {
+            throw new IllegalArgumentException(
+                    "Tournament fee must be between 0 and " + MAX_FEE_BASIS_POINTS + " bps (20%)");
+        }
+        this.feeBasisPoints = feeBasisPoints;
     }
 
     
@@ -805,6 +848,11 @@ public class Tournament {
 
         public TournamentBuilder payoutStructure(List<Integer> percentages) {
             tournament.setPayoutStructure(percentages);
+            return this;
+        }
+
+        public TournamentBuilder feeBasisPoints(int feeBasisPoints) {
+            tournament.setFeeBasisPoints(feeBasisPoints);
             return this;
         }
 
