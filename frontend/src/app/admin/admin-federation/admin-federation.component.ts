@@ -90,6 +90,20 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
               Schedule final + e-mail finalists
             </button>
           </div>
+          <div class="prize" data-cy="fed-prize-config">
+            <span class="hint">Prize config — editable until payout. Champion takes the remainder; 100 bps = 1%.</span>
+            <div class="row">
+              <label>Final-table 2nd, 3rd… bps (CSV)
+                <input data-cy="fed-place-bps" [(ngModel)]="prizeForm.placeBps" placeholder="300,100" /></label>
+              <label>Rest-of-table bps
+                <input type="number" data-cy="fed-rest-bps" [(ngModel)]="prizeForm.restBps" min="0" /></label>
+              <label>Shard-winner ppm
+                <input type="number" data-cy="fed-ppm" [(ngModel)]="prizeForm.ppm" min="0" /></label>
+            </div>
+            <button class="btn" data-cy="fed-prize-save"
+              [disabled]="busy() || f.status === 'COMPLETED' || f.status === 'CANCELLED'"
+              (click)="savePrizeConfig()">Save prize config</button>
+          </div>
           <div class="buyup" data-cy="fed-buyup-actions">
             <span class="hint">Buy-up controls (real-money buy-up federations only):</span>
             <div class="row">
@@ -127,6 +141,9 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
     .buyup { margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.75rem; }
     .buyup .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
     .buyup input { width: 110px; }
+    .prize { margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.75rem; }
+    .prize .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin: 0.5rem 0; }
+    .prize input { width: 130px; }
     .btn-primary, .btn { background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; border-radius:8px; padding:0.5rem 1rem; font-weight:600; cursor:pointer; }
     .btn-ghost { background: transparent; color:#cbd5e1; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:0.5rem 1rem; cursor:pointer; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -143,6 +160,7 @@ export class AdminFederationComponent {
   };
   scheduleAt = '';
   openShardIndex = 0;
+  prizeForm = { placeBps: '300,100', restBps: 100, ppm: 1 };
 
   readonly federation = signal<FederationDetail | null>(null);
   readonly busy = signal(false);
@@ -168,7 +186,7 @@ export class AdminFederationComponent {
       feeBasisPoints: Math.round((this.form.feePercent || 0) * 100)
     }).subscribe({
       next: detail => {
-        this.federation.set(detail);
+        this.setFederation(detail);
         this.errorHandler.addSuccess('Federation created', `${detail.shardCount} shards`);
         this.busy.set(false);
       },
@@ -250,15 +268,41 @@ export class AdminFederationComponent {
     }
     this.busy.set(true);
     this.service.get(f.id).subscribe({
-      next: detail => { this.federation.set(detail); this.busy.set(false); },
+      next: detail => { this.setFederation(detail); this.busy.set(false); },
       error: () => this.failed('refresh')
     });
   }
 
+  savePrizeConfig(): void {
+    const f = this.federation();
+    if (!f) {
+      return;
+    }
+    this.busy.set(true);
+    this.service.updatePrizeConfig(f.id, {
+      shardWinnerPpm: this.prizeForm.ppm,
+      finalTablePlaceBps: this.prizeForm.placeBps,
+      finalTableRestBps: this.prizeForm.restBps
+    }).subscribe({
+      next: detail => this.applied(detail, 'prize-config'),
+      error: () => this.failed('prize-config')
+    });
+  }
+
   private applied(detail: FederationDetail, action: string): void {
-    this.federation.set(detail);
+    this.setFederation(detail);
     this.errorHandler.addSuccess(`Done: ${action}`, `Status: ${detail.status}`);
     this.busy.set(false);
+  }
+
+  /** Set the active federation and mirror its prize config into the editable form. */
+  private setFederation(detail: FederationDetail): void {
+    this.federation.set(detail);
+    this.prizeForm = {
+      placeBps: detail.finalTablePlaceBps ?? '',
+      restBps: detail.finalTableRestBps ?? 0,
+      ppm: detail.shardWinnerPpm ?? 0
+    };
   }
 
   private failed(action: string): void {

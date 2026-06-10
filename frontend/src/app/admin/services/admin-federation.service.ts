@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { CreateFederationRequest, FederationDetail } from '../models/admin-federation.models';
+import { CreateFederationRequest, FederationDetail, PrizeConfigRequest } from '../models/admin-federation.models';
 
 /** Admin control plane for federated (sharded) pyramids — see AdminPyramidFederationController. */
 @Injectable({ providedIn: 'root' })
@@ -48,5 +48,9 @@ export class AdminFederationService {
 
   distribute(id: string): Observable<FederationDetail> {
     return this.http.post<FederationDetail>(`${this.url}/${id}/distribute`, {});
+  }
+
+  updatePrizeConfig(id: string, config: PrizeConfigRequest): Observable<FederationDetail> {
+    return this.http.post<FederationDetail>(`${this.url}/${id}/prize-config`, config);
   }
 }

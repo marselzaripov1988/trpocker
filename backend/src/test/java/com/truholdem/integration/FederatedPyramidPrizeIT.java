@@ -1,6 +1,7 @@
 package com.truholdem.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -131,5 +132,38 @@ class FederatedPyramidPrizeIT {
                 .map(p -> walletService.balance(p, ASSET))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         assertThat(total).isEqualByComparingTo("800");
+    }
+
+    @Test
+    @DisplayName("an admin prize-config override (2nd place → 5%) flows into the payout")
+    void prizeConfigOverrideAppliesToPayout() {
+        federatedService.updateFederationPrizeConfig(federationId, 1, "500", 100); // 2nd place 5%
+
+        federatedService.drainShards(federationId);
+        federatedService.scheduleFinal(federationId, Instant.now().plus(2, ChronoUnit.HOURS));
+        federatedService.startFinal(federationId);
+        federatedService.runFinalToChampion(federationId);
+
+        PyramidFederation done = federationRepository.findById(federationId).orElseThrow();
+        UUID champion = done.getChampionPlayerId();
+        var finalTable = tournamentRegistrationRepository
+                .findTopFinishersByTournament(done.getFinalTournamentId(), 2);
+        UUID runnerUp = finalTable.get(1).getPlayerId();
+
+        // 2nd place 5% of 160 = 8.0; champion = 160 − 0.00064 − 8 = 151.99936 (+ own 0.00016 qualifier).
+        assertThat(walletService.balance(runnerUp, ASSET)).isEqualByComparingTo("88.00016");
+        assertThat(walletService.balance(champion, ASSET)).isEqualByComparingTo("231.99952");
+
+        BigDecimal total = players.stream()
+                .map(p -> walletService.balance(p, ASSET))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(total).isEqualByComparingTo("800");
+    }
+
+    @Test
+    @DisplayName("a prize config exceeding 100% of the pool is rejected")
+    void prizeConfigRejectsOver100Percent() {
+        assertThatThrownBy(() -> federatedService.updateFederationPrizeConfig(federationId, 1, "9000,2000", 100))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

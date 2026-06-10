@@ -206,7 +206,9 @@ winners**, then an **admin sets the start time + e-mails finalists**; registrati
       (`federated-shard-winner-ppm`, default 1 ppm = 0.0001% each) + the final-table places
       (`federated-final-table-place-bps` 2nd/3rd… + `…-rest-bps`, default 2%/1% + 1% split), with the grand
       champion taking the remainder (absorbs rounding). Organisation fee (≤20%, `feeBasisPoints`) is withheld off
-      the top first. Verified by `FederatedPyramidPrizeIT` (both logics + pool conservation) + `FederatedPrizeSplitTest`.
+      the top first. The prize config is snapshotted onto the federation at creation and **admin-editable until
+      payout** (`POST …/prize-config` + a prize-config panel on `/admin/federations`; changeset 28). Verified by
+      `FederatedPyramidPrizeIT` (both logics + per-federation override + pool conservation) + `FederatedPrizeSplitTest`.
 - [x] **8. Cluster/load verify** — `registerBotsBatch` + admin `register-bots` endpoint (enables wave load);
       node-group pinning balance verified (`FederatedPyramidNodeGroupIT`: 12 shards → 4/4/4 over 3 groups) +
       batch-fill tests; documented manual wave load on the scale cluster (`load/k6/README.md`). **Epic complete.**

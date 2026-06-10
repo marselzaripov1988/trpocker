@@ -83,6 +83,19 @@ public class PyramidFederation {
     @Column(name = "buy_up_enabled", nullable = false)
     private boolean buyUpEnabled = false;
 
+    /** Per-federation prize config (real money). Seeded from the {@code app.tournament} defaults at creation and
+     *  editable by an admin until payout; {@code null} falls back to the global default at distribution. */
+    @Column(name = "shard_winner_ppm")
+    private Integer shardWinnerPpm;
+
+    /** Final-table non-champion place shares as comma-separated basis points (index 0 = 2nd place, e.g.
+     *  {@code "300,100"} = 3% + 1%); {@code null}/blank falls back to the global default. */
+    @Column(name = "final_table_place_bps", length = 200)
+    private String finalTablePlaceBps;
+
+    @Column(name = "final_table_rest_bps")
+    private Integer finalTableRestBps;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -234,6 +247,45 @@ public class PyramidFederation {
 
     public void setBuyUpEnabled(boolean buyUpEnabled) {
         this.buyUpEnabled = buyUpEnabled;
+    }
+
+    public Integer getShardWinnerPpm() {
+        return shardWinnerPpm;
+    }
+
+    public void setShardWinnerPpm(Integer shardWinnerPpm) {
+        this.shardWinnerPpm = shardWinnerPpm;
+    }
+
+    public String getFinalTablePlaceBps() {
+        return finalTablePlaceBps;
+    }
+
+    public void setFinalTablePlaceBps(String finalTablePlaceBps) {
+        this.finalTablePlaceBps = finalTablePlaceBps;
+    }
+
+    public Integer getFinalTableRestBps() {
+        return finalTableRestBps;
+    }
+
+    public void setFinalTableRestBps(Integer finalTableRestBps) {
+        this.finalTableRestBps = finalTableRestBps;
+    }
+
+    /** The configured final-table place shares parsed from the CSV column, or {@code null} when unset/blank. */
+    public java.util.List<Integer> finalTablePlaceBpsList() {
+        if (finalTablePlaceBps == null || finalTablePlaceBps.isBlank()) {
+            return null;
+        }
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        for (String s : finalTablePlaceBps.split(",")) {
+            String t = s.trim();
+            if (!t.isEmpty()) {
+                out.add(Integer.parseInt(t));
+            }
+        }
+        return out.isEmpty() ? null : out;
     }
 
     public Instant getCreatedAt() {

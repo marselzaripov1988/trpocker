@@ -23,5 +23,10 @@ public record FederationDetailResponse(
         int shardsRegistering,
         int shardsReady,
         int shardsRunning,
-        int shardsCompleted) {
+        int shardsCompleted,
+        /** Effective prize config (the federation's snapshot, or the global default): shard-winner qualifier in
+         *  ppm, the non-champion final-table place shares (CSV of bps), and the rest-of-table bps. */
+        int shardWinnerPpm,
+        String finalTablePlaceBps,
+        int finalTableRestBps) {
 }

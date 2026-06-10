@@ -27,6 +27,18 @@ export interface FederationDetail {
   shardsReady: number;
   shardsRunning: number;
   shardsCompleted: number;
+  /** Prize config: shard-winner qualifier (ppm of the pool), non-champion final-table place shares (CSV of
+   *  basis points, index 0 = 2nd place) and the rest-of-table bps. The champion takes the remainder. */
+  shardWinnerPpm: number;
+  finalTablePlaceBps: string;
+  finalTableRestBps: number;
+}
+
+/** Mirrors the backend PrizeConfigRequest (any field omitted falls back to the global default). */
+export interface PrizeConfigRequest {
+  shardWinnerPpm: number;
+  finalTablePlaceBps: string;
+  finalTableRestBps: number;
 }
 
 /** Mirrors the backend CreateFederationRequest. */

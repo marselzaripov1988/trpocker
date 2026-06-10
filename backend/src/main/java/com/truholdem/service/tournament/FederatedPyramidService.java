@@ -150,6 +150,10 @@ public class FederatedPyramidService {
         }
         federation.setBuyUpEnabled(buyUpEnabled);
         federation.setFeeBasisPoints(feeBasisPoints); // validates 0..2000
+        // Snapshot the current global prize config onto the federation so an admin can tune it per-federation.
+        federation.setShardWinnerPpm(tournamentProperties.getFederatedShardWinnerPpm());
+        federation.setFinalTablePlaceBps(csv(tournamentProperties.getFederatedFinalTablePlaceBps()));
+        federation.setFinalTableRestBps(tournamentProperties.getFederatedFinalTableRestBps());
         federation = federationRepository.save(federation);
 
         int nodeGroups = Math.max(1, tournamentProperties.getFederatedNodeGroupCount());
@@ -565,6 +569,74 @@ public class FederatedPyramidService {
                 .multiply(BigDecimal.valueOf((long) federation.getShardCount() * federation.getShardSize()));
     }
 
+    /**
+     * Admin action: tune the federation's prize config (shard-winner qualifier ppm + the non-champion
+     * final-table place/rest shares) before the prizes are paid out. Validated so the field shares plus the
+     * shard qualifiers never exceed the pool (the champion always takes a non-negative remainder). Rejected once
+     * the federation is COMPLETED or CANCELLED (the payout has run / cannot run).
+     */
+    @Transactional
+    public void updateFederationPrizeConfig(UUID federationId, Integer shardWinnerPpm,
+            String finalTablePlaceBps, Integer finalTableRestBps) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (federation.getStatus() == FederationStatus.COMPLETED
+                || federation.getStatus() == FederationStatus.CANCELLED) {
+            throw new IllegalStateException(
+                    "Prize config cannot be changed once the federation is " + federation.getStatus());
+        }
+        int ppm = shardWinnerPpm != null ? shardWinnerPpm : tournamentProperties.getFederatedShardWinnerPpm();
+        int restBps = finalTableRestBps != null ? finalTableRestBps : tournamentProperties.getFederatedFinalTableRestBps();
+        List<Integer> placeBps = parsePlaceBps(finalTablePlaceBps);
+        if (ppm < 0 || restBps < 0 || placeBps.stream().anyMatch(b -> b < 0)) {
+            throw new IllegalArgumentException("Prize shares must be non-negative");
+        }
+        // The shard qualifiers consume ppm/1e6 of the pool each (×shardCount); convert to bps (ceil) and require
+        // the final-table shares + qualifiers to fit in 100%, so the champion's remainder is never negative.
+        long qualifierBps = ((long) ppm * federation.getShardCount() + 99) / 100;
+        long total = placeBps.stream().mapToLong(Integer::longValue).sum() + restBps + qualifierBps;
+        if (total > 10_000) {
+            throw new IllegalArgumentException(
+                    "Final-table shares + shard qualifiers exceed 100% of the pool (" + total + " bps)");
+        }
+        federation.setShardWinnerPpm(ppm);
+        federation.setFinalTablePlaceBps(csv(placeBps));
+        federation.setFinalTableRestBps(restBps);
+        federationRepository.save(federation);
+        log.info("Federation {} — prize config updated (ppm={}, placeBps={}, restBps={})",
+                federationId, ppm, placeBps, restBps);
+    }
+
+    /** Parse a comma-separated bps list (blank/null = the global default place schedule). */
+    private List<Integer> parsePlaceBps(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return tournamentProperties.getFederatedFinalTablePlaceBps();
+        }
+        List<Integer> out = new ArrayList<>();
+        for (String s : csv.split(",")) {
+            String t = s.trim();
+            if (!t.isEmpty()) {
+                try {
+                    out.add(Integer.parseInt(t));
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid basis-points value: '" + t + "'");
+                }
+            }
+        }
+        return out;
+    }
+
+    /** Render an integer list as a comma-separated string (empty list → empty string). */
+    private static String csv(List<Integer> values) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(values.get(i));
+        }
+        return sb.toString();
+    }
+
     private void distributePrizes(PyramidFederation federation, UUID championId) {
         long registered = registrationRepository.countByFederationId(federation.getId());
         payPool(federation, championId,
@@ -597,8 +669,16 @@ public class FederatedPyramidService {
                 federation.getFeeBasisPoints(), "fedfee:" + federationId);
         BigDecimal paidOut = BigDecimal.ZERO;
 
+        // Per-federation prize config (snapshot at creation, admin-editable), falling back to the global default.
+        int ppm = federation.getShardWinnerPpm() != null
+                ? federation.getShardWinnerPpm() : tournamentProperties.getFederatedShardWinnerPpm();
+        List<Integer> placeBps = federation.finalTablePlaceBpsList() != null
+                ? federation.finalTablePlaceBpsList() : tournamentProperties.getFederatedFinalTablePlaceBps();
+        int restBps = federation.getFinalTableRestBps() != null
+                ? federation.getFinalTableRestBps() : tournamentProperties.getFederatedFinalTableRestBps();
+
         // 1) Shard-winner qualifier — a flat ppm of the net pool to every shard winner.
-        BigDecimal perWinner = pool.multiply(BigDecimal.valueOf(tournamentProperties.getFederatedShardWinnerPpm()))
+        BigDecimal perWinner = pool.multiply(BigDecimal.valueOf(ppm))
                 .divide(BigDecimal.valueOf(1_000_000), 18, RoundingMode.DOWN);
         List<PyramidFederationShard> completed =
                 shardRepository.findByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED);
@@ -618,8 +698,7 @@ public class FederatedPyramidService {
                         federation.getFinalTournamentId(), federation.getSeatsPerTable());
         if (!finalTable.isEmpty()) {
             List<BigDecimal> placeAwards = FederatedPrizeSplit.nonChampionAwards(pool, finalTable.size(),
-                    tournamentProperties.getFederatedFinalTablePlaceBps(),
-                    tournamentProperties.getFederatedFinalTableRestBps());
+                    placeBps, restBps);
             for (int i = 1; i < finalTable.size(); i++) { // i = finish position − 1; skip the champion (i == 0)
                 UUID playerId = finalTable.get(i).getPlayerId();
                 BigDecimal award = placeAwards.get(i - 1);
@@ -666,7 +745,13 @@ public class FederatedPyramidService {
                 shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.REGISTERING),
                 shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.READY),
                 shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.RUNNING),
-                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED));
+                shardRepository.countByFederationIdAndStatus(federationId, FederationShardStatus.COMPLETED),
+                f.getShardWinnerPpm() != null ? f.getShardWinnerPpm()
+                        : tournamentProperties.getFederatedShardWinnerPpm(),
+                f.getFinalTablePlaceBps() != null ? f.getFinalTablePlaceBps()
+                        : csv(tournamentProperties.getFederatedFinalTablePlaceBps()),
+                f.getFinalTableRestBps() != null ? f.getFinalTableRestBps()
+                        : tournamentProperties.getFederatedFinalTableRestBps());
     }
 
     /** The finalists to notify: shard winners plus anyone who bought a final seat directly. */

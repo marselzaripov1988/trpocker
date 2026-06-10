@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Per-federation prize config (shard-winner ppm + final-table place/rest bps), admin-editable until payout.
+         Postgres-only; H2 derives the columns from the entity. -->
+    <changeSet id="federation-005-prize-config" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="pyramid_federations" columnName="shard_winner_ppm"/></not>
+        </preConditions>
+        <addColumn tableName="pyramid_federations">
+            <column name="shard_winner_ppm" type="int"/>
+            <column name="final_table_place_bps" type="varchar(200)"/>
+            <column name="final_table_rest_bps" type="int"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

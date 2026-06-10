@@ -18,6 +18,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateFederationRequest;
 import com.truholdem.dto.FederationDetailResponse;
+import com.truholdem.dto.PrizeConfigRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.PyramidFederation;
@@ -136,6 +137,18 @@ public class AdminPyramidFederationController {
         assertEnabled();
         federatedService.distributeFederationPrizes(id);
         log.info("Admin distributed prizes for federation {}", id);
+        return ResponseEntity.ok(federatedService.getFederationDetail(id));
+    }
+
+    @PostMapping("/{id}/prize-config")
+    @Operation(summary = "Tune the federation's prize config (shard-winner ppm + final-table place/rest bps) "
+            + "before payout")
+    public ResponseEntity<FederationDetailResponse> prizeConfig(@PathVariable UUID id,
+            @RequestBody PrizeConfigRequest request) {
+        assertEnabled();
+        federatedService.updateFederationPrizeConfig(id, request.shardWinnerPpm(),
+                request.finalTablePlaceBps(), request.finalTableRestBps());
+        log.info("Admin updated prize config for federation {}", id);
         return ResponseEntity.ok(federatedService.getFederationDetail(id));
     }
 
