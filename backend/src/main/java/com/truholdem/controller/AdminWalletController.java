@@ -37,9 +37,11 @@ import com.truholdem.dto.wallet.PoolImportResponse;
 import com.truholdem.dto.wallet.PoolStatusResponse;
 import com.truholdem.dto.wallet.RejectWithdrawalRequest;
 import com.truholdem.dto.wallet.WithdrawalSigningRequestDto;
+import com.truholdem.dto.HouseRevenueResponse;
 import com.truholdem.model.User;
 import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.DepositAddressPoolService;
+import com.truholdem.service.wallet.HouseRevenueService;
 import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
 import com.truholdem.service.wallet.btc.BtcWithdrawalCoordinator;
@@ -68,18 +70,27 @@ public class AdminWalletController {
     private final DepositAddressPoolService pool;
     private final KycVerificationService kycVerificationService;
     private final WalletService walletService;
+    private final HouseRevenueService houseRevenueService;
     private final ObjectProvider<EthWithdrawalCoordinator> ethCoordinator;
     private final ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator;
 
     public AdminWalletController(DepositAddressPoolService pool,
             KycVerificationService kycVerificationService, WalletService walletService,
+            HouseRevenueService houseRevenueService,
             ObjectProvider<EthWithdrawalCoordinator> ethCoordinator,
             ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator) {
         this.pool = pool;
         this.kycVerificationService = kycVerificationService;
         this.walletService = walletService;
+        this.houseRevenueService = houseRevenueService;
         this.ethCoordinator = ethCoordinator;
         this.btcCoordinator = btcCoordinator;
+    }
+
+    @GetMapping("/house-revenue")
+    @Operation(summary = "Accumulated house revenue per asset (tournament commission + cash-table rake)")
+    public ResponseEntity<HouseRevenueResponse> houseRevenue() {
+        return ResponseEntity.ok(houseRevenueService.summary());
     }
 
     @PostMapping("/deposit-pool/import")

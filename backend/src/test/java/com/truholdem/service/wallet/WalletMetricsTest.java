@@ -40,6 +40,10 @@ class WalletMetricsTest {
     private WithdrawalRequestRepository withdrawalRepository;
     @Mock(lenient = true)
     private WalletAccountRepository walletAccountRepository;
+    @Mock(lenient = true)
+    private com.truholdem.repository.TournamentFeeEntryRepository tournamentFeeRepository;
+    @Mock(lenient = true)
+    private com.truholdem.repository.CashRakeEntryRepository cashRakeRepository;
 
     private AppProperties appProperties;
     private MeterRegistry registry;
@@ -53,7 +57,8 @@ class WalletMetricsTest {
     }
 
     private void build() {
-        new WalletMetrics(poolRepository, withdrawalRepository, walletAccountRepository, appProperties, registry);
+        new WalletMetrics(poolRepository, withdrawalRepository, walletAccountRepository,
+                tournamentFeeRepository, cashRakeRepository, appProperties, registry);
     }
 
     private double gauge(String name) {
@@ -73,6 +78,19 @@ class WalletMetricsTest {
                 .thenReturn(new BigDecimal("300"));
         build();
         assertThat(gauge("truholdem.wallet.withdrawals.in_flight_amount")).isEqualTo(300.0);
+    }
+
+    @Test
+    void houseRevenueGaugesReflectFeeAndRakeBySource() {
+        when(tournamentFeeRepository.totalFeeForAsset(ASSET)).thenReturn(new BigDecimal("8"));
+        when(cashRakeRepository.totalRakeForAsset(ASSET)).thenReturn(new BigDecimal("2.5"));
+        build();
+        double fee = Search.in(registry).name("truholdem.wallet.house_revenue")
+                .tag("asset", ASSET.name()).tag("source", "tournament_fee").gauge().value();
+        double rake = Search.in(registry).name("truholdem.wallet.house_revenue")
+                .tag("asset", ASSET.name()).tag("source", "cash_rake").gauge().value();
+        assertThat(fee).isEqualTo(8.0);
+        assertThat(rake).isEqualTo(2.5);
     }
 
     @Test

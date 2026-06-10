@@ -12,7 +12,9 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.DepositAddressStatus;
 import com.truholdem.model.WithdrawalStatus;
+import com.truholdem.repository.CashRakeEntryRepository;
 import com.truholdem.repository.DepositAddressPoolRepository;
+import com.truholdem.repository.TournamentFeeEntryRepository;
 import com.truholdem.repository.WalletAccountRepository;
 import com.truholdem.repository.WithdrawalRequestRepository;
 
@@ -42,6 +44,8 @@ public class WalletMetrics {
     public WalletMetrics(DepositAddressPoolRepository poolRepository,
             WithdrawalRequestRepository withdrawalRepository,
             WalletAccountRepository walletAccountRepository,
+            TournamentFeeEntryRepository tournamentFeeRepository,
+            CashRakeEntryRepository cashRakeRepository,
             AppProperties appProperties,
             MeterRegistry meterRegistry) {
 
@@ -83,6 +87,23 @@ public class WalletMetrics {
                     .description("Operator-declared custodied on-chain reserve float for this asset (app.payments.reserve-float). NaN if unset.")
                     .baseUnit(asset.getSymbol())
                     .tag("asset", asset.name())
+                    .register(meterRegistry);
+
+            // Accumulated house revenue per asset, by source. NOT a wallet balance (it sits in the treasury as
+            // the gap between funds taken in and paid out), so it never enters the liabilities sum above.
+            Gauge.builder("truholdem.wallet.house_revenue",
+                            () -> safeAmount(() -> tournamentFeeRepository.totalFeeForAsset(asset)))
+                    .description("Accumulated tournament-commission house revenue for this asset.")
+                    .baseUnit(asset.getSymbol())
+                    .tag("asset", asset.name())
+                    .tag("source", "tournament_fee")
+                    .register(meterRegistry);
+            Gauge.builder("truholdem.wallet.house_revenue",
+                            () -> safeAmount(() -> cashRakeRepository.totalRakeForAsset(asset)))
+                    .description("Accumulated cash-table rake house revenue for this asset.")
+                    .baseUnit(asset.getSymbol())
+                    .tag("asset", asset.name())
+                    .tag("source", "cash_rake")
                     .register(meterRegistry);
         }
 

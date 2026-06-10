@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏛️ House revenue view (accumulated commission + rake)
+- Answered “which account does the fee accumulate on?”: it doesn't — the fee/rake is **withheld** from each
+  pool (winners get the net) and stays in the custodial treasury, deliberately **not** credited to any
+  `WalletAccount` (a house balance would be summed into the solvency monitor's liabilities and double-count).
+  This adds a read-only accounting view over the two revenue ledgers so an operator can see what has accrued:
+  - **`HouseRevenueService.summary()`** → per-asset `{tournamentFees, cashRake, total}`, aggregating
+    `tournament_fee_entries` + `cash_rake_entries` (new `CashRakeEntryRepository.totalRakeForAsset`).
+  - **Admin endpoint** `GET /api/v1/admin/wallet/house-revenue` (ADMIN) → `HouseRevenueResponse`.
+  - **Prometheus gauge** `truholdem_wallet_house_revenue{asset, source=tournament_fee|cash_rake}` in
+    `WalletMetrics` — visible alongside the solvency panels; like the others it's read-only and NaN-safe, and
+    (being revenue, not a balance) it stays out of the `liabilities` sum.
+- Note: this is the **accounting** view; moving the revenue on-chain remains a treasury operation (offline
+  keys), not a wallet-ledger withdrawal. A dedicated operator withdrawal path is a possible follow-up.
+- Verified: `HouseRevenueServiceTest` (3 — aggregation, omits zero-revenue assets, null-safe), `WalletMetricsTest`
+  (house-revenue gauges by source), full unit suite (1114) green, wallet context IT boots the new beans + JPQL.
+
 ### 🏦 Tournament house commission (configurable fee up to 20%)
 - Real-money tournaments now support a **house commission** on the crypto prize pool, set by an admin at
   creation (0–20%). Until now the full buy-in pool was paid out (no rake on tournaments); this adds the
