@@ -36,6 +36,8 @@ import com.truholdem.dto.wallet.PoolImportRequest;
 import com.truholdem.dto.wallet.PoolImportResponse;
 import com.truholdem.dto.wallet.PoolStatusResponse;
 import com.truholdem.dto.wallet.RejectWithdrawalRequest;
+import com.truholdem.dto.wallet.SolBroadcastRequest;
+import com.truholdem.dto.wallet.SolUnsignedTxDto;
 import com.truholdem.dto.wallet.WithdrawalSigningRequestDto;
 import com.truholdem.dto.HouseRevenueResponse;
 import com.truholdem.model.User;
@@ -46,6 +48,7 @@ import com.truholdem.service.wallet.KycVerificationService;
 import com.truholdem.service.wallet.WalletService;
 import com.truholdem.service.wallet.btc.BtcWithdrawalCoordinator;
 import com.truholdem.service.wallet.eth.EthWithdrawalCoordinator;
+import com.truholdem.service.wallet.sol.SolWithdrawalCoordinator;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -73,18 +76,21 @@ public class AdminWalletController {
     private final HouseRevenueService houseRevenueService;
     private final ObjectProvider<EthWithdrawalCoordinator> ethCoordinator;
     private final ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator;
+    private final ObjectProvider<SolWithdrawalCoordinator> solCoordinator;
 
     public AdminWalletController(DepositAddressPoolService pool,
             KycVerificationService kycVerificationService, WalletService walletService,
             HouseRevenueService houseRevenueService,
             ObjectProvider<EthWithdrawalCoordinator> ethCoordinator,
-            ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator) {
+            ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator,
+            ObjectProvider<SolWithdrawalCoordinator> solCoordinator) {
         this.pool = pool;
         this.kycVerificationService = kycVerificationService;
         this.walletService = walletService;
         this.houseRevenueService = houseRevenueService;
         this.ethCoordinator = ethCoordinator;
         this.btcCoordinator = btcCoordinator;
+        this.solCoordinator = solCoordinator;
     }
 
     @GetMapping("/house-revenue")
@@ -254,6 +260,34 @@ public class AdminWalletController {
         BtcWithdrawalCoordinator coordinator = btcCoordinator.getIfAvailable();
         if (coordinator == null) {
             throw new IllegalStateException("BTC RPC coordinator is disabled (app.payments.btc-rpc-enabled)");
+        }
+        return coordinator;
+    }
+
+    @GetMapping("/withdrawals/{id}/sol-unsigned")
+    @Operation(summary = "Assemble an unsigned USDT-Solana (SPL) transfer for the offline ed25519 signer")
+    public ResponseEntity<SolUnsignedTxDto> solUnsigned(@PathVariable UUID id) {
+        return ResponseEntity.ok(solCoordinatorOrThrow().buildUnsigned(id));
+    }
+
+    @PostMapping("/withdrawals/{id}/sol-broadcast")
+    @Operation(summary = "Broadcast the offline-signed Solana tx and record its signature (→ BROADCAST)")
+    public ResponseEntity<AdminWithdrawalDto> solBroadcast(@PathVariable UUID id,
+            @Valid @RequestBody SolBroadcastRequest body) {
+        return ResponseEntity.ok(
+                AdminWithdrawalDto.from(solCoordinatorOrThrow().broadcast(id, body.signedTx())));
+    }
+
+    @PostMapping("/withdrawals/{id}/sol-reconcile")
+    @Operation(summary = "Reconcile a broadcast USDT-Solana withdrawal against its signature status (→ CONFIRMED)")
+    public ResponseEntity<AdminWithdrawalDto> solReconcile(@PathVariable UUID id) {
+        return ResponseEntity.ok(AdminWithdrawalDto.from(solCoordinatorOrThrow().reconcile(id)));
+    }
+
+    private SolWithdrawalCoordinator solCoordinatorOrThrow() {
+        SolWithdrawalCoordinator coordinator = solCoordinator.getIfAvailable();
+        if (coordinator == null) {
+            throw new IllegalStateException("Solana RPC coordinator is disabled (app.payments.sol-rpc-enabled)");
         }
         return coordinator;
     }

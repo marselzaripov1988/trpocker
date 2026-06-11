@@ -11,6 +11,7 @@ import com.truholdem.model.WithdrawalRequest;
 import com.truholdem.model.WithdrawalStatus;
 import com.truholdem.service.wallet.btc.BtcWithdrawalCoordinator;
 import com.truholdem.service.wallet.eth.EthWithdrawalCoordinator;
+import com.truholdem.service.wallet.sol.SolWithdrawalCoordinator;
 
 /**
  * Periodically reconciles BROADCAST withdrawals against the chain so they reach their terminal state without
@@ -29,14 +30,17 @@ public class WithdrawalReconcileScheduler {
     private final AppProperties appProperties;
     private final ObjectProvider<EthWithdrawalCoordinator> ethCoordinator;
     private final ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator;
+    private final ObjectProvider<SolWithdrawalCoordinator> solCoordinator;
 
     public WithdrawalReconcileScheduler(WalletService walletService, AppProperties appProperties,
             ObjectProvider<EthWithdrawalCoordinator> ethCoordinator,
-            ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator) {
+            ObjectProvider<BtcWithdrawalCoordinator> btcCoordinator,
+            ObjectProvider<SolWithdrawalCoordinator> solCoordinator) {
         this.walletService = walletService;
         this.appProperties = appProperties;
         this.ethCoordinator = ethCoordinator;
         this.btcCoordinator = btcCoordinator;
+        this.solCoordinator = solCoordinator;
     }
 
     @Scheduled(fixedDelayString = "${app.payments.withdrawal-reconcile-interval-ms:60000}")
@@ -47,16 +51,18 @@ public class WithdrawalReconcileScheduler {
         }
         EthWithdrawalCoordinator eth = ethCoordinator.getIfAvailable();
         BtcWithdrawalCoordinator btc = btcCoordinator.getIfAvailable();
+        SolWithdrawalCoordinator sol = solCoordinator.getIfAvailable();
         for (WithdrawalRequest w : walletService.withdrawalsForReview(WithdrawalStatus.BROADCAST)) {
             try {
-                reconcileOne(w, eth, btc);
+                reconcileOne(w, eth, btc, sol);
             } catch (RuntimeException e) {
                 log.warn("Reconcile of broadcast withdrawal {} failed (will retry next sweep)", w.getId(), e);
             }
         }
     }
 
-    private void reconcileOne(WithdrawalRequest w, EthWithdrawalCoordinator eth, BtcWithdrawalCoordinator btc) {
+    private void reconcileOne(WithdrawalRequest w, EthWithdrawalCoordinator eth, BtcWithdrawalCoordinator btc,
+            SolWithdrawalCoordinator sol) {
         switch (w.getAsset()) {
             case ETH, USDT_ERC20 -> {
                 if (eth != null) {
@@ -66,6 +72,11 @@ public class WithdrawalReconcileScheduler {
             case BTC -> {
                 if (btc != null) {
                     btc.reconcile(w.getId());
+                }
+            }
+            case USDT_SOL -> {
+                if (sol != null) {
+                    sol.reconcile(w.getId());
                 }
             }
             default -> {

@@ -64,6 +64,10 @@ class SolWithdrawalCoordinatorIT {
     private SolWithdrawalCoordinator coordinator;
     @Autowired
     private com.truholdem.service.wallet.sol.SolanaRpcClient rpc;
+    @Autowired
+    private com.truholdem.service.wallet.WalletService walletService;
+    @Autowired
+    private com.truholdem.repository.WalletAccountRepository accountRepository;
 
     @DynamicPropertySource
     static void solProps(DynamicPropertyRegistry registry) {
@@ -73,6 +77,10 @@ class SolWithdrawalCoordinatorIT {
                 () -> "http://" + VALIDATOR.getHost() + ":" + VALIDATOR.getMappedPort(8899));
         registry.add("app.payments.sol-from-address", () -> TREASURY_ADDR);
         registry.add("app.payments.sol-usdt-mint", () -> MINT_ADDR);
+        registry.add("app.payments.provider", () -> "offline-pool"); // approve keeps APPROVED (offline signing)
+        registry.add("app.payments.kyc-required-for-withdrawal", () -> false);
+        registry.add("app.payments.withdrawal-approval-required", () -> true);
+        registry.add("app.payments.min-confirmations", () -> 1);
     }
 
     private static final String URL = "http://127.0.0.1:8899";
@@ -94,10 +102,20 @@ class SolWithdrawalCoordinatorIT {
     }
 
     @Test
-    @DisplayName("assemble → offline-sign → broadcast → confirm; recipient USDT balance moves")
+    @DisplayName("withdrawal: request → approve → assemble → offline-sign → broadcast → reconcile; balance moves")
     void usdtWithdrawalEndToEnd() throws Exception {
+        // A USDT-Solana withdrawal goes through the normal wallet flow: credit, request (debit + APPROVED).
+        java.util.UUID user = java.util.UUID.randomUUID();
+        com.truholdem.model.WalletAccount account =
+                new com.truholdem.model.WalletAccount(user, com.truholdem.model.CryptoAsset.USDT_SOL);
+        account.credit(new java.math.BigDecimal("250"));
+        accountRepository.save(account);
+        var req = walletService.requestWithdrawal(user, com.truholdem.model.CryptoAsset.USDT_SOL,
+                RECIPIENT_ADDR, new java.math.BigDecimal("250"));
+        walletService.approveWithdrawal(req.getId(), java.util.UUID.randomUUID());
+
         // Online: assemble the unsigned SPL transfer (recipient ATA does not exist yet → created in-tx).
-        SolUnsignedTxDto unsigned = coordinator.buildUnsigned(RECIPIENT_ADDR, AMOUNT);
+        SolUnsignedTxDto unsigned = coordinator.buildUnsigned(req.getId());
         assertThat(unsigned.createsRecipientAta()).isTrue();
         assertThat(unsigned.feePayer()).isEqualTo(TREASURY_ADDR);
 
@@ -106,18 +124,21 @@ class SolWithdrawalCoordinatorIT {
         byte[] signature = SolKeys.sign(TREASURY_SEED, message);
         String signedTx = com.truholdem.service.wallet.sol.SolTransactionTestKit.serialize(signature, message);
 
-        // Online: broadcast + confirm.
-        String sig = coordinator.broadcast(signedTx);
-        boolean confirmed = false;
-        for (int i = 0; i < 60 && !confirmed; i++) {
-            confirmed = coordinator.isConfirmed(sig);
-            if (!confirmed) {
-                Thread.sleep(500);
-            }
-        }
-        assertThat(confirmed).as("withdrawal signature confirmed").isTrue();
+        // Online: broadcast + reconcile through the withdrawal state machine.
+        var broadcast = coordinator.broadcast(req.getId(), signedTx);
+        assertThat(broadcast.getStatus()).isEqualTo(com.truholdem.model.WithdrawalStatus.BROADCAST);
 
-        // The recipient's USDT ATA now holds the transferred amount.
+        com.truholdem.model.WithdrawalRequest confirmed = null;
+        for (int i = 0; i < 60; i++) {
+            confirmed = coordinator.reconcile(req.getId());
+            if (confirmed.getStatus() == com.truholdem.model.WithdrawalStatus.CONFIRMED) {
+                break;
+            }
+            Thread.sleep(500);
+        }
+        assertThat(confirmed.getStatus()).isEqualTo(com.truholdem.model.WithdrawalStatus.CONFIRMED);
+
+        // The recipient's USDT ATA now holds the transferred amount (250 USDT = 250_000_000 base units).
         BigInteger balance = rpc.getTokenAccountBalance(unsigned.recipientAta());
         assertThat(balance).isEqualTo(BigInteger.valueOf(AMOUNT));
     }

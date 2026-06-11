@@ -347,11 +347,16 @@ Slices:
       ATAs → allocate → confirmed deposit credits the owner; malformed address rejected) + deposit regression
       green. Remaining (ops/follow-up): the deposit ATA must exist on-chain to receive SPL — pre-create deposit
       ATAs (funded, offline-signed, ~0.002 SOL rent each), analogous to the sweep epic; decide payer.
-- [ ] **5. Verify** — `SolWithdrawalCoordinatorIT` against `solana-test-validator` (Testcontainers, like
-      `geth --dev` / `bitcoind -regtest`): fund treasury USDT → assemble → offline ed25519-sign → broadcast →
-      reconcile to CONFIRMED, recipient ATA balance moves. Plus `CryptoAsset` wiring + flag-off 404 test.
+- [x] **5. Wiring + verify** — `SolWithdrawalCoordinator` now drives the standard withdrawal state machine
+      (`buildUnsigned(withdrawalId)` / `broadcast` → `recordBroadcast` / `reconcile` → `confirmWithdrawal`, via
+      `WalletService`); admin `sol-unsigned` / `sol-broadcast` / `sol-reconcile` endpoints (mirror `btc-*`);
+      `WithdrawalReconcileScheduler` `USDT_SOL` case; flag-off → coordinator bean absent
+      (`SolWithdrawalCoordinatorDisabledTest`). `SolWithdrawalCoordinatorIT` now runs the **full flow** end-to-end
+      on `solana-test-validator`: credit → request → approve → assemble → offline ed25519-sign → broadcast →
+      reconcile to CONFIRMED, recipient ATA balance moves (250 USDT). `WithdrawalReconcileSchedulerTest` covers
+      the new dispatch. **Epic complete (slices 1–5).**
 Open: a Solana sweep (deposit ATAs → treasury) is a later slice under the sweep epic; durable-nonce vs
-fast-window for air-gap; whether to also add USDC alongside USDT.
+fast-window for air-gap; whether to also add USDC alongside USDT; pre-create deposit ATAs (from slice 4).
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store

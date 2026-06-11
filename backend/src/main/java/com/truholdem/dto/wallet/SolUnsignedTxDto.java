@@ -1,5 +1,7 @@
 package com.truholdem.dto.wallet;
 
+import java.util.UUID;
+
 /**
  * The unsigned Solana withdrawal handed to the air-gapped signer: {@code messageBase64} is the exact compiled
  * legacy-message bytes to ed25519-sign (with the treasury key), {@code feePayer} is the treasury owner that
@@ -7,6 +9,7 @@ package com.truholdem.dto.wallet;
  * {@code broadcast(...)}. {@code createsRecipientAta} flags that the tx also lazily creates the recipient's ATA.
  */
 public record SolUnsignedTxDto(
+        UUID withdrawalId,
         String messageBase64,
         String feePayer,
         String recipientAta,
