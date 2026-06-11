@@ -438,7 +438,13 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       `solana-test-validator` (`SolAtaProvisionValidatorIT`): a pre-created ATA lets a bare exchange-style transfer
       land + seat; closing an empty ATA returns rent to the operator. (Read methods moved to `confirmed` commitment
       so a just-created mint/ATA is visible — the default `finalized` lagged.) Liquibase changeset 32.
-    - [ ] Deposit polling at scale (scheduler/batched `getSignaturesForAddress`), admin UI.
+    - [x] **Admin UI** — isolated-custody console on the admin-federation page (`IsolatedCustodyPanelComponent`):
+      create toggle (isolated + USDT_SOL buy-in); import dedicated wallets (paste a generator chunk file, idempotent);
+      ATA pre-create/close batches; reconcile deposits + release no-shows; admin-approved refunds
+      (request/approve/reject + unsigned→broadcast→reconcile). Offline-signing ops are key-free: the console only
+      triggers the backend build/broadcast/confirm endpoints and shows the raw JSON; the operator signs the
+      `messageBase64` off-browser and pastes the signed tx back. Verified via AOT template build + lint.
+    - [ ] Deposit polling at scale (scheduler/batched `getSignaturesForAddress`).
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store

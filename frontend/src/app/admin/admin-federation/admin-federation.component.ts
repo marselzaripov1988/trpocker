@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { AdminFederationService } from '../services/admin-federation.service';
 import { FederationDetail } from '../models/admin-federation.models';
 import { ErrorHandlerService } from '../../services/error-handler.service';
+import { IsolatedCustodyPanelComponent } from './isolated-custody-panel.component';
 
 /**
  * Admin page for federated (sharded) pyramids: create one, then drive + monitor its lifecycle
@@ -14,7 +15,7 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
 @Component({
   selector: 'app-admin-federation',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IsolatedCustodyPanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="fed-page" data-cy="admin-federation">
@@ -38,11 +39,19 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
             <input type="checkbox" data-cy="fed-buyup" [(ngModel)]="form.buyUpEnabled" />
             Buy-up (real-money seat buy-outs in shards + final)
           </label>
-          @if (form.buyUpEnabled) {
+          <label class="check">
+            <input type="checkbox" data-cy="fed-isolated" [(ngModel)]="form.isolatedWalletsEnabled" />
+            Isolated custody (on-chain per-player wallets, USDT_SOL)
+          </label>
+          @if (form.buyUpEnabled || form.isolatedWalletsEnabled) {
             <label>Buy-in amount
               <input type="number" data-cy="fed-buyin" [(ngModel)]="form.buyInAmount" min="0" /></label>
-            <label>Buy-in asset
-              <input data-cy="fed-asset" [(ngModel)]="form.buyInAsset" placeholder="USDT_TRC20" /></label>
+            @if (form.isolatedWalletsEnabled) {
+              <label>Buy-in asset<input data-cy="fed-asset" value="USDT_SOL" disabled /></label>
+            } @else {
+              <label>Buy-in asset
+                <input data-cy="fed-asset" [(ngModel)]="form.buyInAsset" placeholder="USDT_TRC20" /></label>
+            }
           }
         </div>
         <button class="btn-primary" data-cy="fed-create" [disabled]="busy() || !canCreate()" (click)="create()">
@@ -115,6 +124,9 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
               <button class="btn" [disabled]="busy()" (click)="distribute()">Distribute prizes (final table)</button>
             </div>
           </div>
+          @if (f.isolatedWalletsEnabled) {
+            <app-isolated-custody-panel [federation]="f" (refreshRequested)="refresh()" />
+          }
         </section>
       }
     </div>
@@ -156,7 +168,8 @@ export class AdminFederationComponent {
 
   readonly form = {
     name: '', startingPlayers: 1000, shardSize: 100, deadline: '',
-    buyUpEnabled: false, buyInAmount: 0, buyInAsset: 'USDT_TRC20', feePercent: 0
+    buyUpEnabled: false, isolatedWalletsEnabled: false,
+    buyInAmount: 0, buyInAsset: 'USDT_TRC20', feePercent: 0
   };
   scheduleAt = '';
   openShardIndex = 0;
@@ -166,22 +179,28 @@ export class AdminFederationComponent {
   readonly busy = signal(false);
 
   canCreate(): boolean {
-    return this.form.name.trim().length >= 3
+    const base = this.form.name.trim().length >= 3
       && this.form.startingPlayers >= this.form.shardSize
       && this.form.shardSize >= 2
       && this.form.feePercent >= 0 && this.form.feePercent <= 20;
+    // Isolated custody requires a real-money buy-in (the on-chain deposit).
+    return base && (!this.form.isolatedWalletsEnabled || this.form.buyInAmount > 0);
   }
 
   create(): void {
     this.busy.set(true);
+    const isolated = this.form.isolatedWalletsEnabled;
+    const wantsBuyIn = isolated || this.form.buyUpEnabled;
     this.service.create({
       name: this.form.name.trim(),
       startingPlayers: this.form.startingPlayers,
       shardSize: this.form.shardSize,
       registrationDeadline: this.form.deadline ? new Date(this.form.deadline).toISOString() : null,
       buyUpEnabled: this.form.buyUpEnabled,
-      buyInAmount: this.form.buyUpEnabled ? this.form.buyInAmount : null,
-      buyInAsset: this.form.buyUpEnabled ? this.form.buyInAsset : null,
+      isolatedWalletsEnabled: isolated,
+      buyInAmount: wantsBuyIn ? this.form.buyInAmount : null,
+      // Isolated custody is Solana-only; otherwise use the chosen asset.
+      buyInAsset: isolated ? 'USDT_SOL' : (this.form.buyUpEnabled ? this.form.buyInAsset : null),
       // House commission %, sent as basis points (e.g. 10% → 1000 bps), capped at 20% (2000 bps).
       feeBasisPoints: Math.round((this.form.feePercent || 0) * 100)
     }).subscribe({
