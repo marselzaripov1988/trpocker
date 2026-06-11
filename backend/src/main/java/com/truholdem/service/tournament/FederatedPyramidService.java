@@ -321,9 +321,14 @@ public class FederatedPyramidService {
         return true;
     }
 
+    /** Up to this many token accounts per {@code getMultipleAccounts} call (Solana's documented cap). */
+    private static final int DEPOSIT_BALANCE_BATCH = 100;
+
     /**
-     * Poll the assigned-but-unfunded wallets' on-chain USDT balances and confirm those holding ≥ the buy-in. A
-     * slice-1 driver (admin/test); scale polling is a later slice. Returns the number newly seated.
+     * Poll the assigned-but-unfunded wallets' on-chain USDT balances and confirm those holding ≥ the buy-in.
+     * Balances are read in batches of {@value #DEPOSIT_BALANCE_BATCH} via {@code getMultipleAccounts}, so a large
+     * field costs ceil(N/100) RPC calls rather than N — the background poller ({@code FederationDepositPollScheduler})
+     * and the admin button share this. Returns the number newly seated.
      */
     public int reconcileDeposits(UUID federationId) {
         PyramidFederation federation = requireFederation(federationId);
@@ -337,20 +342,26 @@ public class FederatedPyramidService {
         int decimals = federation.getCryptoBuyInAsset().getDecimals();
         BigInteger minBaseUnits = federation.getCryptoBuyInAmount().movePointRight(decimals).toBigIntegerExact();
         int min = Math.max(0, paymentsProperties.getMinConfirmations());
+        List<FederationPlayerWallet> awaiting = walletPoolService.assignedAwaitingDeposit(federationId);
         int seated = 0;
-        for (FederationPlayerWallet wallet : walletPoolService.assignedAwaitingDeposit(federationId)) {
+        for (int from = 0; from < awaiting.size(); from += DEPOSIT_BALANCE_BATCH) {
+            List<FederationPlayerWallet> batch = awaiting.subList(from, Math.min(from + DEPOSIT_BALANCE_BATCH, awaiting.size()));
             try {
-                BigInteger balance = rpc.getTokenAccountBalance(wallet.getAddress());
-                if (balance.compareTo(minBaseUnits) >= 0) {
-                    BigDecimal amount = new BigDecimal(balance).movePointLeft(decimals);
-                    if (self.confirmDeposit(federationId, wallet.getAddress(),
-                            "soldep:" + federationId + ":" + wallet.getAddress(), amount, min)) {
-                        seated++;
+                java.util.Map<String, BigInteger> balances =
+                        rpc.getTokenAccountBalances(batch.stream().map(FederationPlayerWallet::getAddress).toList());
+                for (FederationPlayerWallet wallet : batch) {
+                    BigInteger balance = balances.getOrDefault(wallet.getAddress(), BigInteger.ZERO);
+                    if (balance.compareTo(minBaseUnits) >= 0) {
+                        BigDecimal amount = new BigDecimal(balance).movePointLeft(decimals);
+                        if (self.confirmDeposit(federationId, wallet.getAddress(),
+                                "soldep:" + federationId + ":" + wallet.getAddress(), amount, min)) {
+                            seated++;
+                        }
                     }
                 }
             } catch (RuntimeException e) {
-                log.debug("Federation {} — wallet {} not yet funded: {}",
-                        federationId, wallet.getAddress(), e.toString());
+                log.debug("Federation {} — deposit balance batch [{}..{}) failed (will retry): {}",
+                        federationId, from, from + batch.size(), e.toString());
             }
         }
         return seated;

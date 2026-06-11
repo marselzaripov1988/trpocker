@@ -1379,6 +1379,14 @@ public class AppProperties {
         @Min(1)
         private int federatedIsolatedAtaBatchSize = 6;
 
+        /** Isolated custody: enable the background deposit poller that scans REGISTERING federations' dedicated
+         *  wallets on-chain and seats players whose buy-in landed (no manual reconcile). Off by default. */
+        private boolean federatedIsolatedDepositPollEnabled = false;
+
+        /** Isolated custody: how often (ms) the deposit poller runs. Default 30s. */
+        @Min(1000)
+        private long federatedIsolatedDepositPollIntervalMs = 30_000;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
@@ -1417,6 +1425,22 @@ public class AppProperties {
 
         public void setFederatedIsolatedAtaBatchSize(int federatedIsolatedAtaBatchSize) {
             this.federatedIsolatedAtaBatchSize = federatedIsolatedAtaBatchSize;
+        }
+
+        public boolean isFederatedIsolatedDepositPollEnabled() {
+            return federatedIsolatedDepositPollEnabled;
+        }
+
+        public void setFederatedIsolatedDepositPollEnabled(boolean federatedIsolatedDepositPollEnabled) {
+            this.federatedIsolatedDepositPollEnabled = federatedIsolatedDepositPollEnabled;
+        }
+
+        public long getFederatedIsolatedDepositPollIntervalMs() {
+            return federatedIsolatedDepositPollIntervalMs;
+        }
+
+        public void setFederatedIsolatedDepositPollIntervalMs(long federatedIsolatedDepositPollIntervalMs) {
+            this.federatedIsolatedDepositPollIntervalMs = federatedIsolatedDepositPollIntervalMs;
         }
 
         public int getFederatedDefaultShardSize() {

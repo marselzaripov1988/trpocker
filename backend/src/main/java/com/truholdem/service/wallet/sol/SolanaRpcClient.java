@@ -79,6 +79,18 @@ public class SolanaRpcClient {
                 List.of(owner, Map.of("mint", mint), Map.of("encoding", "jsonParsed", "commitment", "confirmed"))));
     }
 
+    /** Raw (base-unit) balances of up to 100 token accounts (e.g. dedicated-wallet ATAs) in ONE call via
+     *  {@code getMultipleAccounts} — the batched deposit poll uses this so a large field costs ceil(N/100) RPCs
+     *  instead of N. Returns a map keyed by the input address; missing/uninitialized accounts are absent. Read at
+     *  {@code confirmed}. */
+    public Map<String, BigInteger> getTokenAccountBalances(List<String> tokenAccounts) {
+        if (tokenAccounts.isEmpty()) {
+            return Map.of();
+        }
+        return parseMultipleTokenAmounts(rpc("getMultipleAccounts",
+                List.of(tokenAccounts, Map.of("encoding", "jsonParsed", "commitment", "confirmed"))), tokenAccounts);
+    }
+
     /** Broadcast a base64-encoded signed transaction; returns its signature. Preflight runs at {@code confirmed}
      *  (not the default {@code finalized}) so a just-created/funded source account — visible at {@code confirmed}
      *  but not yet finalized — isn't rejected with a spurious {@code InvalidAccountData}. */
@@ -110,6 +122,24 @@ public class SolanaRpcClient {
             String amount = acc.path("account").path("data").path("parsed").path("info")
                     .path("tokenAmount").path("amount").asText("0");
             out.add(new TokenAccount(acc.path("pubkey").asText(), new BigInteger(amount)));
+        }
+        return out;
+    }
+
+    /** Map each input address to its parsed token-account balance (jsonParsed). {@code value} is positional and
+     *  parallel to the requested addresses; a null entry (uninitialized account) is simply omitted. */
+    static Map<String, BigInteger> parseMultipleTokenAmounts(JsonNode result, List<String> addresses) {
+        java.util.Map<String, BigInteger> out = new java.util.HashMap<>();
+        JsonNode value = result.path("value");
+        for (int i = 0; i < addresses.size() && i < value.size(); i++) {
+            JsonNode acc = value.get(i);
+            if (acc == null || acc.isNull()) {
+                continue;
+            }
+            JsonNode amount = acc.path("data").path("parsed").path("info").path("tokenAmount").path("amount");
+            if (!amount.isMissingNode()) {
+                out.put(addresses.get(i), new BigInteger(amount.asText("0")));
+            }
         }
         return out;
     }

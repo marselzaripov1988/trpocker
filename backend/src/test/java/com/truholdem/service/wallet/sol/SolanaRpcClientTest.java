@@ -75,6 +75,22 @@ class SolanaRpcClientTest {
     }
 
     @Test
+    @DisplayName("parses getMultipleAccounts balances by address, skipping null (uninitialized) entries")
+    void parsesMultipleTokenAmounts() {
+        // value is positional/parallel to the requested addresses; the middle account is uninitialized (null).
+        JsonNode result = read("{\"context\":{\"slot\":1},\"value\":["
+                + "{\"data\":{\"parsed\":{\"info\":{\"tokenAmount\":{\"amount\":\"5000000\",\"decimals\":6}}}}},"
+                + "null,"
+                + "{\"data\":{\"parsed\":{\"info\":{\"tokenAmount\":{\"amount\":\"7\",\"decimals\":6}}}}}]}");
+        Map<String, BigInteger> balances =
+                SolanaRpcClient.parseMultipleTokenAmounts(result, List.of("AtaA", "AtaB", "AtaC"));
+        assertThat(balances).hasSize(2);
+        assertThat(balances.get("AtaA")).isEqualTo(new BigInteger("5000000"));
+        assertThat(balances).doesNotContainKey("AtaB"); // null account omitted
+        assertThat(balances.get("AtaC")).isEqualTo(new BigInteger("7"));
+    }
+
+    @Test
     @DisplayName("parses signature status: confirmed, finalized (null confirmations), failed, and not-found")
     void parsesSignatureStatus() {
         SolanaRpcClient.SignatureStatus confirmed = SolanaRpcClient.parseSignatureStatus(read(

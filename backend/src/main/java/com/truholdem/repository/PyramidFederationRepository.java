@@ -11,4 +11,7 @@ import com.truholdem.model.PyramidFederation;
 public interface PyramidFederationRepository extends JpaRepository<PyramidFederation, UUID> {
 
     List<PyramidFederation> findByStatus(FederationStatus status);
+
+    /** Isolated-custody federations in a status — the deposit poller scans REGISTERING ones for on-chain buy-ins. */
+    List<PyramidFederation> findByStatusAndIsolatedWalletsEnabledTrue(FederationStatus status);
 }

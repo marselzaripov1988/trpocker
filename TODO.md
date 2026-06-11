@@ -415,7 +415,7 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       player-provided withdrawal address) — admin confirms it at approval. This is the **essential money-back
       safety path** (without it, funded players' USDT is stranded on cancel); it builds the (soft) offline-transfer
       infra slice 3 would have. Verify on `solana-test-validator`.
-- [~] **5. Scale/ops** — *offline keygen-batching done; the rest later.*
+- [x] **5. Scale/ops** — keygen-batching, ATA lifecycle, admin UI, batched deposit polling.
     - [x] **Offline keygen-batching (1M)** — `OfflineDepositPoolGenerator` derives federation wallets by
       **absolute index** (`generateFederationWallets(seed, fedId, fromIndex, count, mint)`), so any chunk equals
       the matching slice of a whole-field generation and is re-runnable. CLI `--federation-id --mint --count
@@ -444,7 +444,14 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       (request/approve/reject + unsigned→broadcast→reconcile). Offline-signing ops are key-free: the console only
       triggers the backend build/broadcast/confirm endpoints and shows the raw JSON; the operator signs the
       `messageBase64` off-browser and pastes the signed tx back. Verified via AOT template build + lint.
-    - [ ] Deposit polling at scale (scheduler/batched `getSignaturesForAddress`).
+    - [x] **Batched deposit polling at scale** — `FederationDepositPollScheduler` (`@Scheduled`, flag-gated on
+      `app.tournament.federated-isolated-deposit-poll-enabled`, interval `…-deposit-poll-interval-ms`, default 30s)
+      scans every REGISTERING isolated federation and seats funded players with no manual reconcile. Inert unless
+      the pyramid + isolated-wallets + Solana-RPC features are all on; idempotent per reconcile (safe cluster-wide).
+      `reconcileDeposits` now reads balances in batches of 100 via `getMultipleAccounts`, so a large field costs
+      ceil(N/100) RPC calls instead of N. Tests: `FederationDepositPollSchedulerTest` (gating + per-federation
+      dispatch + failure isolation), `SolanaRpcClientTest.parsesMultipleTokenAmounts`; the batched read is
+      exercised end-to-end by the validator ITs' `reconcileDeposits`.
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
