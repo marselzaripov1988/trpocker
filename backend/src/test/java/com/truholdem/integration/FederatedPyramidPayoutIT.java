@@ -34,6 +34,7 @@ import com.truholdem.service.wallet.WalletService;
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
         "app.payments.enabled=true",
+        "app.tournament.federated-shard-winner-ppm=1",
         "app.tournament.pyramid-default-seats-per-table=2",
         "app.tournament.pyramid-default-hands-per-round=1"
 })

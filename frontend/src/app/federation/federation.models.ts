@@ -27,6 +27,15 @@ export interface FederationDetail {
   shardsReady: number;
   shardsRunning: number;
   shardsCompleted: number;
+  /** Effective prize config (the federation's snapshot, or the global default). */
+  feeBasisPoints: number;
+  shardWinnerPpm: number;
+  /** CSV of basis points for the non-champion final-table places — index 0 = 2nd place, 1 = 3rd, … */
+  finalTablePlaceBps: string;
+  finalTableRestBps: number;
+  /** Real-money buy-in + asset (null for play-money) — lets the UI show prize amounts in currency. */
+  cryptoBuyInAmount?: number | null;
+  cryptoBuyInAsset?: string | null;
 }
 
 /** Mirrors the backend FederationRegistrationResponse. */

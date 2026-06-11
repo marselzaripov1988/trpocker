@@ -1212,9 +1212,10 @@ public class AppProperties {
 
         /** Federated pyramid (real money): the qualifier paid to EACH shard winner, in parts-per-million of the
          * net prize pool (i.e. after the organisation fee), deducted from the champion's remainder. Default
-         * 1 ppm = 0.0001% of the pool per winner. The organisation fee itself is {@code feeBasisPoints} (≤20%). */
+         * 100 ppm = 0.01% of the WHOLE federation pool per winner (so the canonical 100-shard field pays out 1%
+         * of the pool across the shard winners). The organisation fee itself is {@code feeBasisPoints} (≤20%). */
         @Min(0)
-        private int federatedShardWinnerPpm = 1;
+        private int federatedShardWinnerPpm = 100;
 
         /** Federated pyramid (real money): per-place prize share (basis points of the net pool) for the
          * non-champion FINAL-TABLE places — index 0 = 2nd place, 1 = 3rd, … Default {@code [300,100]} = 3% + 1%.

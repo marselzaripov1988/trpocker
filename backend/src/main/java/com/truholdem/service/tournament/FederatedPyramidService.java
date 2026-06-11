@@ -751,7 +751,8 @@ public class FederatedPyramidService {
                 f.getFinalTablePlaceBps() != null ? f.getFinalTablePlaceBps()
                         : csv(tournamentProperties.getFederatedFinalTablePlaceBps()),
                 f.getFinalTableRestBps() != null ? f.getFinalTableRestBps()
-                        : tournamentProperties.getFederatedFinalTableRestBps());
+                        : tournamentProperties.getFederatedFinalTableRestBps(),
+                f.getCryptoBuyInAmount(), f.getCryptoBuyInAsset());
     }
 
     /** The finalists to notify: shard winners plus anyone who bought a final seat directly. */
