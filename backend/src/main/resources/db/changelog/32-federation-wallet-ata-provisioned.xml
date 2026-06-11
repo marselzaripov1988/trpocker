@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Isolated-custody federated pyramid: track whether each dedicated wallet's USDT ATA has been pre-created
+         on-chain (so exchange buy-ins, which don't create the recipient ATA, can land). Postgres-only; H2 derives
+         the schema from the entity. -->
+    <changeSet id="fedwallet-004-ata-provisioned" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="federation_player_wallets" columnName="ata_provisioned"/></not>
+        </preConditions>
+        <addColumn tableName="federation_player_wallets">
+            <column name="ata_provisioned" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

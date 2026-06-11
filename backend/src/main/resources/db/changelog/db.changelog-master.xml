@@ -41,5 +41,6 @@
     <include file="db/changelog/29-sweep-batch.xml"/>
     <include file="db/changelog/30-federation-player-wallets.xml"/>
     <include file="db/changelog/31-federation-refunds.xml"/>
+    <include file="db/changelog/32-federation-wallet-ata-provisioned.xml"/>
 
 </databaseChangeLog>

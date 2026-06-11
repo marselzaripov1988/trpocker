@@ -74,6 +74,12 @@ public class FederationPlayerWallet {
     @Column(name = "funded_amount", precision = 38, scale = 18)
     private BigDecimal fundedAmount;
 
+    /** Whether this wallet's USDT ATA has been pre-created on-chain. Exchanges send a bare SPL transfer (they do
+     *  not create the recipient ATA), so the ATA must exist before the buy-in can land — provisioned in batches
+     *  by the offline-signed {@code SolAtaProvisioner}. */
+    @Column(name = "ata_provisioned", nullable = false)
+    private boolean ataProvisioned = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -117,6 +123,16 @@ public class FederationPlayerWallet {
     /** Mark a funded wallet refunded (its buy-in was returned on-chain to the player). */
     public void markRefunded() {
         this.status = FederationWalletStatus.REFUNDED;
+    }
+
+    /** Record that this wallet's USDT ATA has been (idempotently) created on-chain. */
+    public void markAtaProvisioned() {
+        this.ataProvisioned = true;
+    }
+
+    /** Record that this wallet's USDT ATA has been closed (rent reclaimed) — it can no longer receive deposits. */
+    public void markAtaClosed() {
+        this.ataProvisioned = false;
     }
 
     /** Release an assigned-but-unfunded wallet back to the FREE pool (a no-show whose buy-in never landed). */
@@ -168,6 +184,10 @@ public class FederationPlayerWallet {
 
     public BigDecimal getFundedAmount() {
         return fundedAmount;
+    }
+
+    public boolean isAtaProvisioned() {
+        return ataProvisioned;
     }
 
     public Instant getCreatedAt() {

@@ -64,10 +64,19 @@ public class SolanaRpcClient {
                 List.of(tokenAccount, Map.of("commitment", "confirmed"))));
     }
 
-    /** Token accounts owned by {@code owner} for {@code mint} (jsonParsed) — used to find/inspect an ATA. */
+    /** Lamport balance of an account (e.g. the operator) — used to confirm reclaimed ATA rent landed. Read at
+     *  {@code confirmed} so a just-landed change is visible without waiting for finalization. */
+    public BigInteger getBalance(String address) {
+        return BigInteger.valueOf(rpc("getBalance",
+                List.of(address, Map.of("commitment", "confirmed"))).path("value").asLong());
+    }
+
+    /** Token accounts owned by {@code owner} for {@code mint} (jsonParsed) — used to find/inspect an ATA. Read at
+     *  {@code confirmed} so a freshly created mint/ATA is visible (the default {@code finalized} lags by ~32
+     *  slots and rejects a not-yet-finalized mint with "could not find mint"). */
     public List<TokenAccount> getTokenAccountsByOwner(String owner, String mint) {
         return parseTokenAccounts(rpc("getTokenAccountsByOwner",
-                List.of(owner, Map.of("mint", mint), Map.of("encoding", "jsonParsed"))));
+                List.of(owner, Map.of("mint", mint), Map.of("encoding", "jsonParsed", "commitment", "confirmed"))));
     }
 
     /** Broadcast a base64-encoded signed transaction; returns its signature. Preflight runs at {@code confirmed}

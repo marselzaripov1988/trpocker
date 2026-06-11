@@ -102,6 +102,34 @@ public class FederationPlayerWalletService {
         repository.save(wallet);
     }
 
+    /** The next batch of wallets (FREE buffer + ASSIGNED) whose USDT ATA still needs pre-creating, capped at
+     *  {@code limit} and ordered by derivation index. */
+    @Transactional(readOnly = true)
+    public List<FederationPlayerWallet> walletsNeedingAta(UUID federationId, int limit) {
+        return repository.findNeedingAta(federationId, org.springframework.data.domain.PageRequest.of(0, limit));
+    }
+
+    @Transactional(readOnly = true)
+    public List<FederationPlayerWallet> walletsByIds(UUID federationId, java.util.Collection<UUID> ids) {
+        return repository.findByFederationIdAndIdIn(federationId, ids);
+    }
+
+    /** Mark a batch of wallets' ATAs created on-chain (after the create batch confirms). Returns the count updated. */
+    @Transactional
+    public int markAtaProvisioned(UUID federationId, java.util.Collection<UUID> ids) {
+        int n = ids.isEmpty() ? 0 : repository.updateAtaProvisioned(federationId, ids, true);
+        log.info("Federation {} — marked {} wallet ATA(s) provisioned", federationId, n);
+        return n;
+    }
+
+    /** Mark a batch of wallets' ATAs closed (rent reclaimed) — they can no longer receive deposits. */
+    @Transactional
+    public int markAtaClosed(UUID federationId, java.util.Collection<UUID> ids) {
+        int n = ids.isEmpty() ? 0 : repository.updateAtaProvisioned(federationId, ids, false);
+        log.info("Federation {} — marked {} wallet ATA(s) closed", federationId, n);
+        return n;
+    }
+
     private static void requireValid(String address, String field) {
         if (address == null || address.length() > MAX_ADDRESS_LENGTH || !SolKeys.isValidAddress(address)) {
             throw new IllegalArgumentException("Invalid base58 " + field + ": " + address);

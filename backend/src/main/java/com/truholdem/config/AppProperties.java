@@ -1374,6 +1374,11 @@ public class AppProperties {
          *  player receives {@code fundedAmount − this}. Covers the operator's on-chain refund cost. Default 0. */
         private java.math.BigDecimal federatedIsolatedRefundFee = java.math.BigDecimal.ZERO;
 
+        /** Isolated custody: how many dedicated-wallet ATAs to pre-create (or close) per offline-signed batch
+         *  transaction. Kept small so the tx stays within Solana's size + compute limits. Default 6. */
+        @Min(1)
+        private int federatedIsolatedAtaBatchSize = 6;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
@@ -1404,6 +1409,14 @@ public class AppProperties {
 
         public void setFederatedIsolatedRefundFee(java.math.BigDecimal federatedIsolatedRefundFee) {
             this.federatedIsolatedRefundFee = federatedIsolatedRefundFee;
+        }
+
+        public int getFederatedIsolatedAtaBatchSize() {
+            return federatedIsolatedAtaBatchSize;
+        }
+
+        public void setFederatedIsolatedAtaBatchSize(int federatedIsolatedAtaBatchSize) {
+            this.federatedIsolatedAtaBatchSize = federatedIsolatedAtaBatchSize;
         }
 
         public int getFederatedDefaultShardSize() {

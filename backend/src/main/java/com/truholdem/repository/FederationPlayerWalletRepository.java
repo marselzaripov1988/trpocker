@@ -5,8 +5,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -41,4 +43,21 @@ public interface FederationPlayerWalletRepository extends JpaRepository<Federati
             + "WHERE w.federationId = :federationId AND w.address IN :addresses")
     List<String> findExistingAddresses(@Param("federationId") UUID federationId,
             @Param("addresses") Collection<String> addresses);
+
+    /** Wallets that can still receive a deposit (FREE buffer + ASSIGNED) but whose USDT ATA isn't created yet —
+     *  the backlog the ATA provisioner pre-creates, lowest derivation index first (cap via {@link Pageable}). */
+    @Query("SELECT w FROM FederationPlayerWallet w WHERE w.federationId = :federationId "
+            + "AND w.ataProvisioned = false AND w.status IN "
+            + "(com.truholdem.model.FederationWalletStatus.FREE, com.truholdem.model.FederationWalletStatus.ASSIGNED) "
+            + "ORDER BY w.derivationIndex ASC")
+    List<FederationPlayerWallet> findNeedingAta(@Param("federationId") UUID federationId, Pageable pageable);
+
+    List<FederationPlayerWallet> findByFederationIdAndIdIn(UUID federationId, Collection<UUID> ids);
+
+    /** Bulk-mark wallets' ATAs created (provisioned) / closed — set after the on-chain batch confirms. */
+    @Modifying
+    @Query("UPDATE FederationPlayerWallet w SET w.ataProvisioned = :provisioned "
+            + "WHERE w.federationId = :federationId AND w.id IN :ids")
+    int updateAtaProvisioned(@Param("federationId") UUID federationId, @Param("ids") Collection<UUID> ids,
+            @Param("provisioned") boolean provisioned);
 }

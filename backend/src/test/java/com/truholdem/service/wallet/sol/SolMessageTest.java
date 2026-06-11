@@ -78,6 +78,43 @@ class SolMessageTest {
         assertThat(msg[0]).isEqualTo((byte) 2);            // feePayer + authority are both signers
     }
 
+    @Test
+    @DisplayName("compiles a CloseAccount with the operator (fee payer) + owner as the two signers")
+    void compilesCloseAccount() {
+        byte[] operator = SolKeys.publicKeyFromSeed(seed(9)); // fee payer + rent destination
+        byte[] ata = fill(0x11);
+        byte[] owner = SolKeys.publicKeyFromSeed(seed(7));    // close authority (signer)
+        byte[] blockhash = fill(0x33);
+
+        byte[] msg = SolMessage.compile(operator, blockhash,
+                List.of(SolInstructions.closeAccount(ata, operator, owner)));
+
+        // header: 2 signers (operator + owner), 1 readonly-signed (owner), 1 readonly-unsigned (token program).
+        assertThat(msg[0]).isEqualTo((byte) 2);
+        assertThat(msg[1]).isEqualTo((byte) 1);
+        assertThat(msg[2]).isEqualTo((byte) 1);
+
+        // account keys: count = 4, ordered [operator(writable signer), owner(readonly signer), ata, tokenProgram].
+        assertThat(msg[3]).isEqualTo((byte) 4);
+        assertThat(slice(msg, 4, 36)).isEqualTo(operator);
+        assertThat(slice(msg, 36, 68)).isEqualTo(owner);
+        assertThat(slice(msg, 68, 100)).isEqualTo(ata);
+        assertThat(slice(msg, 100, 132)).isEqualTo(SolInstructions.TOKEN_PROGRAM_ID);
+
+        // one instruction: programIdIndex=3, accounts [account=ata(2), destination=operator(0), owner(1)].
+        assertThat(msg[164]).isEqualTo((byte) 1);   // instruction count
+        assertThat(msg[165]).isEqualTo((byte) 3);   // programIdIndex (token program)
+        assertThat(msg[166]).isEqualTo((byte) 3);   // account-index count
+        assertThat(msg[167]).isEqualTo((byte) 2);   // account = ata
+        assertThat(msg[168]).isEqualTo((byte) 0);   // destination = operator
+        assertThat(msg[169]).isEqualTo((byte) 1);   // owner (close authority)
+
+        // data: length 1 = [9] (SPL CloseAccount).
+        assertThat(msg[170]).isEqualTo((byte) 1);
+        assertThat(msg[171]).isEqualTo((byte) 9);
+        assertThat(msg).hasSize(172);
+    }
+
     private static byte[] slice(byte[] b, int from, int to) {
         return Arrays.copyOfRange(b, from, to);
     }

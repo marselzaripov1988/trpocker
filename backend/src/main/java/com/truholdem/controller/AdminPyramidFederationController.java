@@ -23,7 +23,10 @@ import com.truholdem.dto.FederationWalletImportRequest;
 import com.truholdem.dto.PrizeConfigRequest;
 import com.truholdem.dto.RefundApprovalRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
+import com.truholdem.dto.wallet.AtaBatchConfirmRequest;
+import com.truholdem.dto.wallet.AtaCloseRequest;
 import com.truholdem.dto.wallet.RejectWithdrawalRequest;
+import com.truholdem.dto.wallet.SolAtaBatchUnsignedDto;
 import com.truholdem.dto.wallet.SolBroadcastRequest;
 import com.truholdem.dto.wallet.SolRefundUnsignedDto;
 import com.truholdem.exception.ResourceNotFoundException;
@@ -31,6 +34,7 @@ import com.truholdem.model.PyramidFederation;
 import com.truholdem.model.User;
 import com.truholdem.service.tournament.FederatedPyramidService;
 import com.truholdem.service.tournament.FederationRefundService;
+import com.truholdem.service.wallet.sol.SolAtaProvisioner;
 import com.truholdem.service.wallet.sol.SolRefundCoordinator;
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -60,14 +64,17 @@ public class AdminPyramidFederationController {
     private final FederatedPyramidService federatedService;
     private final FederationRefundService refundService;
     private final ObjectProvider<SolRefundCoordinator> refundCoordinator;
+    private final ObjectProvider<SolAtaProvisioner> ataProvisioner;
     private final AppProperties appProperties;
 
     public AdminPyramidFederationController(FederatedPyramidService federatedService,
             FederationRefundService refundService,
-            ObjectProvider<SolRefundCoordinator> refundCoordinator, AppProperties appProperties) {
+            ObjectProvider<SolRefundCoordinator> refundCoordinator,
+            ObjectProvider<SolAtaProvisioner> ataProvisioner, AppProperties appProperties) {
         this.federatedService = federatedService;
         this.refundService = refundService;
         this.refundCoordinator = refundCoordinator;
+        this.ataProvisioner = ataProvisioner;
         this.appProperties = appProperties;
     }
 
@@ -181,6 +188,62 @@ public class AdminPyramidFederationController {
             throw new IllegalStateException("Solana refund coordinator is disabled (app.payments.sol-rpc-enabled)");
         }
         return coordinator;
+    }
+
+    // --- Isolated-custody dedicated-wallet ATA lifecycle (offline-signed batches) ---
+
+    @PostMapping("/{id}/ata/create/unsigned")
+    @Operation(summary = "Assemble an unsigned batch that pre-creates dedicated wallets' USDT ATAs (operator pays "
+            + "rent) — required before exchange buy-ins can land")
+    public ResponseEntity<SolAtaBatchUnsignedDto> ataCreateUnsigned(@PathVariable UUID id,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Integer limit) {
+        assertEnabled();
+        int batch = limit != null ? limit
+                : appProperties.getTournament().getFederatedIsolatedAtaBatchSize();
+        return ResponseEntity.ok(ataProvisionerOrThrow().buildCreateBatch(id, batch));
+    }
+
+    @PostMapping("/{id}/ata/close/unsigned")
+    @Operation(summary = "Assemble an unsigned batch that closes finished wallets' (empty) ATAs to reclaim rent "
+            + "to the operator")
+    public ResponseEntity<SolAtaBatchUnsignedDto> ataCloseUnsigned(@PathVariable UUID id,
+            @Valid @RequestBody AtaCloseRequest body) {
+        assertEnabled();
+        return ResponseEntity.ok(ataProvisionerOrThrow().buildCloseBatch(id, body.walletIds()));
+    }
+
+    @PostMapping("/{id}/ata/broadcast")
+    @Operation(summary = "Broadcast an offline-signed ATA batch (create or close); returns the signature")
+    public ResponseEntity<java.util.Map<String, String>> ataBroadcast(@PathVariable UUID id,
+            @Valid @RequestBody SolBroadcastRequest body) {
+        assertEnabled();
+        return ResponseEntity.ok(java.util.Map.of("signature", ataProvisionerOrThrow().broadcast(body.signedTx())));
+    }
+
+    @PostMapping("/{id}/ata/create/confirm")
+    @Operation(summary = "Confirm a broadcast create batch and mark its wallets ATA-provisioned")
+    public ResponseEntity<java.util.Map<String, Integer>> ataConfirmCreated(@PathVariable UUID id,
+            @Valid @RequestBody AtaBatchConfirmRequest body) {
+        assertEnabled();
+        return ResponseEntity.ok(java.util.Map.of("provisioned",
+                ataProvisionerOrThrow().confirmCreated(id, body.walletIds(), body.signature())));
+    }
+
+    @PostMapping("/{id}/ata/close/confirm")
+    @Operation(summary = "Confirm a broadcast close batch and mark its wallets ATA-closed")
+    public ResponseEntity<java.util.Map<String, Integer>> ataConfirmClosed(@PathVariable UUID id,
+            @Valid @RequestBody AtaBatchConfirmRequest body) {
+        assertEnabled();
+        return ResponseEntity.ok(java.util.Map.of("closed",
+                ataProvisionerOrThrow().confirmClosed(id, body.walletIds(), body.signature())));
+    }
+
+    private SolAtaProvisioner ataProvisionerOrThrow() {
+        SolAtaProvisioner provisioner = ataProvisioner.getIfAvailable();
+        if (provisioner == null) {
+            throw new IllegalStateException("Solana ATA provisioner is disabled (app.payments.sol-rpc-enabled)");
+        }
+        return provisioner;
     }
 
     @GetMapping("/{id}")

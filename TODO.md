@@ -426,7 +426,19 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       `federationWalletSeed(seed, fedId, index)`; nothing private touches the server. Tests:
       `OfflineFederationWalletGenTest` (chunk == slice, key re-derivation, chunked-file writer) +
       `FederationIsolatedWalletIT.importIsIdempotentAndBatched`.
-    - [ ] ATA pre-creation (rent), deposit polling at scale, admin UI.
+    - [x] **ATA pre-creation + close (rent)** — exchanges send a bare SPL transfer that does NOT create the
+      recipient ATA, so each dedicated wallet's USDT ATA must exist before its buy-in can land. `SolAtaProvisioner`
+      assembles offline-signed batches: **create** (idempotent `createIdempotentAta` for FREE-buffer + ASSIGNED
+      wallets needing one, rent paid by the operator = the only signer) and **close** (`closeAccount` on a finished
+      wallet's empty ATA → rent reclaimed to the operator, signed by the operator fee-payer + each wallet owner).
+      Wallets track `ataProvisioned`; batch size capped (`federated-isolated-ata-batch-size`, default 6) to stay
+      within tx size/compute. Flow build→broadcast→confirm via admin endpoints (`/{id}/ata/create|close/unsigned`,
+      `/ata/broadcast`, `/ata/{create,close}/confirm`), all flag-gated. **Rent economics:** ~0.00204 SOL/ATA, only
+      for actual registrants (lazy buffer, not the whole 1M pool), and recovered on close. Proven on
+      `solana-test-validator` (`SolAtaProvisionValidatorIT`): a pre-created ATA lets a bare exchange-style transfer
+      land + seat; closing an empty ATA returns rent to the operator. (Read methods moved to `confirmed` commitment
+      so a just-created mint/ATA is visible — the default `finalized` lagged.) Liquibase changeset 32.
+    - [ ] Deposit polling at scale (scheduler/batched `getSignaturesForAddress`), admin UI.
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
