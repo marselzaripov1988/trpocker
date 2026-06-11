@@ -9,6 +9,7 @@ public enum CryptoAsset {
 
     USDT_TRC20("USDT", "TRC20", 6),
     USDT_ERC20("USDT", "ERC20", 6),
+    USDT_SOL("USDT", "SPL", 6),
     BTC("BTC", "BTC", 8),
     ETH("ETH", "ETH", 18),
     LTC("LTC", "LTC", 8);

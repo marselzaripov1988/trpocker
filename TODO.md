@@ -340,9 +340,13 @@ Slices:
       `solana-test-validator`** (`SolWithdrawalCoordinatorIT`: provision USDT mint + treasury ATA → assemble →
       offline-sign → broadcast → confirmed → recipient ATA balance moves) + serialization unit tests
       (`SolShortVecTest`/`SolMessageTest`). This also lands slice 5's on-validator proof for the withdrawal path.
-- [ ] **4. Deposit + ATA ingestion** — deposit address = the owner's USDT ATA (owner pubkey + derived ATA);
-      `DepositIngestionService` resolves a watch-only Solana deposit by address; pool import validates base58 +
-      ATA. Note the one-time ATA rent (~0.002 SOL) — decide payer (platform pre-creates vs recipient).
+- [x] **4. Deposit + ATA ingestion** — `CryptoAsset.USDT_SOL("USDT","SPL",6)`; `DepositAddressPoolService`
+      validates SPL deposit addresses (base58 32-byte) on import; the offline `OfflineDepositPoolGenerator` emits
+      Solana deposit addresses = each owner's USDT ATA. `DepositIngestionService` is network-agnostic, so a
+      detected Solana deposit resolves by address → user → credit. Verified by `DepositSolanaIngestionIT` (import
+      ATAs → allocate → confirmed deposit credits the owner; malformed address rejected) + deposit regression
+      green. Remaining (ops/follow-up): the deposit ATA must exist on-chain to receive SPL — pre-create deposit
+      ATAs (funded, offline-signed, ~0.002 SOL rent each), analogous to the sweep epic; decide payer.
 - [ ] **5. Verify** — `SolWithdrawalCoordinatorIT` against `solana-test-validator` (Testcontainers, like
       `geth --dev` / `bitcoind -regtest`): fund treasury USDT → assemble → offline ed25519-sign → broadcast →
       reconcile to CONFIRMED, recipient ATA balance moves. Plus `CryptoAsset` wiring + flag-off 404 test.

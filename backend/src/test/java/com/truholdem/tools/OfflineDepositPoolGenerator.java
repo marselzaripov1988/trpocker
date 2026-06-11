@@ -1,17 +1,24 @@
 package com.truholdem.tools;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.service.wallet.crypto.BtcKeys;
 import com.truholdem.service.wallet.crypto.EthKeys;
+import com.truholdem.service.wallet.crypto.SolAta;
+import com.truholdem.service.wallet.crypto.SolKeys;
 import com.truholdem.service.wallet.crypto.TronKeys;
 
 /**
@@ -68,36 +75,60 @@ public final class OfflineDepositPoolGenerator {
         return generate(seed, asset, count, BtcStyle.P2PKH);
     }
 
+    /** Mainnet USDT SPL mint — the deposit address is the owner's associated token account for this mint. */
+    private static final String SOL_USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+
     public static Batch generate(byte[] seed, CryptoAsset asset, int count, BtcStyle btcStyle) {
         String network = asset.getNetwork();
         boolean eth = "ETH".equals(network) || "ERC20".equals(network);
         boolean tron = "TRC20".equals(network);
         boolean btc = "BTC".equals(network);
-        if (!eth && !tron && !btc) {
+        boolean sol = "SPL".equals(network);
+        if (!eth && !tron && !btc && !sol) {
             throw new IllegalArgumentException("Unsupported network for this generator: " + asset);
         }
         if (count <= 0) {
             throw new IllegalArgumentException("count must be positive");
         }
-        String label = eth ? "eth/" : tron ? "tron/" : "btc/";
+        String label = eth ? "eth/" : tron ? "tron/" : btc ? "btc/" : "sol/";
         List<Keypair> keys = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            BigInteger priv = EthKeys.derivePrivateKey(seed, label + i);
             String address;
-            if (eth) {
-                address = EthKeys.addressFromPrivateKey(priv);
-            } else if (tron) {
-                address = TronKeys.addressFromPrivateKey(priv);
+            String privateKeyHex;
+            if (sol) {
+                // ed25519 owner key (32-byte seed) → its USDT ATA is the watch-only deposit address.
+                byte[] ed25519Seed = ed25519Seed(seed, label + i);
+                address = SolAta.deriveAta(SolKeys.addressFromSeed(ed25519Seed), SOL_USDT_MINT);
+                privateKeyHex = HexFormat.of().formatHex(ed25519Seed);
             } else {
-                address = switch (btcStyle) {
-                    case BECH32 -> BtcKeys.p2wpkhAddress(priv);
-                    case TAPROOT -> BtcKeys.p2trAddress(priv);
-                    default -> BtcKeys.p2pkhAddress(priv);
-                };
+                BigInteger priv = EthKeys.derivePrivateKey(seed, label + i);
+                if (eth) {
+                    address = EthKeys.addressFromPrivateKey(priv);
+                } else if (tron) {
+                    address = TronKeys.addressFromPrivateKey(priv);
+                } else {
+                    address = switch (btcStyle) {
+                        case BECH32 -> BtcKeys.p2wpkhAddress(priv);
+                        case TAPROOT -> BtcKeys.p2trAddress(priv);
+                        default -> BtcKeys.p2pkhAddress(priv);
+                    };
+                }
+                privateKeyHex = priv.toString(16);
             }
-            keys.add(new Keypair(i, priv.toString(16), address));
+            keys.add(new Keypair(i, privateKeyHex, address));
         }
         return new Batch(HexFormat.of().formatHex(seed), asset, keys);
+    }
+
+    /** Deterministic 32-byte ed25519 seed: the first 32 bytes of HMAC-SHA512(seed, label). */
+    private static byte[] ed25519Seed(byte[] seed, String label) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA512");
+            mac.init(new SecretKeySpec(seed, "HmacSHA512"));
+            return Arrays.copyOf(mac.doFinal(label.getBytes(StandardCharsets.UTF_8)), 32);
+        } catch (Exception e) {
+            throw new IllegalStateException("HMAC-SHA512 unavailable", e);
+        }
     }
 
     public static void main(String[] args) throws Exception {

@@ -21,6 +21,7 @@ import com.truholdem.repository.DepositAddressPoolRepository;
 import com.truholdem.service.wallet.WalletExceptions.DepositAddressPoolExhaustedException;
 import com.truholdem.service.wallet.crypto.BtcKeys;
 import com.truholdem.service.wallet.crypto.EthKeys;
+import com.truholdem.service.wallet.crypto.SolKeys;
 import com.truholdem.service.wallet.crypto.TronKeys;
 
 /**
@@ -82,6 +83,10 @@ public class DepositAddressPoolService {
                         "Invalid Bitcoin address for " + e.asset() + " (expected P2PKH 1… or SegWit bc1q…): "
                                 + address);
             }
+            if (isSolanaAddress(e.asset()) && !SolKeys.isValidAddress(address)) {
+                throw new IllegalArgumentException(
+                        "Invalid Solana (base58 32-byte) address for " + e.asset() + ": " + address);
+            }
             if (repository.existsByAssetAndAddress(e.asset(), address)) {
                 skipped++;
                 continue;
@@ -129,5 +134,10 @@ public class DepositAddressPoolService {
     /** Bitcoin uses a legacy P2PKH Base58Check address → validate version + checksum. */
     private static boolean isBitcoinAddress(CryptoAsset asset) {
         return "BTC".equals(asset.getNetwork());
+    }
+
+    /** Solana SPL assets use a base58 ed25519 address (the owner's USDT ATA) → validate 32-byte base58. */
+    private static boolean isSolanaAddress(CryptoAsset asset) {
+        return "SPL".equals(asset.getNetwork());
     }
 }
