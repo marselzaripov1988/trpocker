@@ -306,6 +306,42 @@ Slices:
 - [ ] **6. Admin UI** — on `/admin/pool` (or `/admin/wallet`): Plan sweep (preview sums + fee) → assemble →
       paste signed → broadcast → reconcile, mirroring the `/admin/withdrawals` signing workflow.
 
+## TODO — USDT-Solana (new chain) [NEW EPIC]
+The wallet has BTC (UTXO) + ETH/ERC-20 (account) coordinators; USDT lives on TRC20/ERC20 only. Solana is the
+cheapest *liquid* USDT rail (~$0.0008/transfer vs BTC consolidation ≈ $408k for a 1M-deposit field — see the
+fee analysis), so add USDT-Solana as a first-class asset with its own coordinator, mirroring the **ETH path**
+(account model → one signature per withdrawal). Solana is its own cryptography — **ed25519 keys + base58
+addresses** (NOT secp256k1) — so it does not reuse the BTC/ETH crypto, but it does reuse the
+assemble→offline-sign→broadcast→reconcile shape, flag-gating, deposit-pool, and withdrawal state machine.
+Decided:
+- **Off by default** behind `app.payments.sol-rpc-enabled`; signing always offline (ed25519 signer in test
+  sources, never in the production jar).
+- **Account model** like ETH → 1 signature per withdrawal; SPL-token (USDT mint) transfers.
+- **Recent-blockhash expiry is the air-gap wrinkle**: a Solana tx is signed against a recent blockhash valid only
+  ~150 slots (~60–90s), so a slow offline round-trip expires it. Decide (a) a fast online-assemble→offline-sign→
+  broadcast window, or (b) **durable nonce accounts** (on-chain nonce that doesn't expire) for a relaxed air-gap
+  round-trip — lean to durable nonce for parity with the USB/QR offline flow.
+- New asset `CryptoAsset.USDT_SOL("USDT","SPL",6)`.
+Slices:
+- [ ] **1. Keys + base58 + ATA derivation** — `SolKeys` (ed25519 keypair, base58 pubkey = address) + `Base58`
+      codec + address validation; derive the Associated Token Account (ATA) for an (owner, USDT-mint) pair (PDA
+      via the SPL Associated-Token-Account program). Pure + unit-tested vs reference vectors.
+- [ ] **2. RPC client** — `SolanaRpcClient` (`getLatestBlockhash`, `getTokenAccountBalance`,
+      `getTokenAccountsByOwner`, `sendTransaction`, `getSignatureStatuses`/`getTransaction`), flag-gated on
+      `sol-rpc-enabled`, mirroring `EthRpcClient`/`BtcRpcClient` (RestClient JSON-RPC).
+- [ ] **3. Withdrawal coordinator** — `SolWithdrawalCoordinator`: `buildUnsigned` assembles an SPL `transfer`
+      from the treasury ATA to the recipient ATA against a recent blockhash / durable nonce (creates the
+      recipient ATA if missing); `broadcast` the offline-signed tx; `reconcile` signature status → CONFIRMED.
+      Account model: 1 ed25519 signature. Offline `SolSigner` (test sources) signs the serialized message.
+- [ ] **4. Deposit + ATA ingestion** — deposit address = the owner's USDT ATA (owner pubkey + derived ATA);
+      `DepositIngestionService` resolves a watch-only Solana deposit by address; pool import validates base58 +
+      ATA. Note the one-time ATA rent (~0.002 SOL) — decide payer (platform pre-creates vs recipient).
+- [ ] **5. Verify** — `SolWithdrawalCoordinatorIT` against `solana-test-validator` (Testcontainers, like
+      `geth --dev` / `bitcoind -regtest`): fund treasury USDT → assemble → offline ed25519-sign → broadcast →
+      reconcile to CONFIRMED, recipient ATA balance moves. Plus `CryptoAsset` wiring + flag-off 404 test.
+Open: a Solana sweep (deposit ATAs → treasury) is a later slice under the sweep epic; durable-nonce vs
+fast-window for air-gap; whether to also add USDC alongside USDT.
+
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
 `requestRebuy` effect + lobby "Rebuy" button). **Add-on is modelled but not wired**: `Tournament.addOnAmount` /
