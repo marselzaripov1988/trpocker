@@ -19,10 +19,12 @@ import jakarta.persistence.Version;
 
 /**
  * An admin-approved refund of a funded buy-in from a dedicated player wallet (isolated-custody federated
- * pyramid). The player receives {@code netAmount = grossAmount − feeAmount} (the network fee is deducted from
- * the refund; the operator pays the SOL tx fee). Nothing is signed or broadcast until a moderator approves and
- * supplies the destination {@code toAddress}. Mirrors {@link WithdrawalRequest}, but the source is the dedicated
- * wallet (its owner signs offline) rather than the treasury.
+ * pyramid). The player is made whole — refunded the full {@code grossAmount} on-chain ({@code netAmount =
+ * grossAmount}, {@code feeAmount = 0}); the operator absorbs the SOL network fee, so the wallet's ATA empties and
+ * can be closed to reclaim rent. ({@code feeAmount}/{@code netAmount} are retained for the audit trail and any
+ * future fee policy.) Nothing is signed or broadcast until a moderator approves and supplies the destination
+ * {@code toAddress}. Mirrors {@link WithdrawalRequest}, but the source is the dedicated wallet (its owner signs
+ * offline) rather than the treasury.
  */
 @Entity
 @Table(name = "federation_refunds",

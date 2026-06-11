@@ -395,8 +395,11 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
 - [x] **4. Refund/cancel (admin-approved)** — `FederationRefund` entity/status/repo + `FederationRefundService`
       (request / approve-with-address / reject / forSigning / recordBroadcast / confirm→wallet REFUNDED) +
       `SolRefundCoordinator` (buildUnsigned / broadcast / reconcile) + admin REST (request, approve, reject,
-      sol-unsigned/broadcast/reconcile) + Liquibase 31 + `federated-isolated-refund-fee` (net = gross − fee).
-      Nothing is signable until a moderator approves and supplies the destination. The refund SPL transfer has
+      sol-unsigned/broadcast/reconcile) + Liquibase 31. The player is **made whole — refunded the full gross**
+      on-chain (`net = gross`, `fee = 0`); the operator absorbs the SOL network fee. This keeps the books honest
+      (no phantom revenue) and empties the wallet's ATA so it closes directly (no withheld-fee dust to sweep — the
+      `federated-isolated-refund-fee` knob was removed). Nothing is signable until a moderator approves and supplies
+      the destination. The refund SPL transfer has
       TWO offline signers — operator fee-payer + the dedicated-wallet owner (authority). Verified on H2
       (`FederationRefundIT`) **and end-to-end on `solana-test-validator`** (`FederationRefundValidatorIT`: fund a
       dedicated wallet → request → approve → offline two-signer sign → broadcast → reconcile → player's USDT

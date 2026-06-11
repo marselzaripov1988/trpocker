@@ -106,7 +106,8 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
 
       <details>
         <summary>4 · Refunds (admin-approved)</summary>
-        <p class="hint">Return a funded buy-in. Net = funded − fee; the player's destination is set at approval.</p>
+        <p class="hint">Return a funded buy-in in full (the operator absorbs the network fee); the player's
+          destination is set at approval.</p>
         <div class="row">
           <label>Player id
             <input data-cy="iso-refund-player" [(ngModel)]="refundPlayerId" placeholder="uuid" /></label>

@@ -35,8 +35,9 @@ import com.truholdem.tools.OfflineDepositPoolGenerator;
 
 /**
  * Admin-approved refund state machine (no validator): request → approve (sets destination) → broadcast →
- * confirm marks the wallet REFUNDED. The fee is deducted (net = gross − fee). Approval gate + address validation
- * are checked. The on-chain transfer is proven on a real validator in {@code FederationRefundValidatorIT}.
+ * confirm marks the wallet REFUNDED. The player is made whole — refunded the full gross (net = gross, fee = 0;
+ * the operator absorbs the network cost). Approval gate + address validation are checked. The on-chain transfer
+ * is proven on a real validator in {@code FederationRefundValidatorIT}.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -45,7 +46,6 @@ import com.truholdem.tools.OfflineDepositPoolGenerator;
         "app.payments.min-confirmations=1",
         "app.tournament.federated-pyramid-enabled=true",
         "app.tournament.federated-isolated-wallets-enabled=true",
-        "app.tournament.federated-isolated-refund-fee=1",
         "app.tournament.pyramid-default-seats-per-table=2",
         "app.tournament.pyramid-default-hands-per-round=1"
 })
@@ -93,13 +93,13 @@ class FederationRefundIT {
     }
 
     @Test
-    @DisplayName("request deducts the fee; approve → broadcast → confirm marks the wallet REFUNDED")
+    @DisplayName("refunds the full gross (no fee); approve → broadcast → confirm marks the wallet REFUNDED")
     void fullRefundFlow() {
         FederationRefund refund = refundService.requestRefund(federationId, player);
         assertThat(refund.getStatus()).isEqualTo(FederationRefundStatus.PENDING_APPROVAL);
         assertThat(refund.getGrossAmount()).isEqualByComparingTo("5");
-        assertThat(refund.getFeeAmount()).isEqualByComparingTo("1");
-        assertThat(refund.getNetAmount()).isEqualByComparingTo("4"); // gross − fee
+        assertThat(refund.getFeeAmount()).isEqualByComparingTo("0");      // operator absorbs the network fee
+        assertThat(refund.getNetAmount()).isEqualByComparingTo("5");      // player made whole
 
         refundService.approveRefund(refund.getId(), UUID.randomUUID(), PLAYER_ADDR);
         assertThat(refundService.get(refund.getId()).getStatus()).isEqualTo(FederationRefundStatus.APPROVED);

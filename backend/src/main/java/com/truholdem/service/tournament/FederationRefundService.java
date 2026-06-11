@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.truholdem.config.AppProperties;
 import com.truholdem.model.FederationPlayerWallet;
 import com.truholdem.model.FederationRefund;
 import com.truholdem.model.FederationRefundStatus;
@@ -26,8 +25,9 @@ import com.truholdem.service.wallet.crypto.SolKeys;
  * Admin-approved refund state machine for isolated-custody federations: create a refund of a FUNDED dedicated
  * wallet (PENDING_APPROVAL), a moderator approves it with the destination address (APPROVED), then the offline
  * signer assembles + broadcasts the on-chain transfer (via {@code SolRefundCoordinator}, which calls
- * {@link #forSigning}/{@link #recordBroadcast}/{@link #confirm}). The player receives {@code grossAmount −
- * feeAmount}. Mirrors the withdrawal-approval flow; nothing is signed until a moderator approves.
+ * {@link #forSigning}/{@link #recordBroadcast}/{@link #confirm}). The player is made whole — refunded the
+ * <b>full</b> {@code grossAmount} on-chain; the operator absorbs the tiny SOL network fee. Mirrors the
+ * withdrawal-approval flow; nothing is signed until a moderator approves.
  */
 @Service
 public class FederationRefundService {
@@ -37,15 +37,13 @@ public class FederationRefundService {
     private final FederationRefundRepository refundRepository;
     private final FederationPlayerWalletRepository walletRepository;
     private final PyramidFederationRepository federationRepository;
-    private final AppProperties.Tournament tournamentProperties;
 
     public FederationRefundService(FederationRefundRepository refundRepository,
             FederationPlayerWalletRepository walletRepository,
-            PyramidFederationRepository federationRepository, AppProperties appProperties) {
+            PyramidFederationRepository federationRepository) {
         this.refundRepository = refundRepository;
         this.walletRepository = walletRepository;
         this.federationRepository = federationRepository;
-        this.tournamentProperties = appProperties.getTournament();
     }
 
     /** Create a PENDING_APPROVAL refund for a player's FUNDED dedicated wallet. Idempotent per wallet. */
@@ -79,17 +77,14 @@ public class FederationRefundService {
 
     private FederationRefund createRefund(PyramidFederation federation, FederationPlayerWallet wallet) {
         BigDecimal gross = wallet.getFundedAmount();
-        BigDecimal fee = tournamentProperties.getFederatedIsolatedRefundFee();
-        if (fee == null || fee.signum() < 0) {
-            fee = BigDecimal.ZERO;
+        if (gross == null || gross.signum() <= 0) {
+            throw new IllegalStateException("Refund gross amount <= 0 (funded " + gross + ")");
         }
-        BigDecimal net = gross.subtract(fee);
-        if (net.signum() <= 0) {
-            throw new IllegalStateException("Refund net amount <= 0 (gross " + gross + " − fee " + fee + ")");
-        }
+        // The player is made whole: refund the full funded buy-in on-chain, no fee withheld (the operator absorbs
+        // the SOL network cost). net = gross, fee = 0 — so the wallet's ATA empties and can be closed directly.
         return refundRepository.save(new FederationRefund(
                 federation.getId(), wallet.getId(), wallet.getAssignedPlayerId(),
-                federation.getCryptoBuyInAsset(), gross, fee, net));
+                federation.getCryptoBuyInAsset(), gross, BigDecimal.ZERO, gross));
     }
 
     /** Moderator approves a pending refund, supplying the player's destination address → APPROVED. */
