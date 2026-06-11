@@ -323,9 +323,11 @@ Decided:
   round-trip — lean to durable nonce for parity with the USB/QR offline flow.
 - New asset `CryptoAsset.USDT_SOL("USDT","SPL",6)`.
 Slices:
-- [ ] **1. Keys + base58 + ATA derivation** — `SolKeys` (ed25519 keypair, base58 pubkey = address) + `Base58`
-      codec + address validation; derive the Associated Token Account (ATA) for an (owner, USDT-mint) pair (PDA
-      via the SPL Associated-Token-Account program). Pure + unit-tested vs reference vectors.
+- [x] **1. Keys + base58 + ATA derivation** — `SolKeys` (ed25519 via JDK: deterministic keypair from a 32-byte
+      seed, raw pubkey, base58 address, sign/verify, validation) + reused `Base58` (fixed an all-zero/leading-zero
+      decode bug) + `SolAta` (ed25519 on-curve check + `findProgramAddress` + ATA from `[owner, TOKEN_PROGRAM,
+      mint]`). Verified vs RFC 8032 §7.1 vectors (`SolKeysTest`) + on-curve/structure (`SolAtaTest`); no Tron/Btc
+      regression. NOTE: the exact (owner,mint)→ATA value is cross-checked on `solana-test-validator` in slice 5.
 - [ ] **2. RPC client** — `SolanaRpcClient` (`getLatestBlockhash`, `getTokenAccountBalance`,
       `getTokenAccountsByOwner`, `sendTransaction`, `getSignatureStatuses`/`getTransaction`), flag-gated on
       `sol-rpc-enabled`, mirroring `EthRpcClient`/`BtcRpcClient` (RestClient JSON-RPC).

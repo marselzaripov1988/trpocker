@@ -51,7 +51,10 @@ public final class Base58 {
             }
             num = num.multiply(BASE).add(BigInteger.valueOf(digit));
         }
-        byte[] raw = num.toByteArray();
+        // For a zero value the numeric part contributes nothing — the leading-'1' run below carries the zero
+        // bytes. (BigInteger.ZERO.toByteArray() is {0x00}, which would otherwise add a spurious byte and break
+        // all-zero / leading-zero addresses like Solana's System Program "111…".)
+        byte[] raw = num.signum() == 0 ? new byte[0] : num.toByteArray();
         // BigInteger may prepend a 0x00 sign byte; drop it.
         if (raw.length > 1 && raw[0] == 0) {
             raw = Arrays.copyOfRange(raw, 1, raw.length);
