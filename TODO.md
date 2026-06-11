@@ -392,18 +392,17 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       designed; a different payout model would be needed (e.g. credit the prize off-chain to the winner's
       `WalletAccount` and let them withdraw via the standard Solana coordinator — which reintroduces a treasury/
       consolidation step anyway). Revisit only if a privacy-preserving payout (e.g. CoinJoin-style) is in scope.
-- [~] **4. Refund/cancel (admin-approved)** — STATE MACHINE + REST + H2 DONE; on-chain transfer under
-      investigation. `FederationRefund` entity/status/repo + `FederationRefundService` (request / approve-with-
-      address / reject / forSigning / recordBroadcast / confirm→wallet REFUNDED) + `SolRefundCoordinator`
-      (buildUnsigned / broadcast / reconcile) + admin REST (request, approve, reject, sol-unsigned/broadcast/
-      reconcile) + Liquibase 31 + `federated-isolated-refund-fee` (net = gross − fee). Verified on H2
-      (`FederationRefundIT`: approval gate, fee deduction, idempotency, confirm marks the wallet REFUNDED).
-      ⚠️ The on-validator IT (`FederationRefundValidatorIT`, held back uncommitted) fails: the two-signer SPL
-      transfer (operator fee-payer + dedicated-wallet authority) hits `InvalidAccountData` on the source unpack,
-      even though the compiled message is byte-verified correct (acct keys + indices decoded), the source ATA is
-      a valid funded token account, and signatures pass sigverify. NEXT: compare the failing tx to a manual
-      `spl-token transfer` from the dedicated wallet; check account commitment/visibility at preflight; try
-      `TransferChecked`. Original design notes follow:
+- [x] **4. Refund/cancel (admin-approved)** — `FederationRefund` entity/status/repo + `FederationRefundService`
+      (request / approve-with-address / reject / forSigning / recordBroadcast / confirm→wallet REFUNDED) +
+      `SolRefundCoordinator` (buildUnsigned / broadcast / reconcile) + admin REST (request, approve, reject,
+      sol-unsigned/broadcast/reconcile) + Liquibase 31 + `federated-isolated-refund-fee` (net = gross − fee).
+      Nothing is signable until a moderator approves and supplies the destination. The refund SPL transfer has
+      TWO offline signers — operator fee-payer + the dedicated-wallet owner (authority). Verified on H2
+      (`FederationRefundIT`) **and end-to-end on `solana-test-validator`** (`FederationRefundValidatorIT`: fund a
+      dedicated wallet → request → approve → offline two-signer sign → broadcast → reconcile → player's USDT
+      balance moves + wallet REFUNDED). FIX along the way: `SolanaRpcClient.sendTransaction` now uses
+      `preflightCommitment=confirmed` so a just-funded source account (visible at confirmed, not yet finalized)
+      isn't rejected with a spurious `InvalidAccountData`. Original design notes follow:
       return a funded buy-in from its dedicated wallet to the player when
       the federation can't run (under-fill / cancelled) or a player un-registers before start. **Every refund
       requires admin approval** (a moderator gate, mirroring the withdrawal-approval flow: `PENDING_APPROVAL` →

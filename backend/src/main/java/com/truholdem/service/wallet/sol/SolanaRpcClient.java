@@ -70,9 +70,12 @@ public class SolanaRpcClient {
                 List.of(owner, Map.of("mint", mint), Map.of("encoding", "jsonParsed"))));
     }
 
-    /** Broadcast a base64-encoded signed transaction; returns its signature. */
+    /** Broadcast a base64-encoded signed transaction; returns its signature. Preflight runs at {@code confirmed}
+     *  (not the default {@code finalized}) so a just-created/funded source account — visible at {@code confirmed}
+     *  but not yet finalized — isn't rejected with a spurious {@code InvalidAccountData}. */
     public String sendTransaction(String base64SignedTx) {
-        return rpc("sendTransaction", List.of(base64SignedTx, Map.of("encoding", "base64"))).asText();
+        return rpc("sendTransaction",
+                List.of(base64SignedTx, Map.of("encoding", "base64", "preflightCommitment", "confirmed"))).asText();
     }
 
     /** Confirmation status of a signature (searching history), or {@link SignatureStatus#NOT_FOUND}. */
