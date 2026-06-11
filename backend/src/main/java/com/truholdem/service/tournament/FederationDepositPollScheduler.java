@@ -18,6 +18,10 @@ import com.truholdem.repository.PyramidFederationRepository;
  * per federation. Each reconcile is idempotent (an already-seated wallet is a no-op), so this is safe to run on
  * every node in a cluster. Inert unless the federated-pyramid + isolated-wallets + Solana-RPC features are on and
  * {@code app.tournament.federated-isolated-deposit-poll-enabled=true}.
+ *
+ * <p>With {@code app.tournament.federated-isolated-auto-release-enabled=true} it additionally auto-releases
+ * no-shows in the same cycle — but only <em>after</em> reconcile, so a late-but-valid deposit is seated rather
+ * than dropped. That is a separate opt-in because release deletes pending registrations.
  */
 @Component
 public class FederationDepositPollScheduler {
@@ -42,12 +46,20 @@ public class FederationDepositPollScheduler {
                 || !t.isFederatedIsolatedDepositPollEnabled() || !appProperties.getPayments().isSolRpcEnabled()) {
             return;
         }
+        boolean autoRelease = t.isFederatedIsolatedAutoReleaseEnabled();
         for (PyramidFederation fed :
                 federationRepository.findByStatusAndIsolatedWalletsEnabledTrue(FederationStatus.REGISTERING)) {
             try {
                 int seated = federatedService.reconcileDeposits(fed.getId());
                 if (seated > 0) {
                     log.info("Deposit poll seated {} player(s) in federation {}", seated, fed.getId());
+                }
+                if (autoRelease) {
+                    // Always after reconcile, so a late-but-valid deposit is seated rather than released.
+                    int released = federatedService.releaseNoShows(fed.getId());
+                    if (released > 0) {
+                        log.info("Deposit poll released {} no-show(s) in federation {}", released, fed.getId());
+                    }
                 }
             } catch (RuntimeException e) {
                 log.warn("Deposit poll for federation {} failed (will retry next interval)", fed.getId(), e);

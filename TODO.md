@@ -457,7 +457,13 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       `reconcileDeposits` now reads balances in batches of 100 via `getMultipleAccounts`, so a large field costs
       ceil(N/100) RPC calls instead of N. Tests: `FederationDepositPollSchedulerTest` (gating + per-federation
       dispatch + failure isolation), `SolanaRpcClientTest.parsesMultipleTokenAmounts`; the batched read is
-      exercised end-to-end by the validator ITs' `reconcileDeposits`.
+      exercised end-to-end by the validator ITs' `reconcileDeposits`. With
+      `app.tournament.federated-isolated-auto-release-enabled=true` the same poller also **auto-releases no-shows**
+      — strictly *after* the cycle's reconcile, so a late-but-valid deposit is seated rather than dropped (separate
+      opt-in because it deletes pending registrations).
+    - [x] **Admin guide** — [docs/ISOLATED_CUSTODY_FEDERATION.md](docs/ISOLATED_CUSTODY_FEDERATION.md): end-to-end
+      operator runbook (flags, create → keygen/import → ATA pre-create → deposits/reconcile/release → lifecycle →
+      refunds → ATA close/rent → dashboard), all offline-signing flows and the API/web endpoints.
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store

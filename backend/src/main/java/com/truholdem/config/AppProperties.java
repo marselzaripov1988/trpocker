@@ -1383,6 +1383,12 @@ public class AppProperties {
         @Min(1000)
         private long federatedIsolatedDepositPollIntervalMs = 30_000;
 
+        /** Isolated custody: let the deposit poller also auto-release no-shows — assigned-but-unfunded wallets
+         *  past the deposit window are freed back to the FREE pool and their pending registration dropped (after
+         *  the same cycle's reconcile, so a late-but-valid deposit is seated first). Off by default — it deletes
+         *  pending registrations, so it is a separate opt-in from plain deposit polling. */
+        private boolean federatedIsolatedAutoReleaseEnabled = false;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
@@ -1429,6 +1435,14 @@ public class AppProperties {
 
         public void setFederatedIsolatedDepositPollIntervalMs(long federatedIsolatedDepositPollIntervalMs) {
             this.federatedIsolatedDepositPollIntervalMs = federatedIsolatedDepositPollIntervalMs;
+        }
+
+        public boolean isFederatedIsolatedAutoReleaseEnabled() {
+            return federatedIsolatedAutoReleaseEnabled;
+        }
+
+        public void setFederatedIsolatedAutoReleaseEnabled(boolean federatedIsolatedAutoReleaseEnabled) {
+            this.federatedIsolatedAutoReleaseEnabled = federatedIsolatedAutoReleaseEnabled;
         }
 
         public int getFederatedDefaultShardSize() {
