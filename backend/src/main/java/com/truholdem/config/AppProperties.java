@@ -198,6 +198,11 @@ public class AppProperties {
         /** Minimum confirmations a UTXO needs before the coordinator will spend it. */
         private int btcMinUtxoConfirmations = 1;
 
+        /** Deposit→treasury sweep (consolidation): gathers UTXOs from watch-only deposit addresses into the
+         *  treasury {@code btc-from-address}. Off by default; signing stays offline. */
+        @Valid
+        private Sweep sweep = new Sweep();
+
         /** Periodically reconcile BROADCAST withdrawals against the chain via the ETH/BTC coordinators
          *  (→ CONFIRMED / FAILED). Idempotent, so safe on every node. Inert unless payments are enabled. */
         private boolean withdrawalReconcileEnabled = false;
@@ -484,6 +489,14 @@ public class AppProperties {
             this.btcMinUtxoConfirmations = btcMinUtxoConfirmations;
         }
 
+        public Sweep getSweep() {
+            return sweep;
+        }
+
+        public void setSweep(Sweep sweep) {
+            this.sweep = sweep;
+        }
+
         public boolean isWithdrawalReconcileEnabled() {
             return withdrawalReconcileEnabled;
         }
@@ -658,6 +671,43 @@ public class AppProperties {
 
         public void setKycRetentionDays(int kycRetentionDays) {
             this.kycRetentionDays = kycRetentionDays;
+        }
+
+        /** Deposit→treasury sweep config. Off by default; the treasury target reuses {@code btc-from-address}. */
+        public static class Sweep {
+            /** Master switch for the sweep coordinator's operations (the coordinator bean still needs
+             *  {@code btc-rpc-enabled}). */
+            private boolean enabled = false;
+            /** Per-asset minimum UTXO value to sweep (dust filter), keyed by {@link CryptoAsset#name()},
+             *  e.g. {@code app.payments.sweep.min-amount-per-asset.BTC=0.001}. Absent = no minimum. */
+            private Map<String, BigDecimal> minAmountPerAsset = new HashMap<>();
+            /** Max inputs consolidated in one sweep tx (bounds tx size / fee). */
+            @Min(1)
+            private int batchMaxInputs = 10;
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public Map<String, BigDecimal> getMinAmountPerAsset() {
+                return minAmountPerAsset;
+            }
+
+            public void setMinAmountPerAsset(Map<String, BigDecimal> minAmountPerAsset) {
+                this.minAmountPerAsset = minAmountPerAsset;
+            }
+
+            public int getBatchMaxInputs() {
+                return batchMaxInputs;
+            }
+
+            public void setBatchMaxInputs(int batchMaxInputs) {
+                this.batchMaxInputs = batchMaxInputs;
+            }
         }
     }
 

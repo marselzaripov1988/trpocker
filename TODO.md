@@ -269,6 +269,43 @@ shard and in the final; mechanics first, money later.
       `WalletAccount` (would inflate the solvency-monitor liabilities) — model it as a treasury/operator account
       kept out of the `liabilities` sum, with its own audit trail.
 
+## TODO — deposit→treasury sweep / consolidation [NEW EPIC]
+Deposits land on per-user **watch-only** pool addresses (`DepositAddressPoolService`), but withdrawals are
+funded from a **single** treasury `from-address` per chain (`app.payments.eth-from-address` /
+`btc-from-address`). Nothing moves funds between them, so: liquidity strands on hundreds/thousands of deposit
+addresses; the treasury can run dry while the platform is solvent in aggregate; and the solvency monitor
+compares against an operator-**declared** float, not the observed on-chain balance. This epic adds an
+offline-signed **sweep** that consolidates deposit balances into the treasury, reusing the withdrawal
+coordinators' assemble→offline-sign→broadcast→reconcile pipeline.
+Decided:
+- **Off by default** behind `app.payments.sweep.enabled`; signing **always offline** (sweep = "withdraw to
+  self"); signers stay in test sources, never in the production jar.
+- **Does NOT touch `WalletAccount` / user ledger** — it is an internal custody move; its own `SweepBatch` audit
+  journal, kept **out** of the solvency `liabilities` sum.
+- **Idempotent + cluster-safe** (lease ownership, mirroring `WithdrawalReconcileScheduler`).
+- **BTC-first** (cleanest to prove on regtest); ETH/ERC-20 + TRON follow.
+- Sweep fee is an **operational expense**, NOT house revenue.
+Slices:
+- [x] **1. BTC consolidation (UTXO, MVP)** — `BtcSweepCoordinator` (`planSweep` selects ASSIGNED-pool-address
+      UTXOs ≥ `sweep.min-amount-per-asset`, ≤ `sweep.batch-max-inputs`; N inputs → 1 treasury output + fee,
+      BIP-143/144; `broadcast`; `reconcile`). The offline signer signs **each input with its own derivation key**
+      (per-input `derivationIndex` carried in `BtcSweepUnsignedDto`). `SweepBatch` entity/repo + Liquibase
+      changeset 29 + `Payments.Sweep` config (flag-gated, off by default). Verified end-to-end on
+      `bitcoind -regtest` by `BtcSweepCoordinatorIT` (fund 3 pool addresses → sweep → one consolidated UTXO on
+      the treasury; 1 passed).
+- [ ] **2. Reconcile + scheduler** — extend/mirror `WithdrawalReconcileScheduler` (BROADCAST→CONFIRMED for sweep
+      batches, lease-owned, idempotent retry) + a `@Scheduled` batch planner (threshold / cron, flag-gated).
+- [ ] **3. ETH/ERC-20 sweep (gas-funded)** — `EthSweepCoordinator`, per-address (account model): native = one
+      `transfer`; ERC-20 = treasury funds gas to the deposit address, then `transfer` the token (2–3 tx / 2 sigs
+      per address). Verify on `geth --dev` + a deployed ERC-20. Optional later: deposit/forwarder contracts
+      instead of gas-funding.
+- [ ] **4. TRON sweep** — after the TRON withdrawal coordinator lands (account model; cheap).
+- [ ] **5. Custody journal + reconciliation + metrics** — read view (`Σ deposited − Σ swept − Σ on-deposit ≈
+      on-chain treasury`) closing the solvency follow-up (observed balance vs declared float); metrics
+      `truholdem_wallet_swept_total{asset}` / `_sweep_fee_total` / pending-batches gauge.
+- [ ] **6. Admin UI** — on `/admin/pool` (or `/admin/wallet`): Plan sweep (preview sums + fee) → assemble →
+      paste signed → broadcast → reconcile, mirroring the `/admin/withdrawals` signing workflow.
+
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
 `requestRebuy` effect + lobby "Rebuy" button). **Add-on is modelled but not wired**: `Tournament.addOnAmount` /

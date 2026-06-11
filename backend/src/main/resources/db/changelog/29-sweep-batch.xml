@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Deposit→treasury sweep (consolidation) audit trail + on-chain state machine. Internal custody move,
+         kept out of any WalletAccount. Postgres-only; H2 derives the table from the entity. -->
+    <changeSet id="sweep-batch-001-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="sweep_batches"/></not>
+        </preConditions>
+        <createTable tableName="sweep_batches">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="asset" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="status" type="varchar(16)"><constraints nullable="false"/></column>
+            <column name="to_address" type="varchar(128)"><constraints nullable="false"/></column>
+            <column name="input_count" type="int"><constraints nullable="false"/></column>
+            <column name="total_in_value_sat" type="bigint"><constraints nullable="false"/></column>
+            <column name="fee_sat" type="bigint"><constraints nullable="false"/></column>
+            <column name="tx_id" type="varchar(128)"/>
+            <column name="version" type="bigint"/>
+            <column name="created_at" type="timestamptz"><constraints nullable="false"/></column>
+            <column name="updated_at" type="timestamptz"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="sweep_batches" indexName="idx_sweep_asset_status">
+            <column name="asset"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

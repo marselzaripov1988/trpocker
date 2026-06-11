@@ -1,5 +1,6 @@
 package com.truholdem.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,4 +31,8 @@ public interface DepositAddressPoolRepository extends JpaRepository<DepositAddre
     Optional<DepositAddressPoolEntry> findByAssetAndAddress(CryptoAsset asset, String address);
 
     long countByAssetAndStatus(CryptoAsset asset, DepositAddressStatus status);
+
+    /** All addresses for an asset in a given status — used by the sweep coordinator to enumerate the ASSIGNED
+     *  deposit addresses whose UTXOs are consolidated into the treasury. */
+    List<DepositAddressPoolEntry> findByAssetAndStatus(CryptoAsset asset, DepositAddressStatus status);
 }
