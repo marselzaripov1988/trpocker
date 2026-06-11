@@ -203,6 +203,13 @@ public class AppProperties {
         @Valid
         private Sweep sweep = new Sweep();
 
+        /** Solana (SPL / USDT) JSON-RPC coordinator: assembles + broadcasts SPL transfers, reads balances and
+         *  signature statuses. Account model → 1 ed25519 signature per withdrawal; signing stays offline. Inert
+         *  unless {@code solRpcEnabled}. */
+        private boolean solRpcEnabled = false;
+        /** Solana JSON-RPC endpoint (e.g. http://localhost:8899 or a provider URL). */
+        private String solRpcUrl = "";
+
         /** Periodically reconcile BROADCAST withdrawals against the chain via the ETH/BTC coordinators
          *  (→ CONFIRMED / FAILED). Idempotent, so safe on every node. Inert unless payments are enabled. */
         private boolean withdrawalReconcileEnabled = false;
@@ -495,6 +502,22 @@ public class AppProperties {
 
         public void setSweep(Sweep sweep) {
             this.sweep = sweep;
+        }
+
+        public boolean isSolRpcEnabled() {
+            return solRpcEnabled;
+        }
+
+        public void setSolRpcEnabled(boolean solRpcEnabled) {
+            this.solRpcEnabled = solRpcEnabled;
+        }
+
+        public String getSolRpcUrl() {
+            return solRpcUrl;
+        }
+
+        public void setSolRpcUrl(String solRpcUrl) {
+            this.solRpcUrl = solRpcUrl;
         }
 
         public boolean isWithdrawalReconcileEnabled() {

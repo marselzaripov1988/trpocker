@@ -328,9 +328,10 @@ Slices:
       decode bug) + `SolAta` (ed25519 on-curve check + `findProgramAddress` + ATA from `[owner, TOKEN_PROGRAM,
       mint]`). Verified vs RFC 8032 §7.1 vectors (`SolKeysTest`) + on-curve/structure (`SolAtaTest`); no Tron/Btc
       regression. NOTE: the exact (owner,mint)→ATA value is cross-checked on `solana-test-validator` in slice 5.
-- [ ] **2. RPC client** — `SolanaRpcClient` (`getLatestBlockhash`, `getTokenAccountBalance`,
-      `getTokenAccountsByOwner`, `sendTransaction`, `getSignatureStatuses`/`getTransaction`), flag-gated on
-      `sol-rpc-enabled`, mirroring `EthRpcClient`/`BtcRpcClient` (RestClient JSON-RPC).
+- [x] **2. RPC client** — `SolanaRpcClient` (JSON-RPC 2.0 via RestClient): `getLatestBlockhash`,
+      `getTokenAccountBalance`, `getTokenAccountsByOwner`, `sendTransaction`, `getSignatureStatus`. Flag-gated on
+      `app.payments.sol-rpc-enabled` (+ `sol-rpc-url` config). Pure request-builder + response parsers unit-tested
+      vs sample Solana payloads (`SolanaRpcClientTest`); live calls covered by slice 5.
 - [ ] **3. Withdrawal coordinator** — `SolWithdrawalCoordinator`: `buildUnsigned` assembles an SPL `transfer`
       from the treasury ATA to the recipient ATA against a recent blockhash / durable nonce (creates the
       recipient ATA if missing); `broadcast` the offline-signed tx; `reconcile` signature status → CONFIRMED.
