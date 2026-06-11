@@ -51,9 +51,11 @@ public class SolanaRpcClient {
         this.http = RestClient.builder().requestFactory(factory).build();
     }
 
-    /** Latest blockhash at {@code confirmed} commitment — the value a transaction must be signed against. */
+    /** Latest blockhash at {@code finalized} commitment — the value a transaction must be signed against. Using
+     *  {@code finalized} (not {@code confirmed}) guarantees the blockhash is already in the validator's recent
+     *  blockhash queue, avoiding a {@code BlockhashNotFound} on submit. */
     public Blockhash getLatestBlockhash() {
-        return parseBlockhash(rpc("getLatestBlockhash", List.of(Map.of("commitment", "confirmed"))));
+        return parseBlockhash(rpc("getLatestBlockhash", List.of(Map.of("commitment", "finalized"))));
     }
 
     /** Raw (base-unit) balance of an SPL token account (e.g. an ATA). Throws if the account does not exist. */

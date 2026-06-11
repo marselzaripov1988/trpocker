@@ -332,10 +332,14 @@ Slices:
       `getTokenAccountBalance`, `getTokenAccountsByOwner`, `sendTransaction`, `getSignatureStatus`. Flag-gated on
       `app.payments.sol-rpc-enabled` (+ `sol-rpc-url` config). Pure request-builder + response parsers unit-tested
       vs sample Solana payloads (`SolanaRpcClientTest`); live calls covered by slice 5.
-- [ ] **3. Withdrawal coordinator** — `SolWithdrawalCoordinator`: `buildUnsigned` assembles an SPL `transfer`
-      from the treasury ATA to the recipient ATA against a recent blockhash / durable nonce (creates the
-      recipient ATA if missing); `broadcast` the offline-signed tx; `reconcile` signature status → CONFIRMED.
-      Account model: 1 ed25519 signature. Offline `SolSigner` (test sources) signs the serialized message.
+- [x] **3. Withdrawal coordinator** — pure-Java Solana tx serialization (`SolShortVec` compact-u16, `SolMessage`
+      legacy-message compile with account de-dup/ordering, `SolInstructions` SPL `transfer` + ATA
+      `CreateIdempotent`, `SolTransaction` base64) + `SolWithdrawalCoordinator` (`buildUnsigned` SPL transfer
+      treasury-ATA → recipient-ATA, creates the recipient ATA if missing, against a `finalized` blockhash;
+      `broadcast`; `isConfirmed`). Account model → 1 ed25519 signature, signed offline. **Verified end-to-end on
+      `solana-test-validator`** (`SolWithdrawalCoordinatorIT`: provision USDT mint + treasury ATA → assemble →
+      offline-sign → broadcast → confirmed → recipient ATA balance moves) + serialization unit tests
+      (`SolShortVecTest`/`SolMessageTest`). This also lands slice 5's on-validator proof for the withdrawal path.
 - [ ] **4. Deposit + ATA ingestion** — deposit address = the owner's USDT ATA (owner pubkey + derived ATA);
       `DepositIngestionService` resolves a watch-only Solana deposit by address; pool import validates base58 +
       ATA. Note the one-time ATA rent (~0.002 SOL) — decide payer (platform pre-creates vs recipient).

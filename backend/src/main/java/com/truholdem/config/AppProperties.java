@@ -209,6 +209,10 @@ public class AppProperties {
         private boolean solRpcEnabled = false;
         /** Solana JSON-RPC endpoint (e.g. http://localhost:8899 or a provider URL). */
         private String solRpcUrl = "";
+        /** Treasury owner address (base58 ed25519 pubkey) — fee payer + transfer authority; signs offline. */
+        private String solFromAddress = "";
+        /** USDT SPL mint address (base58) on the target Solana cluster. */
+        private String solUsdtMint = "";
 
         /** Periodically reconcile BROADCAST withdrawals against the chain via the ETH/BTC coordinators
          *  (→ CONFIRMED / FAILED). Idempotent, so safe on every node. Inert unless payments are enabled. */
@@ -518,6 +522,22 @@ public class AppProperties {
 
         public void setSolRpcUrl(String solRpcUrl) {
             this.solRpcUrl = solRpcUrl;
+        }
+
+        public String getSolFromAddress() {
+            return solFromAddress;
+        }
+
+        public void setSolFromAddress(String solFromAddress) {
+            this.solFromAddress = solFromAddress;
+        }
+
+        public String getSolUsdtMint() {
+            return solUsdtMint;
+        }
+
+        public void setSolUsdtMint(String solUsdtMint) {
+            this.solUsdtMint = solUsdtMint;
         }
 
         public boolean isWithdrawalReconcileEnabled() {
