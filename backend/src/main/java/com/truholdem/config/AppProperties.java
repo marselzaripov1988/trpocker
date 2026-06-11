@@ -1370,6 +1370,10 @@ public class AppProperties {
         @Min(0)
         private int federatedIsolatedDepositWindowMinutes = 30;
 
+        /** Isolated custody: flat fee (in the buy-in asset's units, e.g. USDT) deducted from a refund — the
+         *  player receives {@code fundedAmount − this}. Covers the operator's on-chain refund cost. Default 0. */
+        private java.math.BigDecimal federatedIsolatedRefundFee = java.math.BigDecimal.ZERO;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
@@ -1392,6 +1396,14 @@ public class AppProperties {
 
         public void setFederatedIsolatedDepositWindowMinutes(int federatedIsolatedDepositWindowMinutes) {
             this.federatedIsolatedDepositWindowMinutes = federatedIsolatedDepositWindowMinutes;
+        }
+
+        public java.math.BigDecimal getFederatedIsolatedRefundFee() {
+            return federatedIsolatedRefundFee;
+        }
+
+        public void setFederatedIsolatedRefundFee(java.math.BigDecimal federatedIsolatedRefundFee) {
+            this.federatedIsolatedRefundFee = federatedIsolatedRefundFee;
         }
 
         public int getFederatedDefaultShardSize() {

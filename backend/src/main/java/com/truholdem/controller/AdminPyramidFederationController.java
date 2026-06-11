@@ -18,12 +18,24 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateFederationRequest;
 import com.truholdem.dto.FederationDetailResponse;
+import com.truholdem.dto.FederationRefundResponse;
 import com.truholdem.dto.FederationWalletImportRequest;
 import com.truholdem.dto.PrizeConfigRequest;
+import com.truholdem.dto.RefundApprovalRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
+import com.truholdem.dto.wallet.RejectWithdrawalRequest;
+import com.truholdem.dto.wallet.SolBroadcastRequest;
+import com.truholdem.dto.wallet.SolRefundUnsignedDto;
 import com.truholdem.exception.ResourceNotFoundException;
 import com.truholdem.model.PyramidFederation;
+import com.truholdem.model.User;
 import com.truholdem.service.tournament.FederatedPyramidService;
+import com.truholdem.service.tournament.FederationRefundService;
+import com.truholdem.service.wallet.sol.SolRefundCoordinator;
+
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -46,11 +58,16 @@ public class AdminPyramidFederationController {
     private static final Logger log = LoggerFactory.getLogger(AdminPyramidFederationController.class);
 
     private final FederatedPyramidService federatedService;
+    private final FederationRefundService refundService;
+    private final ObjectProvider<SolRefundCoordinator> refundCoordinator;
     private final AppProperties appProperties;
 
     public AdminPyramidFederationController(FederatedPyramidService federatedService,
-            AppProperties appProperties) {
+            FederationRefundService refundService,
+            ObjectProvider<SolRefundCoordinator> refundCoordinator, AppProperties appProperties) {
         this.federatedService = federatedService;
+        this.refundService = refundService;
+        this.refundCoordinator = refundCoordinator;
         this.appProperties = appProperties;
     }
 
@@ -93,6 +110,77 @@ public class AdminPyramidFederationController {
         assertEnabled();
         int released = federatedService.releaseNoShows(id);
         return ResponseEntity.ok(java.util.Map.of("released", released));
+    }
+
+    // --- Isolated-custody refunds (admin-approved) ---
+
+    @PostMapping("/{id}/players/{playerId}/refund")
+    @Operation(summary = "Request a refund of a player's funded buy-in (PENDING_APPROVAL)")
+    public ResponseEntity<FederationRefundResponse> requestRefund(@PathVariable UUID id,
+            @PathVariable UUID playerId) {
+        assertEnabled();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(FederationRefundResponse.from(refundService.requestRefund(id, playerId)));
+    }
+
+    @PostMapping("/{id}/refunds/request")
+    @Operation(summary = "Request refunds for all funded wallets (federation cancelled / under-filled)")
+    public ResponseEntity<java.util.Map<String, Integer>> requestRefunds(@PathVariable UUID id) {
+        assertEnabled();
+        return ResponseEntity.ok(java.util.Map.of("requested", refundService.requestRefundsForCancelled(id)));
+    }
+
+    @PostMapping("/refunds/{refundId}/approve")
+    @Operation(summary = "Approve a refund and set the player's destination address (→ APPROVED)")
+    public ResponseEntity<FederationRefundResponse> approveRefund(@PathVariable UUID refundId,
+            @Valid @RequestBody RefundApprovalRequest body, @AuthenticationPrincipal UserDetails principal) {
+        assertEnabled();
+        UUID moderatorId = ((User) principal).getId();
+        return ResponseEntity.ok(
+                FederationRefundResponse.from(refundService.approveRefund(refundId, moderatorId, body.toAddress())));
+    }
+
+    @PostMapping("/refunds/{refundId}/reject")
+    @Operation(summary = "Reject a pending refund (→ REJECTED)")
+    public ResponseEntity<FederationRefundResponse> rejectRefund(@PathVariable UUID refundId,
+            @RequestBody(required = false) RejectWithdrawalRequest body,
+            @AuthenticationPrincipal UserDetails principal) {
+        assertEnabled();
+        UUID moderatorId = ((User) principal).getId();
+        String reason = body == null ? null : body.reason();
+        return ResponseEntity.ok(
+                FederationRefundResponse.from(refundService.rejectRefund(refundId, moderatorId, reason)));
+    }
+
+    @GetMapping("/refunds/{refundId}/unsigned")
+    @Operation(summary = "Assemble the unsigned refund tx (dedicated wallet → player) for the offline signer")
+    public ResponseEntity<SolRefundUnsignedDto> refundUnsigned(@PathVariable UUID refundId) {
+        assertEnabled();
+        return ResponseEntity.ok(refundCoordinatorOrThrow().buildUnsigned(refundId));
+    }
+
+    @PostMapping("/refunds/{refundId}/broadcast")
+    @Operation(summary = "Broadcast the offline-signed refund tx and record its signature (→ BROADCAST)")
+    public ResponseEntity<FederationRefundResponse> refundBroadcast(@PathVariable UUID refundId,
+            @Valid @RequestBody SolBroadcastRequest body) {
+        assertEnabled();
+        return ResponseEntity.ok(
+                FederationRefundResponse.from(refundCoordinatorOrThrow().broadcast(refundId, body.signedTx())));
+    }
+
+    @PostMapping("/refunds/{refundId}/reconcile")
+    @Operation(summary = "Reconcile a broadcast refund against its signature status (→ CONFIRMED)")
+    public ResponseEntity<FederationRefundResponse> refundReconcile(@PathVariable UUID refundId) {
+        assertEnabled();
+        return ResponseEntity.ok(FederationRefundResponse.from(refundCoordinatorOrThrow().reconcile(refundId)));
+    }
+
+    private SolRefundCoordinator refundCoordinatorOrThrow() {
+        SolRefundCoordinator coordinator = refundCoordinator.getIfAvailable();
+        if (coordinator == null) {
+            throw new IllegalStateException("Solana refund coordinator is disabled (app.payments.sol-rpc-enabled)");
+        }
+        return coordinator;
     }
 
     @GetMapping("/{id}")

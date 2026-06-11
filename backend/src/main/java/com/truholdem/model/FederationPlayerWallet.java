@@ -114,6 +114,11 @@ public class FederationPlayerWallet {
         this.status = FederationWalletStatus.FUNDED;
     }
 
+    /** Mark a funded wallet refunded (its buy-in was returned on-chain to the player). */
+    public void markRefunded() {
+        this.status = FederationWalletStatus.REFUNDED;
+    }
+
     /** Release an assigned-but-unfunded wallet back to the FREE pool (a no-show whose buy-in never landed). */
     public void release() {
         this.assignedPlayerId = null;

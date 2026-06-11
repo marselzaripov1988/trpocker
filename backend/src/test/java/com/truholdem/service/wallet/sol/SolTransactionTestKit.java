@@ -15,4 +15,9 @@ public final class SolTransactionTestKit {
     public static String serialize(byte[] signature, byte[] message) {
         return SolTransaction.serializeBase64(List.of(signature), message);
     }
+
+    /** base64 for a multi-signer transaction; signatures must be in the message's required-signer order. */
+    public static String serialize(List<byte[]> signatures, byte[] message) {
+        return SolTransaction.serializeBase64(signatures, message);
+    }
 }

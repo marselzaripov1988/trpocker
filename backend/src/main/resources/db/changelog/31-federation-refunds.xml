@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Admin-approved refund of a funded buy-in from a dedicated player wallet (isolated-custody federated
+         pyramid). Postgres-only; H2 derives the table from the entity. -->
+    <changeSet id="fedrefund-001-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="federation_refunds"/></not>
+        </preConditions>
+        <createTable tableName="federation_refunds">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="federation_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="wallet_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="player_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="asset" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="gross_amount" type="numeric(38,18)"><constraints nullable="false"/></column>
+            <column name="fee_amount" type="numeric(38,18)"><constraints nullable="false"/></column>
+            <column name="net_amount" type="numeric(38,18)"><constraints nullable="false"/></column>
+            <column name="to_address" type="varchar(64)"/>
+            <column name="status" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="tx_id" type="varchar(128)"/>
+            <column name="reviewed_by" type="uuid"/>
+            <column name="reviewed_at" type="timestamptz"/>
+            <column name="rejection_reason" type="varchar(512)"/>
+            <column name="version" type="bigint"/>
+            <column name="created_at" type="timestamptz"><constraints nullable="false"/></column>
+            <column name="updated_at" type="timestamptz"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="federation_refunds" indexName="idx_fedrefund_fed_status">
+            <column name="federation_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

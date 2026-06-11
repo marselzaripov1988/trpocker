@@ -7,5 +7,7 @@ public enum FederationWalletStatus {
     /** Handed to a player as their dedicated buy-in deposit address; awaiting the on-chain deposit. */
     ASSIGNED,
     /** The buy-in deposit has landed and confirmed on-chain — the player is paid in. */
-    FUNDED
+    FUNDED,
+    /** The buy-in was refunded on-chain back to the player (federation cancelled / un-registered). */
+    REFUNDED
 }

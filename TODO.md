@@ -383,10 +383,39 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       registrations (so the wallet is re-usable); funded wallets untouched. Admin `POST .../release-no-shows`.
       Verified by `FederationIsolatedWalletIT` (only-confirmed-seated + release frees + re-register). Note: run
       `reconcile-deposits` before `release-no-shows` so a genuine late deposit is seated, not released.
-- [ ] **3. Isolated settlement** (hard) — compute prize amounts (reuse `payPool`/`FederatedPrizeSplit`), assemble
-      offline-signed Solana consolidation txs moving USDT from dedicated wallets → winners + house fee (multi-key
-      per-source signing, batched under the 1232-byte tx limit; sources→payees assignment).
-- [ ] **4. Refund/cancel** — return each buy-in from its dedicated wallet to the player (cancel / no-show).
+- [-] **3. Isolated settlement — CANCELLED (on-chain linkability).** Paying the prize by consolidating the
+      dedicated wallets → winners necessarily **reveals the wallets' co-ownership on-chain** and so defeats the
+      isolation: a batched Solana tx exposes co-signing (multiple source signatures = one controller, CIOH-style),
+      a shared fee-payer links all settlement txs, and the convergence of many sources onto a winner clusters them
+      regardless — the isolation only holds *at rest* (during play), not once funds move. Not worth the
+      engineering for no real privacy gain. Consequence: the isolated variant has **no on-chain payout path** as
+      designed; a different payout model would be needed (e.g. credit the prize off-chain to the winner's
+      `WalletAccount` and let them withdraw via the standard Solana coordinator — which reintroduces a treasury/
+      consolidation step anyway). Revisit only if a privacy-preserving payout (e.g. CoinJoin-style) is in scope.
+- [~] **4. Refund/cancel (admin-approved)** — STATE MACHINE + REST + H2 DONE; on-chain transfer under
+      investigation. `FederationRefund` entity/status/repo + `FederationRefundService` (request / approve-with-
+      address / reject / forSigning / recordBroadcast / confirm→wallet REFUNDED) + `SolRefundCoordinator`
+      (buildUnsigned / broadcast / reconcile) + admin REST (request, approve, reject, sol-unsigned/broadcast/
+      reconcile) + Liquibase 31 + `federated-isolated-refund-fee` (net = gross − fee). Verified on H2
+      (`FederationRefundIT`: approval gate, fee deduction, idempotency, confirm marks the wallet REFUNDED).
+      ⚠️ The on-validator IT (`FederationRefundValidatorIT`, held back uncommitted) fails: the two-signer SPL
+      transfer (operator fee-payer + dedicated-wallet authority) hits `InvalidAccountData` on the source unpack,
+      even though the compiled message is byte-verified correct (acct keys + indices decoded), the source ATA is
+      a valid funded token account, and signatures pass sigverify. NEXT: compare the failing tx to a manual
+      `spl-token transfer` from the dedicated wallet; check account commitment/visibility at preflight; try
+      `TransferChecked`. Original design notes follow:
+      return a funded buy-in from its dedicated wallet to the player when
+      the federation can't run (under-fill / cancelled) or a player un-registers before start. **Every refund
+      requires admin approval** (a moderator gate, mirroring the withdrawal-approval flow: `PENDING_APPROVAL` →
+      admin approves → assemble unsigned → offline ed25519-sign the dedicated wallet → broadcast → reconcile →
+      `REFUNDED`). Per-wallet, **multi-key** (each wallet's own offline key signs), reusing
+      `SolMessage`/`SolInstructions`/`SolTransaction`. Privacy: refunds **fan out to distinct players (no
+      convergence)**, so the linkability is far softer than the cancelled slice 3 — do 1 tx/wallet, self-funded
+      fee, refund to the deposit source → on-chain it's just the reverse of the already-public deposit. Open
+      design: the refund destination (capture the deposit's on-chain sender via `getSignaturesForAddress`, vs a
+      player-provided withdrawal address) — admin confirms it at approval. This is the **essential money-back
+      safety path** (without it, funded players' USDT is stranded on cancel); it builds the (soft) offline-transfer
+      infra slice 3 would have. Verify on `solana-test-validator`.
 - [ ] **5. Scale/ops** — 1M-key offline batching, ATA pre-creation (rent), deposit polling at scale, admin UI.
 
 ## TODO — tournament add-on (+ cash top-up)

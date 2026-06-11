@@ -145,6 +145,11 @@ public final class OfflineDepositPoolGenerator {
         return out;
     }
 
+    /** The 32-byte ed25519 seed of a federation wallet (so the offline signer can re-derive its key). */
+    public static byte[] federationWalletSeed(byte[] seed, java.util.UUID federationId, long index) {
+        return ed25519Seed(seed, "fedwallet:" + federationId + "/" + index);
+    }
+
     /** Deterministic 32-byte ed25519 seed: the first 32 bytes of HMAC-SHA512(seed, label). */
     private static byte[] ed25519Seed(byte[] seed, String label) {
         try {
