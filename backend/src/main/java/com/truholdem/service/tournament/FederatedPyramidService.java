@@ -1,11 +1,13 @@
 package com.truholdem.service.tournament;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -18,6 +20,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.model.CryptoAsset;
+import com.truholdem.model.FederationPlayerWallet;
 import com.truholdem.model.FederationShardStatus;
 import com.truholdem.model.FederationStatus;
 import com.truholdem.model.PyramidFederation;
@@ -65,7 +68,11 @@ public class FederatedPyramidService {
     private final TournamentWalletService tournamentWalletService;
     private final TournamentFeeEntryRepository feeEntryRepository;
     private final TournamentRegistrationRepository tournamentRegistrationRepository;
+    private final FederationPlayerWalletService walletPoolService;
+    private final org.springframework.beans.factory.ObjectProvider<
+            com.truholdem.service.wallet.sol.SolanaRpcClient> solRpc;
     private final AppProperties.Tournament tournamentProperties;
+    private final AppProperties.Payments paymentsProperties;
     /** Self proxy, so {@link #recordShardWinner} runs in its own transaction when called internally. */
     private final FederatedPyramidService self;
 
@@ -79,6 +86,9 @@ public class FederatedPyramidService {
             TournamentWalletService tournamentWalletService,
             TournamentFeeEntryRepository feeEntryRepository,
             TournamentRegistrationRepository tournamentRegistrationRepository,
+            FederationPlayerWalletService walletPoolService,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.truholdem.service.wallet.sol.SolanaRpcClient> solRpc,
             AppProperties appProperties, @Lazy FederatedPyramidService self) {
         this.federationRepository = federationRepository;
         this.shardRepository = shardRepository;
@@ -91,7 +101,10 @@ public class FederatedPyramidService {
         this.tournamentWalletService = tournamentWalletService;
         this.feeEntryRepository = feeEntryRepository;
         this.tournamentRegistrationRepository = tournamentRegistrationRepository;
+        this.walletPoolService = walletPoolService;
+        this.solRpc = solRpc;
         this.tournamentProperties = appProperties.getTournament();
+        this.paymentsProperties = appProperties.getPayments();
         this.self = self;
     }
 
@@ -135,8 +148,34 @@ public class FederatedPyramidService {
     public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
             Instant registrationDeadline, BigDecimal buyInAmount, CryptoAsset buyInAsset, boolean buyUpEnabled,
             int feeBasisPoints) {
+        return createFederation(name, startingPlayers, shardSize, registrationDeadline, buyInAmount, buyInAsset,
+                buyUpEnabled, feeBasisPoints, false);
+    }
+
+    /**
+     * As above, with the <b>isolated-custody</b> variant: each player pays their buy-in on-chain into a dedicated
+     * per-player wallet (Solana USDT) instead of an off-chain {@code chargeBuyIn}. Requires a USDT_SOL buy-in and
+     * the {@code app.tournament.federated-isolated-wallets-enabled} flag; incompatible with buy-up.
+     */
+    @Transactional
+    public PyramidFederation createFederation(String name, long startingPlayers, int shardSize,
+            Instant registrationDeadline, BigDecimal buyInAmount, CryptoAsset buyInAsset, boolean buyUpEnabled,
+            int feeBasisPoints, boolean isolatedWalletsEnabled) {
         if (buyUpEnabled && (buyInAmount == null || buyInAmount.signum() <= 0 || buyInAsset == null)) {
             throw new IllegalArgumentException("A buy-up federated pyramid requires a real-money buy-in");
+        }
+        if (isolatedWalletsEnabled) {
+            if (!tournamentProperties.isFederatedIsolatedWalletsEnabled()) {
+                throw new IllegalStateException("Isolated-custody federated pyramid is disabled "
+                        + "(app.tournament.federated-isolated-wallets-enabled)");
+            }
+            if (buyInAmount == null || buyInAmount.signum() <= 0 || buyInAsset != CryptoAsset.USDT_SOL) {
+                throw new IllegalArgumentException(
+                        "Isolated-custody federation requires a USDT_SOL buy-in (Solana-first)");
+            }
+            if (buyUpEnabled) {
+                throw new IllegalArgumentException("Isolated custody is incompatible with buy-up");
+            }
         }
         int seats = tournamentProperties.getPyramidDefaultSeatsPerTable();
         int hands = tournamentProperties.getPyramidDefaultHandsPerRound();
@@ -149,6 +188,7 @@ public class FederatedPyramidService {
             federation.setCryptoBuyInAsset(buyInAsset);
         }
         federation.setBuyUpEnabled(buyUpEnabled);
+        federation.setIsolatedWalletsEnabled(isolatedWalletsEnabled);
         federation.setFeeBasisPoints(feeBasisPoints); // validates 0..2000
         // Snapshot the current global prize config onto the federation so an admin can tune it per-federation.
         federation.setShardWinnerPpm(tournamentProperties.getFederatedShardWinnerPpm());
@@ -184,6 +224,9 @@ public class FederatedPyramidService {
                 && federation.getStatus() != FederationStatus.SHARDS_RUNNING) {
             throw new IllegalStateException("Federation " + federationId + " is not accepting registrations");
         }
+        if (federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Isolated-custody federation uses the dedicated-wallet registration flow");
+        }
         if (registrationRepository.existsByFederationIdAndPlayerId(federationId, playerId)) {
             return shardForExistingPlayer(federationId, playerId);
         }
@@ -204,6 +247,102 @@ public class FederatedPyramidService {
             openNextPendingShard(federationId);
         }
         return shardRepository.save(shard);
+    }
+
+    /**
+     * Isolated-custody registration: assign the player a dedicated on-chain wallet (Solana USDT ATA) to pay the
+     * buy-in into, and record an unconfirmed/unseated registration. The player only takes a shard seat once the
+     * deposit confirms (see {@link #confirmDeposit}). Idempotent — re-registering returns the same wallet.
+     */
+    @Transactional
+    public FederationPlayerWallet registerIsolated(UUID federationId, UUID playerId, String playerName) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        if (federation.getStatus() != FederationStatus.REGISTERING
+                && federation.getStatus() != FederationStatus.SHARDS_RUNNING) {
+            throw new IllegalStateException("Federation " + federationId + " is not accepting registrations");
+        }
+        FederationPlayerWallet wallet = walletPoolService.assign(federationId, playerId);
+        if (!registrationRepository.existsByFederationIdAndPlayerId(federationId, playerId)) {
+            registrationRepository.save(
+                    new PyramidFederationRegistration(federationId, playerId, playerName, wallet.getAddress()));
+        }
+        return wallet;
+    }
+
+    /**
+     * Record a confirmed on-chain buy-in deposit at a player's dedicated wallet: mark it FUNDED and seat the
+     * player into a shard (fill order). Idempotent — returns false below the confirmation threshold, when
+     * underfunded, or for an already-funded wallet.
+     */
+    @Transactional
+    public boolean confirmDeposit(UUID federationId, String walletAddress, String depositTxId, BigDecimal amount,
+            int confirmations) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        int min = Math.max(0, paymentsProperties.getMinConfirmations());
+        if (confirmations < min || amount == null || amount.compareTo(federation.getCryptoBuyInAmount()) < 0) {
+            return false;
+        }
+        Optional<UUID> player = walletPoolService.confirmFunding(federationId, walletAddress, depositTxId, amount);
+        if (player.isEmpty()) {
+            return false; // already funded / unassigned
+        }
+        PyramidFederationShard shard = openFillShard(federationId)
+                .orElseThrow(() -> new IllegalStateException("Federation is full — all shards are filled"));
+        PyramidFederationRegistration reg = registrationRepository
+                .findByFederationIdAndPlayerId(federationId, player.get())
+                .orElseThrow(() -> new IllegalStateException("No registration for funded wallet " + walletAddress));
+        reg.confirmDepositAndSeat(shard.getShardIndex());
+        registrationRepository.save(reg);
+        shard.incrementFilled();
+        if (shard.getFilledCount() >= federation.getShardSize()) {
+            shard.markReady();
+            openNextPendingShard(federationId);
+        }
+        shardRepository.save(shard);
+        log.info("Federation {} — deposit confirmed for player {} → seated in shard {}",
+                federationId, player.get(), shard.getShardIndex());
+        return true;
+    }
+
+    /**
+     * Poll the assigned-but-unfunded wallets' on-chain USDT balances and confirm those holding ≥ the buy-in. A
+     * slice-1 driver (admin/test); scale polling is a later slice. Returns the number newly seated.
+     */
+    public int reconcileDeposits(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        com.truholdem.service.wallet.sol.SolanaRpcClient rpc = solRpc.getIfAvailable();
+        if (rpc == null) {
+            throw new IllegalStateException("Solana RPC is disabled (app.payments.sol-rpc-enabled)");
+        }
+        int decimals = federation.getCryptoBuyInAsset().getDecimals();
+        BigInteger minBaseUnits = federation.getCryptoBuyInAmount().movePointRight(decimals).toBigIntegerExact();
+        int min = Math.max(0, paymentsProperties.getMinConfirmations());
+        int seated = 0;
+        for (FederationPlayerWallet wallet : walletPoolService.assignedAwaitingDeposit(federationId)) {
+            try {
+                BigInteger balance = rpc.getTokenAccountBalance(wallet.getAddress());
+                if (balance.compareTo(minBaseUnits) >= 0) {
+                    BigDecimal amount = new BigDecimal(balance).movePointLeft(decimals);
+                    if (self.confirmDeposit(federationId, wallet.getAddress(),
+                            "soldep:" + federationId + ":" + wallet.getAddress(), amount, min)) {
+                        seated++;
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.debug("Federation {} — wallet {} not yet funded: {}",
+                        federationId, wallet.getAddress(), e.toString());
+            }
+        }
+        return seated;
     }
 
     /**

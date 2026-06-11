@@ -39,5 +39,6 @@
     <include file="db/changelog/27-tournament-fee.xml"/>
     <include file="db/changelog/28-federation-prize-config.xml"/>
     <include file="db/changelog/29-sweep-batch.xml"/>
+    <include file="db/changelog/30-federation-player-wallets.xml"/>
 
 </databaseChangeLog>

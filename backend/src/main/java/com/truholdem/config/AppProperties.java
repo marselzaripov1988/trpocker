@@ -1361,12 +1361,24 @@ public class AppProperties {
             this.federatedNodeGroupCount = federatedNodeGroupCount;
         }
 
+        /** Isolated-custody federated pyramid: each player's buy-in is paid on-chain into a dedicated per-player
+         *  wallet (Solana USDT). Off by default; requires {@code federatedPyramidEnabled}. */
+        private boolean federatedIsolatedWalletsEnabled = false;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
 
         public void setFederatedPyramidEnabled(boolean federatedPyramidEnabled) {
             this.federatedPyramidEnabled = federatedPyramidEnabled;
+        }
+
+        public boolean isFederatedIsolatedWalletsEnabled() {
+            return federatedIsolatedWalletsEnabled;
+        }
+
+        public void setFederatedIsolatedWalletsEnabled(boolean federatedIsolatedWalletsEnabled) {
+            this.federatedIsolatedWalletsEnabled = federatedIsolatedWalletsEnabled;
         }
 
         public int getFederatedDefaultShardSize() {

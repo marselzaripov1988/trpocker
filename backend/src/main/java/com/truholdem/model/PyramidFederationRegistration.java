@@ -40,6 +40,15 @@ public class PyramidFederationRegistration {
     @Column(name = "player_name", nullable = false)
     private String playerName;
 
+    /** Off-chain (legacy) registrations are confirmed immediately; an isolated-custody registration stays
+     *  unconfirmed (and unseated, {@code shardIndex == -1}) until its on-chain buy-in deposit lands. */
+    @Column(name = "deposit_confirmed", nullable = false)
+    private boolean depositConfirmed = true;
+
+    /** The dedicated per-player wallet (USDT ATA) the buy-in is paid into (isolated-custody variant; else null). */
+    @Column(name = "wallet_address", length = 64)
+    private String walletAddress;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -51,6 +60,22 @@ public class PyramidFederationRegistration {
         this.shardIndex = shardIndex;
         this.playerId = playerId;
         this.playerName = playerName;
+    }
+
+    /** Isolated-custody registration: not yet seated ({@code shardIndex == -1}) and awaiting its on-chain deposit. */
+    public PyramidFederationRegistration(UUID federationId, UUID playerId, String playerName, String walletAddress) {
+        this.federationId = federationId;
+        this.shardIndex = -1;
+        this.playerId = playerId;
+        this.playerName = playerName;
+        this.walletAddress = walletAddress;
+        this.depositConfirmed = false;
+    }
+
+    /** Seat a confirmed-deposit player into their shard (isolated-custody flow). */
+    public void confirmDepositAndSeat(int shardIndex) {
+        this.shardIndex = shardIndex;
+        this.depositConfirmed = true;
     }
 
     @PrePersist
@@ -78,6 +103,14 @@ public class PyramidFederationRegistration {
 
     public String getPlayerName() {
         return playerName;
+    }
+
+    public boolean isDepositConfirmed() {
+        return depositConfirmed;
+    }
+
+    public String getWalletAddress() {
+        return walletAddress;
     }
 
     public Instant getCreatedAt() {

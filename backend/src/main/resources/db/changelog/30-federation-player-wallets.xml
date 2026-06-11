@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.24.xsd">
+
+    <!-- Isolated-custody federated pyramid: a dedicated per-player on-chain wallet receives the buy-in.
+         Postgres-only; H2 derives the schema from the entities. -->
+    <changeSet id="fedwallet-001-table" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><tableExists tableName="federation_player_wallets"/></not>
+        </preConditions>
+        <createTable tableName="federation_player_wallets">
+            <column name="id" type="uuid"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="federation_id" type="uuid"><constraints nullable="false"/></column>
+            <column name="derivation_index" type="bigint"><constraints nullable="false"/></column>
+            <column name="owner_pubkey" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="address" type="varchar(64)"><constraints nullable="false"/></column>
+            <column name="asset" type="varchar(32)"><constraints nullable="false"/></column>
+            <column name="status" type="varchar(16)"><constraints nullable="false"/></column>
+            <column name="assigned_player_id" type="uuid"/>
+            <column name="assigned_at" type="timestamptz"/>
+            <column name="deposit_tx_id" type="varchar(128)"/>
+            <column name="funded_amount" type="numeric(38,18)"/>
+            <column name="version" type="bigint"/>
+            <column name="created_at" type="timestamptz"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="federation_player_wallets"
+                columnNames="federation_id, derivation_index" constraintName="uk_fedwallet_index"/>
+        <addUniqueConstraint tableName="federation_player_wallets"
+                columnNames="federation_id, address" constraintName="uk_fedwallet_address"/>
+        <addUniqueConstraint tableName="federation_player_wallets"
+                columnNames="federation_id, assigned_player_id" constraintName="uk_fedwallet_player"/>
+        <createIndex tableName="federation_player_wallets" indexName="idx_fedwallet_fed_status">
+            <column name="federation_id"/>
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="fedwallet-002-federation-flag" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="pyramid_federations" columnName="isolated_wallets_enabled"/></not>
+        </preConditions>
+        <addColumn tableName="pyramid_federations">
+            <column name="isolated_wallets_enabled" type="boolean" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="fedwallet-003-registration-deposit" author="truholdem" dbms="postgresql">
+        <preConditions onFail="MARK_RAN" onError="MARK_RAN">
+            <not><columnExists tableName="pyramid_federation_registrations" columnName="deposit_confirmed"/></not>
+        </preConditions>
+        <addColumn tableName="pyramid_federation_registrations">
+            <column name="deposit_confirmed" type="boolean" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="wallet_address" type="varchar(64)"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

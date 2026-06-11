@@ -358,6 +358,28 @@ Slices:
 Open: a Solana sweep (deposit ATAs → treasury) is a later slice under the sweep epic; durable-nonce vs
 fast-window for air-gap; whether to also add USDC alongside USDT; pre-create deposit ATAs (from slice 4).
 
+## TODO — isolated-custody federated pyramid (on-chain per-player wallets, Solana-first) [NEW EPIC]
+A real-money federated pyramid variant where each player's buy-in is paid **on-chain into a dedicated,
+per-tournament, per-player wallet** (offline-generated Solana ed25519 keypair; its USDT ATA is the deposit
+target). New tournament ⇒ new wallets; keys are generated offline (server watch-only). Decided: **isolated
+custody** (funds stay on the per-player wallets; the prize is consolidated from those wallets directly to the
+winners — no central treasury); **full federated scale** (up to 1M wallets/tournament — cost accepted);
+**registration gated on a confirmed on-chain deposit**; **Solana-first** (reuses the USDT-Solana rails). Flag-gated
+NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
+- [~] **1. Foundation** — `isolatedWalletsEnabled` federation flag (+ `app.tournament.federated-isolated-wallets-enabled`,
+      USDT_SOL-only); `FederationPlayerWallet` entity/repo/pool (`FederationPlayerWalletService`: import/assign/
+      confirmFunding) + Liquibase 30; `OfflineDepositPoolGenerator.generateFederationWallets` (offline ed25519 owner →
+      USDT ATA per `fedwallet:<fedId>/<i>`); `FederatedPyramidService.registerIsolated` (assign a dedicated wallet,
+      unseated/unconfirmed) + `confirmDeposit` (FUNDED + seat into a shard by fill order) + `reconcileDeposits` (poll
+      `SolanaRpcClient.getTokenAccountBalance`). Core verified on H2 (`FederationIsolatedWalletIT`). **Remaining in
+      this slice:** admin `import-wallets`/`reconcile-deposits` + player register dispatch (REST) + the on-validator IT.
+- [ ] **2. Fill/lifecycle** — only deposit-confirmed registrations fill shards / trigger start; no-show handling.
+- [ ] **3. Isolated settlement** (hard) — compute prize amounts (reuse `payPool`/`FederatedPrizeSplit`), assemble
+      offline-signed Solana consolidation txs moving USDT from dedicated wallets → winners + house fee (multi-key
+      per-source signing, batched under the 1232-byte tx limit; sources→payees assignment).
+- [ ] **4. Refund/cancel** — return each buy-in from its dedicated wallet to the player (cancel / no-show).
+- [ ] **5. Scale/ops** — 1M-key offline batching, ATA pre-creation (rent), deposit polling at scale, admin UI.
+
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store
 `requestRebuy` effect + lobby "Rebuy" button). **Add-on is modelled but not wired**: `Tournament.addOnAmount` /

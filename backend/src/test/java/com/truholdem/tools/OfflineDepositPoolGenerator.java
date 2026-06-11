@@ -120,6 +120,31 @@ public final class OfflineDepositPoolGenerator {
         return new Batch(HexFormat.of().formatHex(seed), asset, keys);
     }
 
+    /** A dedicated per-player tournament wallet: its offline ed25519 owner (base58) + the owner's USDT ATA. */
+    public record FedWallet(long index, String ownerPubkey, String address) {
+    }
+
+    /**
+     * OFFLINE: derive {@code count} dedicated Solana wallets for an isolated-custody federation. Each wallet's
+     * ed25519 owner is derived under the label {@code fedwallet:<federationId>/<i>} (so a new tournament ⇒ new
+     * keys), and its deposit address is the owner's ATA for {@code mintAddress} (the USDT SPL mint on the target
+     * cluster). Returns the public entries to import; private keys stay on the air-gapped machine (re-derive by
+     * seed + index for settlement).
+     */
+    public static List<FedWallet> generateFederationWallets(byte[] seed, java.util.UUID federationId, int count,
+            String mintAddress) {
+        if (count <= 0) {
+            throw new IllegalArgumentException("count must be positive");
+        }
+        List<FedWallet> out = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            byte[] s = ed25519Seed(seed, "fedwallet:" + federationId + "/" + i);
+            String owner = SolKeys.addressFromSeed(s);
+            out.add(new FedWallet(i, owner, SolAta.deriveAta(owner, mintAddress)));
+        }
+        return out;
+    }
+
     /** Deterministic 32-byte ed25519 seed: the first 32 bytes of HMAC-SHA512(seed, label). */
     private static byte[] ed25519Seed(byte[] seed, String label) {
         try {

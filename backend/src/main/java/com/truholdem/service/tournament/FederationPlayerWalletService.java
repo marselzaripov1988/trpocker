@@ -1,0 +1,99 @@
+package com.truholdem.service.tournament;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.truholdem.dto.FederationWalletImportRequest;
+import com.truholdem.model.CryptoAsset;
+import com.truholdem.model.FederationPlayerWallet;
+import com.truholdem.model.FederationWalletStatus;
+import com.truholdem.repository.FederationPlayerWalletRepository;
+import com.truholdem.service.wallet.crypto.SolKeys;
+
+/**
+ * Manages the pool of dedicated per-player wallets for an isolated-custody federated pyramid: imports the
+ * offline-generated wallets (FREE), hands one out per player (ASSIGNED), and records the on-chain buy-in deposit
+ * (FUNDED). Keys are never here — only public addresses + derivation indices. Seating a funded player into a
+ * shard is done by {@link FederatedPyramidService} (which owns the shard fill-order logic).
+ */
+@Service
+public class FederationPlayerWalletService {
+
+    private static final Logger log = LoggerFactory.getLogger(FederationPlayerWalletService.class);
+    private static final int MAX_ADDRESS_LENGTH = 64;
+
+    private final FederationPlayerWalletRepository repository;
+
+    public FederationPlayerWalletService(FederationPlayerWalletRepository repository) {
+        this.repository = repository;
+    }
+
+    /** Import a batch of offline-generated wallets for a federation as FREE. Validates base58 addresses, skips
+     *  already-imported addresses (idempotent re-import). Returns the number inserted. */
+    @Transactional
+    public int importBatch(UUID federationId, CryptoAsset asset, List<FederationWalletImportRequest.Entry> entries) {
+        int imported = 0;
+        for (FederationWalletImportRequest.Entry e : entries) {
+            requireValid(e.address(), "address");
+            requireValid(e.ownerPubkey(), "ownerPubkey");
+            if (repository.existsByFederationIdAndAddress(federationId, e.address())) {
+                continue;
+            }
+            repository.save(new FederationPlayerWallet(
+                    federationId, e.derivationIndex(), e.ownerPubkey(), e.address(), asset));
+            imported++;
+        }
+        log.info("Federation {} — imported {} player wallet(s) ({} skipped as duplicates)",
+                federationId, imported, entries.size() - imported);
+        return imported;
+    }
+
+    /** Hand the player their dedicated wallet for the federation: the existing one if already assigned, else the
+     *  lowest-index FREE wallet (row-locked). Throws if the pool is exhausted. Must run in a transaction. */
+    @Transactional
+    public FederationPlayerWallet assign(UUID federationId, UUID playerId) {
+        return repository.findByFederationIdAndAssignedPlayerId(federationId, playerId).orElseGet(() -> {
+            FederationPlayerWallet free = repository
+                    .findFirstByFederationIdAndStatusOrderByDerivationIndexAsc(federationId, FederationWalletStatus.FREE)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Federation " + federationId + " has no free player wallets — import more"));
+            free.assignTo(playerId);
+            FederationPlayerWallet saved = repository.save(free);
+            log.info("Federation {} — assigned wallet #{} ({}) to player {}",
+                    federationId, saved.getDerivationIndex(), saved.getAddress(), playerId);
+            return saved;
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public List<FederationPlayerWallet> assignedAwaitingDeposit(UUID federationId) {
+        return repository.findByFederationIdAndStatus(federationId, FederationWalletStatus.ASSIGNED);
+    }
+
+    /** Mark a wallet's on-chain buy-in deposit confirmed and return the player to seat. Idempotent: returns
+     *  empty if the wallet is already FUNDED or not assigned to a player. */
+    @Transactional
+    public java.util.Optional<UUID> confirmFunding(UUID federationId, String address, String depositTxId,
+            BigDecimal amount) {
+        FederationPlayerWallet wallet = repository.findByFederationIdAndAddress(federationId, address)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown wallet " + address));
+        if (wallet.getStatus() != FederationWalletStatus.ASSIGNED || wallet.getAssignedPlayerId() == null) {
+            return java.util.Optional.empty();
+        }
+        wallet.markFunded(depositTxId, amount);
+        repository.save(wallet);
+        return java.util.Optional.of(wallet.getAssignedPlayerId());
+    }
+
+    private static void requireValid(String address, String field) {
+        if (address == null || address.length() > MAX_ADDRESS_LENGTH || !SolKeys.isValidAddress(address)) {
+            throw new IllegalArgumentException("Invalid base58 " + field + ": " + address);
+        }
+    }
+}

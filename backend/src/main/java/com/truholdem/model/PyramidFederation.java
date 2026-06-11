@@ -83,6 +83,11 @@ public class PyramidFederation {
     @Column(name = "buy_up_enabled", nullable = false)
     private boolean buyUpEnabled = false;
 
+    /** Isolated-custody variant: each player pays their buy-in on-chain into a dedicated per-player wallet
+     *  (Solana USDT), and the prize is later consolidated from those wallets — no off-chain {@code chargeBuyIn}. */
+    @Column(name = "isolated_wallets_enabled", nullable = false)
+    private boolean isolatedWalletsEnabled = false;
+
     /** Per-federation prize config (real money). Seeded from the {@code app.tournament} defaults at creation and
      *  editable by an admin until payout; {@code null} falls back to the global default at distribution. */
     @Column(name = "shard_winner_ppm")
@@ -247,6 +252,14 @@ public class PyramidFederation {
 
     public void setBuyUpEnabled(boolean buyUpEnabled) {
         this.buyUpEnabled = buyUpEnabled;
+    }
+
+    public boolean isIsolatedWalletsEnabled() {
+        return isolatedWalletsEnabled;
+    }
+
+    public void setIsolatedWalletsEnabled(boolean isolatedWalletsEnabled) {
+        this.isolatedWalletsEnabled = isolatedWalletsEnabled;
     }
 
     public Integer getShardWinnerPpm() {
