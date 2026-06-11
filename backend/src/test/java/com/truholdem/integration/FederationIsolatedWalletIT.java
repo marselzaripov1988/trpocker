@@ -169,6 +169,20 @@ class FederationIsolatedWalletIT {
     }
 
     @Test
+    @DisplayName("wallet import is idempotent + batched (re-import adds only new ones)")
+    void importIsIdempotentAndBatched() {
+        // Indices 0..2 are taken by setUp — generate this chunk past them to avoid the (federation, index) constraint.
+        byte[] s = ("import-idem-" + federationId).getBytes(StandardCharsets.UTF_8);
+        var chunkA = OfflineDepositPoolGenerator.generateFederationWallets(s, federationId, 10L, 4, MINT).stream()
+                .map(w -> new FederationWalletImportRequest.Entry(w.index(), w.ownerPubkey(), w.address())).toList();
+        assertThat(walletPoolService.importBatch(federationId, CryptoAsset.USDT_SOL, chunkA)).isEqualTo(4);
+        assertThat(walletPoolService.importBatch(federationId, CryptoAsset.USDT_SOL, chunkA)).isZero(); // idempotent
+        var chunkB = OfflineDepositPoolGenerator.generateFederationWallets(s, federationId, 10L, 6, MINT).stream()
+                .map(w -> new FederationWalletImportRequest.Entry(w.index(), w.ownerPubkey(), w.address())).toList();
+        assertThat(walletPoolService.importBatch(federationId, CryptoAsset.USDT_SOL, chunkB)).isEqualTo(2); // only 2 new
+    }
+
+    @Test
     @DisplayName("isolated custody requires a USDT_SOL buy-in")
     void requiresUsdtSol() {
         assertThatThrownBy(() -> federatedService.createFederation(

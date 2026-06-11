@@ -1,11 +1,14 @@
 package com.truholdem.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.truholdem.model.FederationPlayerWallet;
@@ -32,4 +35,10 @@ public interface FederationPlayerWalletRepository extends JpaRepository<Federati
     List<FederationPlayerWallet> findByFederationIdAndStatus(UUID federationId, FederationWalletStatus status);
 
     long countByFederationIdAndStatus(UUID federationId, FederationWalletStatus status);
+
+    /** The subset of {@code addresses} already imported for the federation — for bulk idempotent import. */
+    @Query("SELECT w.address FROM FederationPlayerWallet w "
+            + "WHERE w.federationId = :federationId AND w.address IN :addresses")
+    List<String> findExistingAddresses(@Param("federationId") UUID federationId,
+            @Param("addresses") Collection<String> addresses);
 }

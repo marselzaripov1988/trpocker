@@ -34,24 +34,28 @@ public class FederationPlayerWalletService {
         this.repository = repository;
     }
 
-    /** Import a batch of offline-generated wallets for a federation as FREE. Validates base58 addresses, skips
-     *  already-imported addresses (idempotent re-import). Returns the number inserted. */
+    /** Import a chunk of offline-generated wallets for a federation as FREE. Validates base58 addresses and skips
+     *  already-imported ones (idempotent re-import) via a single bulk existence query + batch insert — so a 1M
+     *  field can be imported chunk-by-chunk efficiently. Returns the number inserted. */
     @Transactional
     public int importBatch(UUID federationId, CryptoAsset asset, List<FederationWalletImportRequest.Entry> entries) {
-        int imported = 0;
         for (FederationWalletImportRequest.Entry e : entries) {
             requireValid(e.address(), "address");
             requireValid(e.ownerPubkey(), "ownerPubkey");
-            if (repository.existsByFederationIdAndAddress(federationId, e.address())) {
-                continue;
-            }
-            repository.save(new FederationPlayerWallet(
-                    federationId, e.derivationIndex(), e.ownerPubkey(), e.address(), asset));
-            imported++;
         }
+        java.util.Set<String> seen = new java.util.HashSet<>(repository.findExistingAddresses(
+                federationId, entries.stream().map(FederationWalletImportRequest.Entry::address).toList()));
+        List<FederationPlayerWallet> toSave = new java.util.ArrayList<>();
+        for (FederationWalletImportRequest.Entry e : entries) {
+            if (seen.add(e.address())) { // not already imported and not duplicated within this chunk
+                toSave.add(new FederationPlayerWallet(
+                        federationId, e.derivationIndex(), e.ownerPubkey(), e.address(), asset));
+            }
+        }
+        repository.saveAll(toSave);
         log.info("Federation {} — imported {} player wallet(s) ({} skipped as duplicates)",
-                federationId, imported, entries.size() - imported);
-        return imported;
+                federationId, toSave.size(), entries.size() - toSave.size());
+        return toSave.size();
     }
 
     /** Hand the player their dedicated wallet for the federation: the existing one if already assigned, else the

@@ -415,7 +415,18 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       player-provided withdrawal address) — admin confirms it at approval. This is the **essential money-back
       safety path** (without it, funded players' USDT is stranded on cancel); it builds the (soft) offline-transfer
       infra slice 3 would have. Verify on `solana-test-validator`.
-- [ ] **5. Scale/ops** — 1M-key offline batching, ATA pre-creation (rent), deposit polling at scale, admin UI.
+- [~] **5. Scale/ops** — *offline keygen-batching done; the rest later.*
+    - [x] **Offline keygen-batching (1M)** — `OfflineDepositPoolGenerator` derives federation wallets by
+      **absolute index** (`generateFederationWallets(seed, fedId, fromIndex, count, mint)`), so any chunk equals
+      the matching slice of a whole-field generation and is re-runnable. CLI `--federation-id --mint --count
+      --chunk` → `writeFederationWalletsChunked` streams `fedwallets-import-NNNNN.json` chunk files (bounded
+      memory, one chunk in RAM at a time) + a `fedwallets-secret.txt` (seed/fed/mint, offline only). Import is
+      **bulk-idempotent**: `FederationPlayerWalletService.importBatch` does one `findExistingAddresses` query +
+      `saveAll`, so a 1M field imports chunk-by-chunk with re-import = 0 new. Keys re-derive offline via
+      `federationWalletSeed(seed, fedId, index)`; nothing private touches the server. Tests:
+      `OfflineFederationWalletGenTest` (chunk == slice, key re-derivation, chunked-file writer) +
+      `FederationIsolatedWalletIT.importIsIdempotentAndBatched`.
+    - [ ] ATA pre-creation (rent), deposit polling at scale, admin UI.
 
 ## TODO — tournament add-on (+ cash top-up)
 Rebuy is done end-to-end (`POST /v1/tournaments/{id}/rebuy` → `TournamentService.processRebuy` → store

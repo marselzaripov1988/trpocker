@@ -133,11 +133,22 @@ public final class OfflineDepositPoolGenerator {
      */
     public static List<FedWallet> generateFederationWallets(byte[] seed, java.util.UUID federationId, int count,
             String mintAddress) {
-        if (count <= 0) {
-            throw new IllegalArgumentException("count must be positive");
+        return generateFederationWallets(seed, federationId, 0L, count, mintAddress);
+    }
+
+    /**
+     * Generate a CHUNK of federation wallets — indices {@code [fromIndex, fromIndex+count)} — so a 1M field can
+     * be produced in bounded-memory chunks across files/invocations. Derivation is by ABSOLUTE index, so chunks
+     * are consistent with a whole-field generation (chunk[j] == full[fromIndex+j]) and re-runnable.
+     */
+    public static List<FedWallet> generateFederationWallets(byte[] seed, java.util.UUID federationId, long fromIndex,
+            int count, String mintAddress) {
+        if (count <= 0 || fromIndex < 0) {
+            throw new IllegalArgumentException("count must be positive and fromIndex non-negative");
         }
         List<FedWallet> out = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
+        for (int j = 0; j < count; j++) {
+            long i = fromIndex + j;
             byte[] s = ed25519Seed(seed, "fedwallet:" + federationId + "/" + i);
             String owner = SolKeys.addressFromSeed(s);
             out.add(new FedWallet(i, owner, SolAta.deriveAta(owner, mintAddress)));
@@ -148,6 +159,44 @@ public final class OfflineDepositPoolGenerator {
     /** The 32-byte ed25519 seed of a federation wallet (so the offline signer can re-derive its key). */
     public static byte[] federationWalletSeed(byte[] seed, java.util.UUID federationId, long index) {
         return ed25519Seed(seed, "fedwallet:" + federationId + "/" + index);
+    }
+
+    /** One import entry, matching {@code FederationWalletImportRequest.Entry} (POST-ready). */
+    public record FedWalletEntry(long derivationIndex, String ownerPubkey, String address) {
+    }
+
+    /** A chunk of import entries, matching the admin import body {@code {"wallets":[...]}}. */
+    public record FedWalletImportChunk(List<FedWalletEntry> wallets) {
+    }
+
+    /**
+     * OFFLINE: generate {@code total} federation wallets and write them as chunked, POST-ready import files
+     * ({@code fedwallets-import-NNNNN.json}, each ≤ {@code chunkSize}) so a 1M field is produced in bounded
+     * memory (one chunk at a time). Also writes {@code fedwallets-secret.txt} (the master seed + federation id —
+     * KEEP OFFLINE; any key re-derives via {@link #federationWalletSeed}). Returns the number of chunk files.
+     */
+    public static int writeFederationWalletsChunked(byte[] seed, java.util.UUID federationId, String mintAddress,
+            long total, int chunkSize, Path outDir) throws java.io.IOException {
+        if (total <= 0 || chunkSize <= 0) {
+            throw new IllegalArgumentException("total and chunkSize must be positive");
+        }
+        ObjectMapper json = new ObjectMapper();
+        Files.createDirectories(outDir);
+        Files.writeString(outDir.resolve("fedwallets-secret.txt"),
+                "seedHex=" + HexFormat.of().formatHex(seed) + System.lineSeparator()
+                        + "federationId=" + federationId + System.lineSeparator()
+                        + "mint=" + mintAddress + System.lineSeparator());
+        int chunks = 0;
+        for (long from = 0; from < total; from += chunkSize) {
+            int n = (int) Math.min(chunkSize, total - from);
+            List<FedWalletEntry> entries = generateFederationWallets(seed, federationId, from, n, mintAddress)
+                    .stream().map(w -> new FedWalletEntry(w.index(), w.ownerPubkey(), w.address())).toList();
+            json.writerWithDefaultPrettyPrinter().writeValue(
+                    outDir.resolve(String.format("fedwallets-import-%05d.json", chunks)).toFile(),
+                    new FedWalletImportChunk(entries));
+            chunks++;
+        }
+        return chunks;
     }
 
     /** Deterministic 32-byte ed25519 seed: the first 32 bytes of HMAC-SHA512(seed, label). */
@@ -174,6 +223,22 @@ public final class OfflineDepositPoolGenerator {
         } else {
             seed = new byte[32];
             new SecureRandom().nextBytes(seed);
+        }
+
+        // Isolated-custody federation mode: per-tournament dedicated wallets, written as chunked import files.
+        String federationId = argValue(args, "--federation-id", null);
+        if (federationId != null) {
+            String mint = argValue(args, "--mint", SOL_USDT_MINT);
+            long total = Long.parseLong(argValue(args, "--count", "1000"));
+            int chunk = Integer.parseInt(argValue(args, "--chunk", "10000"));
+            int chunks = writeFederationWalletsChunked(
+                    seed, java.util.UUID.fromString(federationId), mint, total, chunk, outDir);
+            System.out.printf("Generated %d federation wallets in %d chunk file(s) under %s%n",
+                    total, chunks, outDir.toAbsolutePath());
+            System.out.printf("  fedwallets-secret.txt  -> KEEP OFFLINE (master seed + federation id)%n");
+            System.out.printf("  fedwallets-import-*.json -> POST each to /admin/pyramid-federations/%s/import-wallets%n",
+                    federationId);
+            return;
         }
 
         Batch batch = generate(seed, asset, count, btcStyle);
