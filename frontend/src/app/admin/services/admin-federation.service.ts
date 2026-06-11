@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
-  CreateFederationRequest, FederationDetail, FederationRefund, PrizeConfigRequest,
+  CreateFederationRequest, FederationDetail, FederationRefund, FederationWalletStats, PrizeConfigRequest,
   SolAtaBatchUnsigned, SolRefundUnsigned, WalletImportEntry
 } from '../models/admin-federation.models';
 
@@ -58,6 +58,11 @@ export class AdminFederationService {
   }
 
   // --- Isolated custody: dedicated per-player wallets ---
+
+  /** Dedicated-wallet pool dashboard: per-status counts, ATAs pre-created, total on-chain buy-in collected. */
+  walletStats(id: string): Observable<FederationWalletStats> {
+    return this.http.get<FederationWalletStats>(`${this.url}/${id}/wallet-stats`);
+  }
 
   /** Import a chunk of offline-generated dedicated wallets (idempotent); returns the inserted count. */
   importWallets(id: string, wallets: WalletImportEntry[]): Observable<{ imported: number }> {

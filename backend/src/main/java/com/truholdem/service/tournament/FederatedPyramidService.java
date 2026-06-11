@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.truholdem.config.AppProperties;
 import com.truholdem.dto.CreateTournamentRequest;
 import com.truholdem.dto.FederationDetailResponse;
+import com.truholdem.dto.FederationWalletStatsResponse;
 import com.truholdem.model.CryptoAsset;
 import com.truholdem.model.FederationPlayerWallet;
 import com.truholdem.model.FederationShardStatus;
@@ -365,6 +366,16 @@ public class FederatedPyramidService {
             }
         }
         return seated;
+    }
+
+    /** Dashboard view of an isolated-custody federation's dedicated-wallet pool (per-status counts, ATAs
+     *  pre-created, total on-chain buy-in collected). */
+    public FederationWalletStatsResponse walletStats(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        return walletPoolService.stats(federationId);
     }
 
     /**

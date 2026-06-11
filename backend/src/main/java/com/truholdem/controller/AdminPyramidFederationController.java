@@ -20,6 +20,7 @@ import com.truholdem.dto.CreateFederationRequest;
 import com.truholdem.dto.FederationDetailResponse;
 import com.truholdem.dto.FederationRefundResponse;
 import com.truholdem.dto.FederationWalletImportRequest;
+import com.truholdem.dto.FederationWalletStatsResponse;
 import com.truholdem.dto.PrizeConfigRequest;
 import com.truholdem.dto.RefundApprovalRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
@@ -101,6 +102,13 @@ public class AdminPyramidFederationController {
         int imported = federatedService.importPlayerWallets(id, request.wallets());
         log.info("Admin imported {} dedicated wallet(s) into federation {}", imported, id);
         return ResponseEntity.ok(java.util.Map.of("imported", imported));
+    }
+
+    @GetMapping("/{id}/wallet-stats")
+    @Operation(summary = "Isolated custody: dedicated-wallet pool dashboard (per-status counts, ATAs, buy-in total)")
+    public ResponseEntity<FederationWalletStatsResponse> walletStats(@PathVariable UUID id) {
+        assertEnabled();
+        return ResponseEntity.ok(federatedService.walletStats(id));
     }
 
     @PostMapping("/{id}/reconcile-deposits")

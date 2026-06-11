@@ -444,6 +444,9 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       (request/approve/reject + unsigned→broadcast→reconcile). Offline-signing ops are key-free: the console only
       triggers the backend build/broadcast/confirm endpoints and shows the raw JSON; the operator signs the
       `messageBase64` off-browser and pastes the signed tx back. Verified via AOT template build + lint.
+      Includes a **pool dashboard** (`GET /{id}/wallet-stats` → `FederationWalletStatsResponse`): per-status counts
+      (FREE buffer / ASSIGNED-awaiting-deposit / FUNDED / REFUNDED), ATAs pre-created, and total on-chain buy-in
+      collected — auto-loaded + refreshed after each op (`FederationIsolatedWalletIT.walletStatsReflectPool`).
     - [x] **Batched deposit polling at scale** — `FederationDepositPollScheduler` (`@Scheduled`, flag-gated on
       `app.tournament.federated-isolated-deposit-poll-enabled`, interval `…-deposit-poll-interval-ms`, default 30s)
       scans every REGISTERING isolated federation and seats funded players with no manual reconcile. Inert unless

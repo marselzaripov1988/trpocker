@@ -183,6 +183,27 @@ class FederationIsolatedWalletIT {
     }
 
     @Test
+    @DisplayName("wallet-stats dashboard reflects the pool as players register + fund")
+    void walletStatsReflectPool() {
+        var initial = federatedService.walletStats(federationId);
+        assertThat(initial.total()).isEqualTo(3);
+        assertThat(initial.free()).isEqualTo(3);
+        assertThat(initial.assigned()).isZero();
+        assertThat(initial.funded()).isZero();
+
+        UUID player = UUID.randomUUID();
+        FederationPlayerWallet wallet = federatedService.registerIsolated(federationId, player, "P1");
+        federatedService.confirmDeposit(federationId, wallet.getAddress(), "tx", BUY_IN, 1);
+
+        var after = federatedService.walletStats(federationId);
+        assertThat(after.total()).isEqualTo(3);
+        assertThat(after.free()).isEqualTo(2);
+        assertThat(after.assigned()).isZero();
+        assertThat(after.funded()).isEqualTo(1);
+        assertThat(after.fundedAmount()).isEqualByComparingTo(BUY_IN);
+    }
+
+    @Test
     @DisplayName("isolated custody requires a USDT_SOL buy-in")
     void requiresUsdtSol() {
         assertThatThrownBy(() -> federatedService.createFederation(

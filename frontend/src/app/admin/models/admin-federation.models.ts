@@ -86,6 +86,17 @@ export interface FederationRefund {
   txId: string | null;
 }
 
+/** Dedicated-wallet pool dashboard (mirrors FederationWalletStatsResponse). */
+export interface FederationWalletStats {
+  total: number;
+  free: number;
+  assigned: number;
+  funded: number;
+  refunded: number;
+  ataProvisioned: number;
+  fundedAmount: number;
+}
+
 /** Unsigned ATA batch (create/close) for the air-gapped signer (mirrors SolAtaBatchUnsignedDto). */
 export interface SolAtaBatchUnsigned {
   federationId: string;

@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, EventEmitter, Input, OnInit, Output, inject, signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 
 import { AdminFederationService } from '../services/admin-federation.service';
-import { FederationDetail, WalletImportEntry } from '../models/admin-federation.models';
+import { FederationDetail, FederationWalletStats, WalletImportEntry } from '../models/admin-federation.models';
 import { ErrorHandlerService } from '../../services/error-handler.service';
 
 /**
@@ -26,6 +28,20 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
       <h2>🔐 Isolated custody</h2>
       <p class="hint">Each buy-in is paid on-chain into a dedicated per-player Solana wallet. Keys are generated
         and signed offline — this console only triggers the backend and shows the response.</p>
+
+      @if (stats(); as s) {
+        <div class="stats" data-cy="iso-stats">
+          <div><span>Wallets</span><strong>{{ s.total }}</strong></div>
+          <div><span>Free</span><strong data-cy="iso-stat-free">{{ s.free }}</strong></div>
+          <div title="Assigned, awaiting on-chain deposit"><span>Awaiting</span>
+            <strong data-cy="iso-stat-assigned">{{ s.assigned }}</strong></div>
+          <div><span>Funded</span><strong data-cy="iso-stat-funded">{{ s.funded }}</strong></div>
+          <div><span>Refunded</span><strong>{{ s.refunded }}</strong></div>
+          <div title="Wallets whose USDT ATA is pre-created"><span>ATAs ready</span><strong>{{ s.ataProvisioned }}</strong></div>
+          <div title="Total buy-in collected on-chain"><span>Collected</span><strong>{{ s.fundedAmount }}</strong></div>
+        </div>
+      }
+      <button class="btn-ghost" data-cy="iso-stats-refresh" [disabled]="busy()" (click)="refreshStats()">↻ Refresh stats</button>
 
       <details open>
         <summary>1 · Import dedicated wallets</summary>
@@ -146,11 +162,15 @@ import { ErrorHandlerService } from '../../services/error-handler.service';
     .btn { background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; border:none; border-radius:8px; padding:0.45rem 0.9rem; font-weight:600; cursor:pointer; }
     .btn-ghost { background: transparent; color:#cbd5e1; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:0.45rem 0.9rem; cursor:pointer; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin: 0.5rem 0; }
+    .stats div { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.5rem; text-align: center; }
+    .stats span { display: block; font-size: 0.7rem; color: #9ca3af; }
+    .stats strong { font-size: 1.05rem; }
     .result { margin-top: 0.75rem; }
     pre { background: rgba(0,0,0,0.35); border-radius: 8px; padding: 0.6rem; overflow: auto; max-height: 240px; font-size: 0.78rem; color: #e5e7eb; }
   `]
 })
-export class IsolatedCustodyPanelComponent {
+export class IsolatedCustodyPanelComponent implements OnInit {
   private readonly service = inject(AdminFederationService);
   private readonly errorHandler = inject(ErrorHandlerService);
 
@@ -161,6 +181,7 @@ export class IsolatedCustodyPanelComponent {
   readonly busy = signal(false);
   readonly opResult = signal('');
   readonly opLabel = signal('');
+  readonly stats = signal<FederationWalletStats | null>(null);
 
   walletsJson = '';
   ataLimit: number | null = null;
@@ -172,6 +193,18 @@ export class IsolatedCustodyPanelComponent {
   refundId = '';
   refundToAddress = '';
   refundSignedTx = '';
+
+  ngOnInit(): void {
+    this.refreshStats();
+  }
+
+  /** Load the dedicated-wallet pool dashboard (silent — no toast). */
+  refreshStats(): void {
+    this.service.walletStats(this.federation.id).subscribe({
+      next: s => this.stats.set(s),
+      error: () => { /* stats are best-effort; the ops below surface real errors */ }
+    });
+  }
 
   hasIds(csv: string): boolean {
     return this.parseIds(csv).length > 0;
@@ -258,6 +291,7 @@ export class IsolatedCustodyPanelComponent {
         this.opResult.set(JSON.stringify(res, null, 2));
         this.errorHandler.addSuccess(`Done: ${label}`, '');
         this.busy.set(false);
+        this.refreshStats(); // any op can change the pool counts
         if (refresh) {
           this.refreshRequested.emit();
         }

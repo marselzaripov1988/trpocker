@@ -38,6 +38,14 @@ public interface FederationPlayerWalletRepository extends JpaRepository<Federati
 
     long countByFederationIdAndStatus(UUID federationId, FederationWalletStatus status);
 
+    /** How many of a federation's wallets have their USDT ATA pre-created (for the pool dashboard). */
+    long countByFederationIdAndAtaProvisionedTrue(UUID federationId);
+
+    /** Total buy-in collected on-chain (sum of FUNDED wallets' amounts), 0 if none — for the pool dashboard. */
+    @Query("SELECT COALESCE(SUM(w.fundedAmount), 0) FROM FederationPlayerWallet w "
+            + "WHERE w.federationId = :federationId AND w.status = com.truholdem.model.FederationWalletStatus.FUNDED")
+    java.math.BigDecimal sumFundedAmount(@Param("federationId") UUID federationId);
+
     /** The subset of {@code addresses} already imported for the federation — for bulk idempotent import. */
     @Query("SELECT w.address FROM FederationPlayerWallet w "
             + "WHERE w.federationId = :federationId AND w.address IN :addresses")

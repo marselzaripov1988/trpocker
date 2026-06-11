@@ -130,6 +130,20 @@ public class FederationPlayerWalletService {
         return n;
     }
 
+    /** Pool dashboard: per-status counts, ATA-provisioned count and the total on-chain buy-in collected. */
+    @Transactional(readOnly = true)
+    public com.truholdem.dto.FederationWalletStatsResponse stats(UUID federationId) {
+        long free = repository.countByFederationIdAndStatus(federationId, FederationWalletStatus.FREE);
+        long assigned = repository.countByFederationIdAndStatus(federationId, FederationWalletStatus.ASSIGNED);
+        long funded = repository.countByFederationIdAndStatus(federationId, FederationWalletStatus.FUNDED);
+        long refunded = repository.countByFederationIdAndStatus(federationId, FederationWalletStatus.REFUNDED);
+        long provisioned = repository.countByFederationIdAndAtaProvisionedTrue(federationId);
+        java.math.BigDecimal fundedAmount = repository.sumFundedAmount(federationId);
+        return new com.truholdem.dto.FederationWalletStatsResponse(
+                free + assigned + funded + refunded, free, assigned, funded, refunded, provisioned,
+                fundedAmount == null ? java.math.BigDecimal.ZERO : fundedAmount);
+    }
+
     private static void requireValid(String address, String field) {
         if (address == null || address.length() > MAX_ADDRESS_LENGTH || !SolKeys.isValidAddress(address)) {
             throw new IllegalArgumentException("Invalid base58 " + field + ": " + address);
