@@ -249,6 +249,17 @@ public class FederatedPyramidService {
         return shardRepository.save(shard);
     }
 
+    /** Import a batch of offline-generated dedicated wallets into an isolated-custody federation (admin). */
+    @Transactional
+    public int importPlayerWallets(UUID federationId,
+            List<com.truholdem.dto.FederationWalletImportRequest.Entry> entries) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        return walletPoolService.importBatch(federationId, federation.getCryptoBuyInAsset(), entries);
+    }
+
     /**
      * Isolated-custody registration: assign the player a dedicated on-chain wallet (Solana USDT ATA) to pay the
      * buy-in into, and record an unconfirmed/unseated registration. The player only takes a shard seat once the
@@ -891,7 +902,7 @@ public class FederatedPyramidService {
                         : csv(tournamentProperties.getFederatedFinalTablePlaceBps()),
                 f.getFinalTableRestBps() != null ? f.getFinalTableRestBps()
                         : tournamentProperties.getFederatedFinalTableRestBps(),
-                f.getCryptoBuyInAmount(), f.getCryptoBuyInAsset());
+                f.getCryptoBuyInAmount(), f.getCryptoBuyInAsset(), f.isIsolatedWalletsEnabled());
     }
 
     /** The finalists to notify: shard winners plus anyone who bought a final seat directly. */

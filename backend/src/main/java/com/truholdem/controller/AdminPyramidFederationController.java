@@ -18,6 +18,7 @@ import com.truholdem.config.AppProperties;
 import com.truholdem.config.api.ApiV1Config;
 import com.truholdem.dto.CreateFederationRequest;
 import com.truholdem.dto.FederationDetailResponse;
+import com.truholdem.dto.FederationWalletImportRequest;
 import com.truholdem.dto.PrizeConfigRequest;
 import com.truholdem.dto.ScheduleTournamentRequest;
 import com.truholdem.exception.ResourceNotFoundException;
@@ -61,10 +62,29 @@ public class AdminPyramidFederationController {
                 request.name(), request.startingPlayers(), request.shardSize(),
                 request.registrationDeadline(), request.buyInAmount(), request.buyInAsset(),
                 request.buyUpEnabled(),
-                request.feeBasisPoints() == null ? 0 : request.feeBasisPoints());
+                request.feeBasisPoints() == null ? 0 : request.feeBasisPoints(),
+                request.isolatedWalletsEnabled());
         log.info("Admin created federated pyramid {} ({} players / shard {})",
                 fed.getId(), request.startingPlayers(), request.shardSize());
         return ResponseEntity.status(HttpStatus.CREATED).body(federatedService.getFederationDetail(fed.getId()));
+    }
+
+    @PostMapping("/{id}/import-wallets")
+    @Operation(summary = "Isolated custody: import offline-generated dedicated per-player wallets (USDT ATAs)")
+    public ResponseEntity<java.util.Map<String, Integer>> importWallets(@PathVariable UUID id,
+            @Valid @RequestBody FederationWalletImportRequest request) {
+        assertEnabled();
+        int imported = federatedService.importPlayerWallets(id, request.wallets());
+        log.info("Admin imported {} dedicated wallet(s) into federation {}", imported, id);
+        return ResponseEntity.ok(java.util.Map.of("imported", imported));
+    }
+
+    @PostMapping("/{id}/reconcile-deposits")
+    @Operation(summary = "Isolated custody: poll dedicated wallets on-chain and seat players whose buy-in landed")
+    public ResponseEntity<java.util.Map<String, Integer>> reconcileDeposits(@PathVariable UUID id) {
+        assertEnabled();
+        int seated = federatedService.reconcileDeposits(id);
+        return ResponseEntity.ok(java.util.Map.of("seated", seated));
     }
 
     @GetMapping("/{id}")

@@ -49,15 +49,21 @@ public class PyramidFederationController {
     }
 
     @PostMapping("/{id}/register")
-    @Operation(summary = "Register the authenticated player into the federation (assigned to a shard)")
+    @Operation(summary = "Register the authenticated player (assigned to a shard, or a dedicated wallet if isolated)")
     public ResponseEntity<FederationRegistrationResponse> register(@PathVariable UUID id,
             @AuthenticationPrincipal UserDetails principal) {
         assertEnabled();
         User user = (User) principal;
-        PyramidFederationShard shard = federatedService.register(id, user.getId(), user.getUsername());
         FederationDetailResponse detail = federatedService.getFederationDetail(id);
+        if (detail.isolatedWalletsEnabled()) {
+            // Isolated custody: hand back the dedicated wallet to pay the buy-in into; not yet seated.
+            var wallet = federatedService.registerIsolated(id, user.getId(), user.getUsername());
+            return ResponseEntity.status(HttpStatus.CREATED).body(new FederationRegistrationResponse(
+                    id, user.getId(), -1, null, detail.status(), wallet.getAddress()));
+        }
+        PyramidFederationShard shard = federatedService.register(id, user.getId(), user.getUsername());
         return ResponseEntity.status(HttpStatus.CREATED).body(new FederationRegistrationResponse(
-                id, user.getId(), shard.getShardIndex(), shard.getStatus(), detail.status()));
+                id, user.getId(), shard.getShardIndex(), shard.getStatus(), detail.status(), null));
     }
 
     @GetMapping("/{id}")

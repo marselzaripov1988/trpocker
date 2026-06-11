@@ -34,5 +34,7 @@ public record FederationDetailResponse(
         /** Real-money config: the per-player buy-in and its asset, so the UI can show prize amounts in currency
          *  off the guaranteed pool ({@code shardCount × shardSize × buyIn}). Null/absent for play-money. */
         BigDecimal cryptoBuyInAmount,
-        CryptoAsset cryptoBuyInAsset) {
+        CryptoAsset cryptoBuyInAsset,
+        /** Isolated-custody variant: the buy-in is paid on-chain into a dedicated per-player wallet. */
+        boolean isolatedWalletsEnabled) {
 }

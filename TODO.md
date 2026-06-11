@@ -366,13 +366,15 @@ custody** (funds stay on the per-player wallets; the prize is consolidated from 
 winners — no central treasury); **full federated scale** (up to 1M wallets/tournament — cost accepted);
 **registration gated on a confirmed on-chain deposit**; **Solana-first** (reuses the USDT-Solana rails). Flag-gated
 NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
-- [~] **1. Foundation** — `isolatedWalletsEnabled` federation flag (+ `app.tournament.federated-isolated-wallets-enabled`,
+- [x] **1. Foundation** — `isolatedWalletsEnabled` federation flag (+ `app.tournament.federated-isolated-wallets-enabled`,
       USDT_SOL-only); `FederationPlayerWallet` entity/repo/pool (`FederationPlayerWalletService`: import/assign/
       confirmFunding) + Liquibase 30; `OfflineDepositPoolGenerator.generateFederationWallets` (offline ed25519 owner →
       USDT ATA per `fedwallet:<fedId>/<i>`); `FederatedPyramidService.registerIsolated` (assign a dedicated wallet,
       unseated/unconfirmed) + `confirmDeposit` (FUNDED + seat into a shard by fill order) + `reconcileDeposits` (poll
-      `SolanaRpcClient.getTokenAccountBalance`). Core verified on H2 (`FederationIsolatedWalletIT`). **Remaining in
-      this slice:** admin `import-wallets`/`reconcile-deposits` + player register dispatch (REST) + the on-validator IT.
+      `SolanaRpcClient.getTokenAccountBalance`). Admin `import-wallets`/`reconcile-deposits` + player register dispatch
+      (returns the dedicated deposit ATA). Verified on H2 (`FederationIsolatedWalletIT`) **and end-to-end on
+      `solana-test-validator`** (`FederationIsolatedWalletValidatorIT`: register → on-chain USDT deposit → reconcile
+      seats the player). Existing federated tests green.
 - [ ] **2. Fill/lifecycle** — only deposit-confirmed registrations fill shards / trigger start; no-show handling.
 - [ ] **3. Isolated settlement** (hard) — compute prize amounts (reuse `payPool`/`FederatedPrizeSplit`), assemble
       offline-signed Solana consolidation txs moving USDT from dedicated wallets → winners + house fee (multi-key

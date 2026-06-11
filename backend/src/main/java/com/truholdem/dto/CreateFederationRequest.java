@@ -28,5 +28,8 @@ public record CreateFederationRequest(
         boolean buyUpEnabled,
         @Min(value = 0, message = "Fee cannot be negative")
         @Max(value = 2000, message = "Fee cannot exceed 2000 bps (20%)")
-        Integer feeBasisPoints) {
+        Integer feeBasisPoints,
+        /** Isolated-custody variant: each player pays the buy-in on-chain into a dedicated per-player wallet
+         *  (requires a USDT_SOL buy-in + the federated-isolated-wallets-enabled flag). */
+        boolean isolatedWalletsEnabled) {
 }
