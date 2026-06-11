@@ -44,6 +44,7 @@ import com.truholdem.tools.OfflineDepositPoolGenerator;
         "app.payments.min-confirmations=1",
         "app.tournament.federated-pyramid-enabled=true",
         "app.tournament.federated-isolated-wallets-enabled=true",
+        "app.tournament.federated-isolated-deposit-window-minutes=0",
         "app.tournament.pyramid-default-seats-per-table=2",
         "app.tournament.pyramid-default-hands-per-round=1"
 })
@@ -123,6 +124,48 @@ class FederationIsolatedWalletIT {
         assertThat(federatedService.confirmDeposit(federationId, wallet.getAddress(), "tx", BUY_IN, 0)).isFalse();
         assertThat(federatedService.confirmDeposit(federationId, wallet.getAddress(), "tx",
                 new BigDecimal("4.99"), 1)).isFalse();
+    }
+
+    @Test
+    @DisplayName("only deposit-confirmed players are seated (fill); unconfirmed stay unseated")
+    void onlyConfirmedSeated() {
+        UUID paid = UUID.randomUUID();
+        UUID noShow = UUID.randomUUID();
+        FederationPlayerWallet paidWallet = federatedService.registerIsolated(federationId, paid, "Paid");
+        federatedService.registerIsolated(federationId, noShow, "NoShow");
+
+        federatedService.confirmDeposit(federationId, paidWallet.getAddress(), "tx", BUY_IN, 1);
+
+        var paidReg = registrationRepository.findByFederationIdAndPlayerId(federationId, paid).orElseThrow();
+        var noShowReg = registrationRepository.findByFederationIdAndPlayerId(federationId, noShow).orElseThrow();
+        assertThat(paidReg.getShardIndex()).isGreaterThanOrEqualTo(0);
+        assertThat(paidReg.isDepositConfirmed()).isTrue();
+        assertThat(noShowReg.getShardIndex()).isEqualTo(-1);     // never seated
+        assertThat(noShowReg.isDepositConfirmed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("release-no-shows frees an unfunded wallet + drops its pending registration; funded wallets stay")
+    void releaseNoShows() {
+        UUID noShow = UUID.randomUUID();
+        UUID paid = UUID.randomUUID();
+        FederationPlayerWallet noShowWallet = federatedService.registerIsolated(federationId, noShow, "NoShow");
+        FederationPlayerWallet paidWallet = federatedService.registerIsolated(federationId, paid, "Paid");
+        federatedService.confirmDeposit(federationId, paidWallet.getAddress(), "tx", BUY_IN, 1);
+
+        int released = federatedService.releaseNoShows(federationId);
+        assertThat(released).isEqualTo(1);
+
+        assertThat(walletRepository.findById(noShowWallet.getId()).orElseThrow().getStatus())
+                .isEqualTo(FederationWalletStatus.FREE);                       // back to the pool
+        assertThat(registrationRepository.findByFederationIdAndPlayerId(federationId, noShow)).isEmpty();
+        // The funded wallet + its seated registration are untouched.
+        assertThat(walletRepository.findById(paidWallet.getId()).orElseThrow().getStatus())
+                .isEqualTo(FederationWalletStatus.FUNDED);
+        assertThat(registrationRepository.findByFederationIdAndPlayerId(federationId, paid)).isPresent();
+
+        // The no-show can re-register and get a (free) wallet again.
+        assertThat(federatedService.registerIsolated(federationId, noShow, "NoShow").getAddress()).isNotBlank();
     }
 
     @Test

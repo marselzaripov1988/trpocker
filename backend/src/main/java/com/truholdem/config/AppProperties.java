@@ -1365,6 +1365,11 @@ public class AppProperties {
          *  wallet (Solana USDT). Off by default; requires {@code federatedPyramidEnabled}. */
         private boolean federatedIsolatedWalletsEnabled = false;
 
+        /** Isolated custody: how long an assigned-but-unfunded dedicated wallet is held before it can be
+         *  released as a no-show (back to the FREE pool). Default 30 minutes; 0 = release immediately. */
+        @Min(0)
+        private int federatedIsolatedDepositWindowMinutes = 30;
+
         public boolean isFederatedPyramidEnabled() {
             return federatedPyramidEnabled;
         }
@@ -1379,6 +1384,14 @@ public class AppProperties {
 
         public void setFederatedIsolatedWalletsEnabled(boolean federatedIsolatedWalletsEnabled) {
             this.federatedIsolatedWalletsEnabled = federatedIsolatedWalletsEnabled;
+        }
+
+        public int getFederatedIsolatedDepositWindowMinutes() {
+            return federatedIsolatedDepositWindowMinutes;
+        }
+
+        public void setFederatedIsolatedDepositWindowMinutes(int federatedIsolatedDepositWindowMinutes) {
+            this.federatedIsolatedDepositWindowMinutes = federatedIsolatedDepositWindowMinutes;
         }
 
         public int getFederatedDefaultShardSize() {

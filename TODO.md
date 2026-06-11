@@ -375,7 +375,14 @@ NEW variant — existing federated pyramids (off-chain `chargeBuyIn`) untouched.
       (returns the dedicated deposit ATA). Verified on H2 (`FederationIsolatedWalletIT`) **and end-to-end on
       `solana-test-validator`** (`FederationIsolatedWalletValidatorIT`: register → on-chain USDT deposit → reconcile
       seats the player). Existing federated tests green.
-- [ ] **2. Fill/lifecycle** — only deposit-confirmed registrations fill shards / trigger start; no-show handling.
+- [x] **2. Fill/lifecycle + no-show** — confirmed-only fill is already guaranteed (unconfirmed regs keep
+      `shardIndex = -1`, excluded from `findByFederationIdAndShardIndex`; `startShard` seeds via `registerPlayer`
+      with no re-charge since the buy-in is paid on-chain). Added **no-show release**:
+      `FederatedPyramidService.releaseNoShows` frees assigned-but-unfunded wallets past
+      `app.tournament.federated-isolated-deposit-window-minutes` back to the FREE pool and drops their pending
+      registrations (so the wallet is re-usable); funded wallets untouched. Admin `POST .../release-no-shows`.
+      Verified by `FederationIsolatedWalletIT` (only-confirmed-seated + release frees + re-register). Note: run
+      `reconcile-deposits` before `release-no-shows` so a genuine late deposit is seated, not released.
 - [ ] **3. Isolated settlement** (hard) — compute prize amounts (reuse `payPool`/`FederatedPrizeSplit`), assemble
       offline-signed Solana consolidation txs moving USDT from dedicated wallets → winners + house fee (multi-key
       per-source signing, batched under the 1232-byte tx limit; sources→payees assignment).

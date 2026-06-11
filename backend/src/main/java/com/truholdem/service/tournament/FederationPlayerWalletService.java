@@ -91,6 +91,13 @@ public class FederationPlayerWalletService {
         return java.util.Optional.of(wallet.getAssignedPlayerId());
     }
 
+    /** Release an assigned-but-unfunded wallet back to the FREE pool (a no-show). */
+    @Transactional
+    public void release(FederationPlayerWallet wallet) {
+        wallet.release();
+        repository.save(wallet);
+    }
+
     private static void requireValid(String address, String field) {
         if (address == null || address.length() > MAX_ADDRESS_LENGTH || !SolKeys.isValidAddress(address)) {
             throw new IllegalArgumentException("Invalid base58 " + field + ": " + address);

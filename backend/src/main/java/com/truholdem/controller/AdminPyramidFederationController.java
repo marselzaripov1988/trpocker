@@ -87,6 +87,14 @@ public class AdminPyramidFederationController {
         return ResponseEntity.ok(java.util.Map.of("seated", seated));
     }
 
+    @PostMapping("/{id}/release-no-shows")
+    @Operation(summary = "Isolated custody: release assigned-but-unfunded wallets (no-shows) past the deposit window")
+    public ResponseEntity<java.util.Map<String, Integer>> releaseNoShows(@PathVariable UUID id) {
+        assertEnabled();
+        int released = federatedService.releaseNoShows(id);
+        return ResponseEntity.ok(java.util.Map.of("released", released));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Federation detail: status, per-shard-status counts, champion")
     public ResponseEntity<FederationDetailResponse> get(@PathVariable UUID id) {

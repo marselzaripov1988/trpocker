@@ -357,6 +357,37 @@ public class FederatedPyramidService {
     }
 
     /**
+     * Release assigned-but-unfunded dedicated wallets older than the deposit window (no-shows) back to the FREE
+     * pool and drop their pending registrations, so the wallet can be re-used. Run {@link #reconcileDeposits}
+     * first so a genuine late deposit is seated rather than released. Returns the number released.
+     */
+    @Transactional
+    public int releaseNoShows(UUID federationId) {
+        PyramidFederation federation = requireFederation(federationId);
+        if (!federation.isIsolatedWalletsEnabled()) {
+            throw new IllegalStateException("Federation " + federationId + " is not an isolated-custody federation");
+        }
+        Instant cutoff = Instant.now().minus(
+                tournamentProperties.getFederatedIsolatedDepositWindowMinutes(), java.time.temporal.ChronoUnit.MINUTES);
+        int released = 0;
+        for (FederationPlayerWallet wallet : walletPoolService.assignedAwaitingDeposit(federationId)) {
+            if (wallet.getAssignedAt() == null || !wallet.getAssignedAt().isBefore(cutoff)) {
+                continue;
+            }
+            UUID playerId = wallet.getAssignedPlayerId();
+            walletPoolService.release(wallet);
+            registrationRepository.findByFederationIdAndPlayerId(federationId, playerId)
+                    .filter(reg -> !reg.isDepositConfirmed())
+                    .ifPresent(registrationRepository::delete);
+            released++;
+        }
+        if (released > 0) {
+            log.info("Federation {} — released {} no-show (unfunded) wallet(s)", federationId, released);
+        }
+        return released;
+    }
+
+    /**
      * Bulk-register {@code count} synthetic bot players (play-money federations only) for load tests and
      * simulations: fills shards in index order (flipping each full shard to READY and opening the next), in a
      * single batched insert rather than per-player. Returns the number actually placed (fewer if the

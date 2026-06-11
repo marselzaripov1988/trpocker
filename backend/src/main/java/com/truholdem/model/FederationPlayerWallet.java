@@ -114,6 +114,13 @@ public class FederationPlayerWallet {
         this.status = FederationWalletStatus.FUNDED;
     }
 
+    /** Release an assigned-but-unfunded wallet back to the FREE pool (a no-show whose buy-in never landed). */
+    public void release() {
+        this.assignedPlayerId = null;
+        this.assignedAt = null;
+        this.status = FederationWalletStatus.FREE;
+    }
+
     public UUID getId() {
         return id;
     }
@@ -144,6 +151,10 @@ public class FederationPlayerWallet {
 
     public UUID getAssignedPlayerId() {
         return assignedPlayerId;
+    }
+
+    public Instant getAssignedAt() {
+        return assignedAt;
     }
 
     public String getDepositTxId() {
