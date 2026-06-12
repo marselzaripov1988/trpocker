@@ -177,22 +177,42 @@ public final class OfflineDepositPoolGenerator {
      */
     public static int writeFederationWalletsChunked(byte[] seed, java.util.UUID federationId, String mintAddress,
             long total, int chunkSize, Path outDir) throws java.io.IOException {
-        if (total <= 0 || chunkSize <= 0) {
-            throw new IllegalArgumentException("total and chunkSize must be positive");
+        return writeFederationWalletsChunked(seed, federationId, mintAddress, 0L, total, chunkSize, outDir);
+    }
+
+    /**
+     * OFFLINE, SHARDED: write the wallets for indices {@code [fromIndex, fromIndex+count)} as chunked import
+     * files. Chunk files are named by their ABSOLUTE chunk number ({@code fromIndex/chunkSize}), so independent
+     * shards (e.g. one process per index range) can write into the same directory without colliding — enabling a
+     * trivially parallel 1M generation. {@code fromIndex} must be a multiple of {@code chunkSize}. The master
+     * secret ({@code fedwallets-secret.txt}) is written only by the shard at {@code fromIndex == 0} (all shards
+     * share one master seed). Returns the number of chunk files this shard wrote.
+     */
+    public static int writeFederationWalletsChunked(byte[] seed, java.util.UUID federationId, String mintAddress,
+            long fromIndex, long count, int chunkSize, Path outDir) throws java.io.IOException {
+        if (count <= 0 || chunkSize <= 0) {
+            throw new IllegalArgumentException("count and chunkSize must be positive");
+        }
+        if (fromIndex < 0 || fromIndex % chunkSize != 0) {
+            throw new IllegalArgumentException("fromIndex must be >= 0 and a multiple of chunkSize (got " + fromIndex
+                    + ", chunkSize " + chunkSize + ")");
         }
         ObjectMapper json = new ObjectMapper();
         Files.createDirectories(outDir);
-        Files.writeString(outDir.resolve("fedwallets-secret.txt"),
-                "seedHex=" + HexFormat.of().formatHex(seed) + System.lineSeparator()
-                        + "federationId=" + federationId + System.lineSeparator()
-                        + "mint=" + mintAddress + System.lineSeparator());
+        if (fromIndex == 0) {
+            Files.writeString(outDir.resolve("fedwallets-secret.txt"),
+                    "seedHex=" + HexFormat.of().formatHex(seed) + System.lineSeparator()
+                            + "federationId=" + federationId + System.lineSeparator()
+                            + "mint=" + mintAddress + System.lineSeparator());
+        }
         int chunks = 0;
-        for (long from = 0; from < total; from += chunkSize) {
-            int n = (int) Math.min(chunkSize, total - from);
+        long end = fromIndex + count;
+        for (long from = fromIndex; from < end; from += chunkSize) {
+            int n = (int) Math.min(chunkSize, end - from);
             List<FedWalletEntry> entries = generateFederationWallets(seed, federationId, from, n, mintAddress)
                     .stream().map(w -> new FedWalletEntry(w.index(), w.ownerPubkey(), w.address())).toList();
             json.writerWithDefaultPrettyPrinter().writeValue(
-                    outDir.resolve(String.format("fedwallets-import-%05d.json", chunks)).toFile(),
+                    outDir.resolve(String.format("fedwallets-import-%05d.json", from / chunkSize)).toFile(),
                     new FedWalletImportChunk(entries));
             chunks++;
         }
@@ -231,11 +251,20 @@ public final class OfflineDepositPoolGenerator {
             String mint = argValue(args, "--mint", SOL_USDT_MINT);
             long total = Long.parseLong(argValue(args, "--count", "1000"));
             int chunk = Integer.parseInt(argValue(args, "--chunk", "10000"));
+            long fromIndex = Long.parseLong(argValue(args, "--from-index", "0"));
+            // Sharded run: every shard must derive from the SAME master seed, so require an explicit --seed-hex
+            // (otherwise each process would roll its own random seed and produce a different, inconsistent pool).
+            if (fromIndex > 0 && seedHex == null) {
+                throw new IllegalArgumentException("Sharded generation (--from-index>0) requires --seed-hex so "
+                        + "every shard shares one master seed");
+            }
             int chunks = writeFederationWalletsChunked(
-                    seed, java.util.UUID.fromString(federationId), mint, total, chunk, outDir);
-            System.out.printf("Generated %d federation wallets in %d chunk file(s) under %s%n",
-                    total, chunks, outDir.toAbsolutePath());
-            System.out.printf("  fedwallets-secret.txt  -> KEEP OFFLINE (master seed + federation id)%n");
+                    seed, java.util.UUID.fromString(federationId), mint, fromIndex, total, chunk, outDir);
+            System.out.printf("Generated %d federation wallets [%d..%d) in %d chunk file(s) under %s%n",
+                    total, fromIndex, fromIndex + total, chunks, outDir.toAbsolutePath());
+            if (fromIndex == 0) {
+                System.out.printf("  fedwallets-secret.txt  -> KEEP OFFLINE (master seed + federation id)%n");
+            }
             System.out.printf("  fedwallets-import-*.json -> POST each to /admin/pyramid-federations/%s/import-wallets%n",
                     federationId);
             return;
