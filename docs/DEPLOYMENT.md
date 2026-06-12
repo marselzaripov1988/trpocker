@@ -217,6 +217,34 @@ support/DDoS; you self-manage the full stack:
 | [COIN.HOST](https://coin.host/ddos-protection/crypto) | Crypto + DDoS | Accepts BTC/USDT/ETH/…, 110% SLA-backed DDoS |
 | [OVHcloud](https://us.ovhcloud.com/security/game-ddos-protection/) | Pragmatic middle | Included game-tuned multi-Tbps anti-DDoS, bare metal **+ managed DBs/k8s**, mature global, generally gambling-tolerant — best ops-maturity/cost balance |
 
+### Comparison matrix
+
+Legend: ✓ yes · ~ partial/conditional · ✗ no · ? unconfirmed (verify with provider). Cells reflect public
+AUP/positioning at time of research — **confirm the licence-gate and crypto-payment columns directly.**
+
+| Provider | Gambling OK | No licence gate¹ | Pay in crypto | WS-safe DDoS² | Managed svcs³ | SLA / ops | iGaming compliance⁴ |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| FlokiNET | ✓ | ✓ | ✓ | ~? | ✗ | ~ | ✗ |
+| Cherry Servers | ~? | ✓ | ✓ | ~ | ~ | ✓ | ✗ |
+| COIN.HOST | ✓ | ✓ | ✓ | ✓ | ✗ | ✓ | ✗ |
+| OVHcloud | ~ | ~ | ✗ | ✓ | ✓ | ✓ | ~ |
+| NovoServe | ✓ | ~ | ? | ✓ | ✗ | ✓ | ~ |
+| Internet Vikings | ✓ | ✗ | ? | ✓ | ~ | ✓ | ✓ |
+| MassiveGRID | ✓ | ✗ | ? | ✓ | ✓ | ✓ | ✓ |
+| Continent 8 | ✓ | ✗ | ? | ✓ | ✓ | ✓ | ✓✓ |
+
+¹ **No licence gate** = the provider does not require proof of a gambling licence to onboard (per public
+AUP/positioning). This is **provider onboarding policy, not legality** — running real-money gambling without a
+licence is a legal risk regardless of host, and every provider still acts on court orders / abuse reports. The
+iGaming specialists are compliance-first and typically **expect a licence** (✗ here).
+² WebSocket-safe / game-aware DDoS scrubbing (not just volumetric L3/L4). ³ Managed Postgres/Redis/object
+storage/k8s vs self-run on bare metal. ⁴ Built-in regulated-market compliance (MGA/UKGC/JaaS).
+
+> **The matrix shows the core trade-off:** "no licence gate" (offshore/crypto hosts, top rows) and
+> "managed + SLA + iGaming compliance" (specialists, bottom rows) sit at **opposite ends** — you rarely get both.
+> Pick the row band that matches your licensing strategy; the air-gapped custody is what makes the top band
+> tolerable security-wise.
+
 **Protection layer (pair with any host).** [Cloudflare Spectrum / Magic Transit](https://www.cloudflare.com/)
 (WebSocket-safe L4/L7 DDoS + proxy) or **Path.net** decouple DDoS quality from the host — useful if you otherwise
 prefer a cheaper/offshore box. Validate WebSocket pass-through + added latency.
