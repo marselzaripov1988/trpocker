@@ -66,6 +66,7 @@ class OfflineFederationWalletGenTest {
 
         FedWalletImportChunk first = new ObjectMapper().readValue(
                 dir.resolve("fedwallets-import-00000.json").toFile(), FedWalletImportChunk.class);
+        assertThat(first.federationId()).isEqualTo(FED.toString()); // file self-documents its tournament
         assertThat(first.wallets()).hasSize(10);
         assertThat(first.wallets().get(0).derivationIndex()).isZero();
         assertThat(first.wallets().get(9).derivationIndex()).isEqualTo(9L);

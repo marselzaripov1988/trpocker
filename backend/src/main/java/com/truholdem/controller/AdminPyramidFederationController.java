@@ -99,6 +99,12 @@ public class AdminPyramidFederationController {
     public ResponseEntity<java.util.Map<String, Integer>> importWallets(@PathVariable UUID id,
             @Valid @RequestBody FederationWalletImportRequest request) {
         assertEnabled();
+        // Guard against importing a chunk generated for a different tournament (the file declares its own id).
+        if (request.federationId() != null && !request.federationId().isBlank()
+                && !request.federationId().equals(id.toString())) {
+            throw new IllegalArgumentException("These wallets belong to federation " + request.federationId()
+                    + ", not " + id);
+        }
         int imported = federatedService.importPlayerWallets(id, request.wallets());
         log.info("Admin imported {} dedicated wallet(s) into federation {}", imported, id);
         return ResponseEntity.ok(java.util.Map.of("imported", imported));

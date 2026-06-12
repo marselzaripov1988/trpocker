@@ -165,8 +165,9 @@ public final class OfflineDepositPoolGenerator {
     public record FedWalletEntry(long derivationIndex, String ownerPubkey, String address) {
     }
 
-    /** A chunk of import entries, matching the admin import body {@code {"wallets":[...]}}. */
-    public record FedWalletImportChunk(List<FedWalletEntry> wallets) {
+    /** A chunk of import entries, matching the admin import body. Carries the {@code federationId} so the file
+     *  self-documents which tournament it belongs to (and the server can reject a mismatched import). */
+    public record FedWalletImportChunk(String federationId, List<FedWalletEntry> wallets) {
     }
 
     /**
@@ -213,7 +214,7 @@ public final class OfflineDepositPoolGenerator {
                     .stream().map(w -> new FedWalletEntry(w.index(), w.ownerPubkey(), w.address())).toList();
             json.writerWithDefaultPrettyPrinter().writeValue(
                     outDir.resolve(String.format("fedwallets-import-%05d.json", from / chunkSize)).toFile(),
-                    new FedWalletImportChunk(entries));
+                    new FedWalletImportChunk(federationId.toString(), entries));
             chunks++;
         }
         return chunks;

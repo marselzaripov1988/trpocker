@@ -213,9 +213,11 @@ export class IsolatedCustodyPanelComponent implements OnInit {
 
   importWallets(): void {
     let entries: unknown;
+    let fileFederationId: string | undefined;
     try {
       const parsed = JSON.parse(this.walletsJson);
       entries = Array.isArray(parsed) ? parsed : parsed?.wallets;
+      fileFederationId = Array.isArray(parsed) ? undefined : parsed?.federationId;
     } catch {
       this.errorHandler.addError('Invalid JSON', 'Paste a chunk file or a bare wallet array.');
       return;
@@ -224,7 +226,9 @@ export class IsolatedCustodyPanelComponent implements OnInit {
       this.errorHandler.addError('No wallets found', 'Expected { "wallets": [...] } or a non-empty array.');
       return;
     }
-    this.run('import wallets', this.service.importWallets(this.federation.id, entries as WalletImportEntry[]), true);
+    // Forward the chunk's declared federationId so the server rejects a chunk from another tournament.
+    this.run('import wallets',
+      this.service.importWallets(this.federation.id, entries as WalletImportEntry[], fileFederationId), true);
   }
 
   reconcileDeposits(): void {

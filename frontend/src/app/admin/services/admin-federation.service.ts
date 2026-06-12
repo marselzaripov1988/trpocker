@@ -64,9 +64,10 @@ export class AdminFederationService {
     return this.http.get<FederationWalletStats>(`${this.url}/${id}/wallet-stats`);
   }
 
-  /** Import a chunk of offline-generated dedicated wallets (idempotent); returns the inserted count. */
-  importWallets(id: string, wallets: WalletImportEntry[]): Observable<{ imported: number }> {
-    return this.http.post<{ imported: number }>(`${this.url}/${id}/import-wallets`, { wallets });
+  /** Import a chunk of offline-generated dedicated wallets (idempotent); returns the inserted count. The chunk's
+   *  own `federationId` (if present) is forwarded so the server can reject a chunk from another tournament. */
+  importWallets(id: string, wallets: WalletImportEntry[], federationId?: string): Observable<{ imported: number }> {
+    return this.http.post<{ imported: number }>(`${this.url}/${id}/import-wallets`, { federationId, wallets });
   }
 
   /** Poll dedicated wallets on-chain and seat players whose buy-in landed; returns the seated count. */
