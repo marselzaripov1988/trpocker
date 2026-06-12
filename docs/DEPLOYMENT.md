@@ -9,6 +9,7 @@ Production deployment and operations guide for the TruHoldem poker platform.
 - [Quick Start](#quick-start)
 - [Development Setup](#development-setup)
 - [Docker Deployment](#docker-deployment)
+- [Hosting provider selection](#hosting-provider-selection)
 - [Production Configuration](#production-configuration)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Monitoring & Observability](#monitoring--observability)
@@ -167,6 +168,84 @@ healthcheck:
   retries: 3
   start_period: 60s
 ```
+
+---
+
+## Hosting provider selection
+
+Real-money **crypto** poker is an unusual hosting workload: mainstream clouds (AWS/GCP/Azure) routinely suspend
+gambling and crypto businesses per ToS, the platform is a prime DDoS-extortion target, it is WebSocket-heavy and
+latency-sensitive, and tournaments are bursty (federated pyramids scale toward 1M players). One mitigating factor:
+**signing is offline / air-gapped** (see [ISOLATED_CUSTODY_FEDERATION.md](ISOLATED_CUSTODY_FEDERATION.md) §0), so
+the production host is **watch-only and never holds hot keys** — which lowers the trust you must place in any host
+and makes smaller providers viable.
+
+### Selection criteria (weighted for this platform)
+
+| Need | Why it matters here | Bar |
+|---|---|---|
+| Gambling + crypto ToS tolerance | Don't get deplatformed mid-tournament; hosting must be paid in crypto if desired | Hard requirement |
+| DDoS: **L7 + WebSocket-safe + always-on** | Poker is heavily targeted; long-lived WS connections + latency-sensitive action timers | Hard requirement; validate live |
+| Managed stateful services *or* capacity to self-run | Code needs Postgres HA/PITR, Redis cluster, S3/MinIO (KYC), k8s (`k8s/pyramid-10k`) | Decide build-vs-buy explicitly |
+| Elastic / burst headroom | Tournament spikes (`pyramid-10k` → 1M) vs fixed dedicated capacity | Overprovision or autoscale |
+| SLA + 24/7 ops | It moves player funds; downtime = disputes + lost money | ≥99.9%, real response SLA |
+| Jurisdiction + KYC data residency | Encrypted KYC video/docs stored; EEA = GDPR | Match licence + GDPR |
+| Latency to player geography | WS action timers; scrubbing adds latency | Test from target regions |
+
+> **Hosting ≠ a gambling licence.** Offshore hosting does not legalise real-money poker — a licence
+> (Curaçao / Anjouan / Kahnawake / MGA / etc.) is the gating legal step and drives KYC/AML obligations and where
+> you may operate. Decide the licence route first; it constrains the host more than the reverse.
+
+### Candidate providers (better-fit than a generic privacy host)
+
+**Route A — licensed/regulated operator (recommended for real-money at scale).** iGaming-specialist *managed*
+hosts that fill the gaps a privacy host leaves (managed services, real SLAs, game-aware DDoS, compliance):
+
+| Provider | Fit | Notes |
+|---|---|---|
+| [Continent 8](https://www.continent8.com/) | Premium, compliance-first | Purpose-built iGaming, 100+ locations/4 continents, WAAP + DDoS, **Jurisdiction-as-a-Service** / regulated cloud, 25+ yrs |
+| [MassiveGRID](https://massivegrid.com/igaming-gambling-managed-hosting/) | Managed + SLA | MGA/UKGC compliance, **10+ Tbps** DDoS with iGaming traffic profiling, 100% uptime SLA |
+| [Internet Vikings](https://internetvikings.com/) | Regulated markets (esp. US) | Cloudflare DDoS (claimed 230+ Tbps), bare metal across continents |
+| [NovoServe](https://novoserve.com/igaming) | Bare-metal iGaming | Multi-Tbps in-house *game-aware* scrubbing, EU/US |
+
+**Route B — crypto-native / offshore (FlokiNET-style, but stronger ops).** Crypto-paying bare metal with better
+support/DDoS; you self-manage the full stack:
+
+| Provider | Fit | Notes |
+|---|---|---|
+| [Cherry Servers](https://www.cherryservers.com/blog/dedicated-servers-with-ddos-protection) | Crypto-native bare metal | 15+ coins, DDoS, **24/7 human support** + dedicated manager — "FlokiNET with better ops" |
+| [COIN.HOST](https://coin.host/ddos-protection/crypto) | Crypto + DDoS | Accepts BTC/USDT/ETH/…, 110% SLA-backed DDoS |
+| [OVHcloud](https://us.ovhcloud.com/security/game-ddos-protection/) | Pragmatic middle | Included game-tuned multi-Tbps anti-DDoS, bare metal **+ managed DBs/k8s**, mature global, generally gambling-tolerant — best ops-maturity/cost balance |
+
+**Protection layer (pair with any host).** [Cloudflare Spectrum / Magic Transit](https://www.cloudflare.com/)
+(WebSocket-safe L4/L7 DDoS + proxy) or **Path.net** decouple DDoS quality from the host — useful if you otherwise
+prefer a cheaper/offshore box. Validate WebSocket pass-through + added latency.
+
+### Worked example — FlokiNET (flokinet.is)
+
+Viable for the **crypto / offshore / gambling** model: AUP doesn't prohibit gambling, accepts crypto (BTC/XMR/…),
+anti-DDoS included (separate "1Tbps+" tier), privacy jurisdictions (Iceland/NL/Finland/Romania); and the air-gapped
+custody means it never holds keys. **Gaps:** no managed services (you self-run Postgres/Redis/MinIO/k8s), no
+autoscale for tournament bursts, thinner SLA/support (Signal/Threema/email), and DDoS efficacy + WebSocket-safety
+are **unverified**. Verdict: usable for the **stateful core + strict DR**, but validate DDoS/SLA live and put a
+WebSocket-safe scrubbing layer in front.
+
+### Decision guide
+
+- **Licensed real-money at scale** → iGaming specialist (Continent 8 / MassiveGRID / Internet Vikings / NovoServe).
+- **Crypto-offshore + cost, willing to self-manage** → Cherry Servers / COIN.HOST / OVH, fronted by Cloudflare Spectrum.
+- **Always:** licence first · never single-home a money platform (multi-DC or second provider for DR) ·
+  load-test (`load/k6` + a tournament simulation) against a trial box before migrating.
+
+> Vendor Tbps/uptime figures are **marketing** — validate scrubbing capacity, L7/WebSocket behaviour, always-on vs
+> on-demand, and added latency yourself before committing.
+
+**Sources:** [iGaming hosting guide (RedSwitches)](https://www.redswitches.com/blog/best-igaming-server-hosting-providers/) ·
+[Online casino hosting (HostAdvice)](https://hostadvice.com/offshore-hosting/online-casino-hosting/) ·
+[Continent 8](https://www.continent8.com/) · [MassiveGRID](https://massivegrid.com/igaming-gambling-managed-hosting/) ·
+[Internet Vikings](https://internetvikings.com/) · [NovoServe](https://novoserve.com/igaming) ·
+[Cherry Servers — DDoS dedicated](https://www.cherryservers.com/blog/dedicated-servers-with-ddos-protection) ·
+[COIN.HOST](https://coin.host/ddos-protection/crypto) · [OVHcloud game DDoS](https://us.ovhcloud.com/security/game-ddos-protection/).
 
 ---
 
