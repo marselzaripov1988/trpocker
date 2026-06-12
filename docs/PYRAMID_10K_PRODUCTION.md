@@ -124,6 +124,29 @@ route (OVH vRack + Managed Kubernetes/DB; Continent 8 / MassiveGRID IaaS).
 > The 1M federated tier is **not** this cluster — it scales by adding node-groups. Price the "+1 node-group" unit
 > so you can model tournament-day capacity, not just the 10 k baseline.
 
+### Sizing by shard size
+
+Hardware is driven by the **peak concurrent WebSocket count = the round-1 player count** (the memory + file-descriptor
+bottleneck). The **number of rounds does not change the fleet** — it only changes duration (more rounds × 3 hands =
+longer). So size the farm to the shard size, not to how deep the pyramid goes.
+
+**Rule of thumb:** ~**1 backend node per ~1 250–2 000 concurrent players** + one PostgreSQL + one Redis + an LB,
+with HA minimums (always ≥ 2 backend, a PG primary, a Redis). PG/Redis scale ~linearly with the peak.
+
+| Shard (peak WS) | Pyramid shape | Backend | PostgreSQL | Redis | LB/ops | ~ nodes | ~ $/mo (OVH-class) |
+|---|---|---|---|---|---|:--:|---|
+| **1 000** | 10³ (3 rounds @ 10) | 2 × (8c/16 GB) *(2nd = HA)* | 1 × (8–16c / 32–64 GB), replica opt. | 1 × 8 GB (or co-res) | folded | **2–3** | **$200–400** |
+| **6 561** | 9⁴ (4 rounds @ 9) or 3⁸ (8 @ 3) | 5 × (8c/16 GB) **or** 3 × (16c/48 GB)×2 JVM | 1 × (16–24c / 64–96 GB) + opt. replica | 4 × 8 GB | 1 edge + folded ops | **5–6** | **$600–1 000** |
+| **10 000** | ≈10⁴ (4 rounds @ 10) | 8 × (8c/16 GB) | 32c / 128 GB + replica | 6 × 8 GB | edge + infra | **8** | **$1 000–1 500** |
+
+Smaller shards are the **hardware ↔ shard-count ↔ duration** lever: a 1 000-shard farm is cheap but a 1M field is
+**1 000 shards** of 3 rounds each; a 10 000-shard farm costs more but it's only **100 shards** of 4 rounds. 6 561 is
+a clean middle (perfect power → pyramids to 1; 1M ≈ 153 shards). Round count affects only the **per-shard time**
+(4 rounds ≈ 1–2 h at human pace, `pyramidDefaultHandsPerRound=3`, 30 s/action; bots ≈ seconds).
+
+> Figures are an engineering starting point from the ~1–2 MB/WS, 8–16 GB heap per 2–3 k connections heuristic above.
+> The real "WS per node" ceiling is confirmed only by a WebSocket load test (`load/k6`), not on paper.
+
 ---
 
 ## Docker Compose (lab / staging)
