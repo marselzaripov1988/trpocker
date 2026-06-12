@@ -77,16 +77,38 @@ on-chain она бы разрушилась (связываемость), поэ
 ## 4. Генерация и импорт выделенных кошельков
 
 ### 4.1 Офлайн-генерация (на air-gapped машине)
-Инструмент `OfflineDepositPoolGenerator` (режим `--federation-id`) детерминированно выводит кошельки **по
-абсолютному индексу** и пишет их чанками, не держа всё поле в памяти:
+Инструмент — main-класс `com.truholdem.tools.OfflineDepositPoolGenerator` (в test-исходниках). Режим
+`--federation-id=…` детерминированно выводит кошельки **по абсолютному индексу** и пишет их чанками, не держа
+всё поле в памяти. Аргументы в формате **`--ключ=значение`**:
+
+| Аргумент | Значение | По умолчанию |
+|---|---|---|
+| `--federation-id=<UUID>` | id турнира (берётся из ответа на создание, §3) | — (обязателен) |
+| `--count=<N>` | сколько кошельков сгенерировать | `1000` |
+| `--chunk=<размер>` | размер чанк-файла | `10000` |
+| `--mint=<base58>` | mint USDT в Solana | mainnet USDT |
+| `--out-dir=<папка>` | куда писать файлы | `.` |
+| `--seed-hex=<64 hex>` | мастер-seed (если задан — детерминированно; иначе случайный 32-байтовый) | случайный |
+
+Запуск (нет exec-плагина — через classpath; PowerShell/Windows):
+```powershell
+cd backend
+.\mvnw -q test-compile
+.\mvnw -q org.apache.maven.plugins:maven-dependency-plugin:build-classpath "-Dmdep.outputFile=cp.txt"
+java -cp "target/test-classes;target/classes;$(Get-Content cp.txt)" `
+  com.truholdem.tools.OfflineDepositPoolGenerator `
+  --federation-id=<UUID> --count=100000 --chunk=10000 --out-dir=out
 ```
---federation-id <UUID> --mint <USDT_MINT> --count <N> --chunk <размер_чанка> --out <папка>
-```
-На выходе:
-- `fedwallets-import-00000.json`, `...-00001.json`, … — **публичные** записи `{ wallets: [ {derivationIndex,
-  ownerPubkey, address} ] }`, готовые к импорту;
-- `fedwallets-secret.txt` — seed + fedId + mint. **Остаётся ТОЛЬКО на офлайн-машине** (по нему позже
-  переподписываются ATA/рефанды). На сервер не загружается.
+
+На выходе в `--out-dir`:
+- `fedwallets-import-00000.json`, `…-00001.json`, … — **публичные** записи
+  `{ "wallets": [ {derivationIndex, ownerPubkey, address} ] }`, готовые к импорту (§4.2);
+- `fedwallets-secret.txt` — `seedHex` + `federationId` + `mint`. **Остаётся ТОЛЬКО на офлайн-машине** (по нему
+  позже переподписываются ATA/рефанды через `federationWalletSeed(seed, fedId, index)`). На сервер не
+  загружается, в репозиторий не коммитится.
+
+> Приватные ключи как таковые на диск не пишутся: хранится мастер-seed, а ключ кошелька #i выводится из
+> `(seed, federationId, i)` офлайн по требованию. Достаточно сохранить `fedwallets-secret.txt`.
 
 Масштаб: для 1M кошельков генерируйте чанками (напр. по 10 000) — память ограничена одним чанком.
 
