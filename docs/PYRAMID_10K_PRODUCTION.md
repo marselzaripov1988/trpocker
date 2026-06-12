@@ -58,6 +58,74 @@ Guide for running a **real-player** pyramid tournament (`10 000 → 1 000 �
 
 ---
 
+## Reference cluster topology (for provider price comparison)
+
+Maps the **Recommended (10 000-player)** sizing onto **physical servers** so providers can be quoted
+apples-to-apples. Pick the shape that matches your hosting route (see
+[DEPLOYMENT.md → Hosting provider selection](DEPLOYMENT.md#hosting-provider-selection)). The signer is
+**air-gapped and off-cluster** — none of these nodes hold private keys.
+
+> Heads-up: "8 servers" in the compose file is only the **app tier** (`--scale backend=8`). A self-managed
+> cluster also needs DB, Redis, LB and ops nodes, so the real box count is higher unless you take managed
+> services (variant C).
+
+### A) Packed — exactly 8 dedicated servers (offshore/crypto route, self-managed, min box count)
+
+Consolidates roles to hit 8 boxes; less blast-radius isolation. Workable for launch / cost-sensitive.
+
+| # | Node | Specs | Runs |
+|---|------|-------|------|
+| 1 | `edge-1` | 8 vCPU / 16 GB / ≥1 Gbps | LB (HAProxy/Traefik, **WS-sticky**) + TLS + frontend origin |
+| 2–5 | `app-1..4` | 16 vCPU / 32 GB / NVMe | **2× backend each = 8 instances** + PgBouncer; one Redis node co-resident |
+| 6 | `db-1` | 32 vCPU / 128 GB / 2×NVMe RAID1 | PostgreSQL **primary** |
+| 7 | `db-2` | 16 vCPU / 64 GB / NVMe | PostgreSQL **replica** + backup target |
+| 8 | `infra-1` | 8 vCPU / 32 GB / NVMe | Redis cluster anchor + Prometheus/Grafana + MinIO (KYC) |
+
+Redis = 6-node cluster spread across `app-1..4` + `infra-1` (+`edge-1`). **Trade-off:** Redis/LB co-resident with
+app → a node loss hits more than one role. Needs a private VLAN; DDoS in front of `edge-1`.
+
+### B) Clean — isolated roles (~14–16 dedicated servers, self-managed, recommended for go-live)
+
+| Role | Count | Per-node specs |
+|------|:--:|---|
+| LB / edge (HA pair) | 2 | 8 vCPU / 16 GB |
+| Backend app | 8 | 8 vCPU / 16 GB |
+| PostgreSQL (primary + replica) | 2 | 32/128 + 16/64, NVMe |
+| Redis cluster | 3 | 8 vCPU / 16 GB (3 master + co-resident replicas) |
+| Ops (Prometheus/Grafana + PgBouncer + backups + MinIO) | 1 | 8 vCPU / 32 GB |
+
+≈ **16 nodes**, best isolation/HA. This is the bare-metal/colocation target for FlokiNET/AbeloHost/Cherry Servers.
+
+### C) Managed — fewest self-run boxes (OVH / iGaming specialist)
+
+| Component | What you rent | You manage? |
+|-----------|---------------|:--:|
+| Backend app | 8 compute nodes **or** a managed-k8s pool (≈64 vCPU / 128 GB total) | pods only |
+| PostgreSQL | Managed PG (32 vCPU / 128 GB + read replica) | ✗ |
+| Redis | Managed Redis cluster (≥48 GB) | ✗ |
+| Load balancer | Managed **WS-aware** LB (1 public VIP) | ✗ |
+| DDoS / WAAP | Included | ✗ |
+| Object storage | Managed S3-compatible (KYC docs) | ✗ |
+
+You operate ~**8 compute nodes**; DB/Redis/LB/storage are managed → fewest moving parts. Best for the licensed
+route (OVH vRack + Managed Kubernetes/DB; Continent 8 / MassiveGRID IaaS).
+
+### Quote checklist (paste to each provider for apples-to-apples pricing)
+
+- **N nodes** with the specs above, **all in one datacenter**.
+- **Private L2/VLAN** across all nodes, intra-cluster latency target **< 1 ms** (Redis pub/sub, PG replication, WS cluster).
+- **WebSocket-aware load balancer** (managed, or capacity to run HAProxy) — 1 public VIP, sticky sessions ≥ 3 h.
+- **Always-on DDoS (L3/4 + L7)** — confirm **WebSocket pass-through** and **added latency** under scrubbing.
+- **NVMe** on DB nodes (RAID1 on primary); daily snapshot/backup target + egress allowance.
+- **Bandwidth:** ≥ 1 Gbps/node + monthly transfer allowance (10 k WS is light on bytes but bursty).
+- **Burst/headroom:** for federated tournaments → quote the unit price to **add an 8-node node-group** on demand
+  (1M-player federations shard horizontally across node-groups, pinned round-robin).
+
+> The 1M federated tier is **not** this cluster — it scales by adding node-groups. Price the "+1 node-group" unit
+> so you can model tournament-day capacity, not just the 10 k baseline.
+
+---
+
 ## Docker Compose (lab / staging)
 
 Files:
