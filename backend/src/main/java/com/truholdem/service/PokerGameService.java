@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.truholdem.domain.value.PotMath;
 import com.truholdem.dto.ShowdownResult;
 import com.truholdem.dto.ShowdownResult.WinnerInfo;
 import com.truholdem.model.Card;
@@ -1191,65 +1192,15 @@ public class PokerGameService {
     }
 
     private List<PotInfo> calculatePots(Game game) {
-        List<Player> playersInHand = game.getPlayersStillInHand();
-
-        List<Integer> allInAmounts = playersInHand.stream()
-                .filter(Player::isAllIn)
-                .map(Player::getTotalBetInRound)
-                .distinct()
-                .sorted()
+        // Side-pot math lives in the shared PotMath (single source of truth with the aggregate engine). Pot
+        // amounts include folded players' dead money; eligibility is limited to players still in the hand.
+        List<PotMath.Contribution> contributions = game.getPlayers().stream()
+                .map(p -> new PotMath.Contribution(
+                        p.getId(), p.getTotalBetInRound(), p.isFolded(), p.isAllIn()))
                 .toList();
-
-        if (allInAmounts.isEmpty()) {
-
-            List<UUID> eligibleIds = playersInHand.stream()
-                    .map(Player::getId)
-                    .toList();
-            return List.of(new PotInfo(game.getCurrentPot(), eligibleIds));
-        }
-
-        List<PotInfo> pots = new ArrayList<>();
-        int previousLevel = 0;
-
-        for (int level : allInAmounts) {
-            int potAmount = 0;
-            List<UUID> eligibleIds = new ArrayList<>();
-
-            for (Player p : playersInHand) {
-                int contribution = Math.min(p.getTotalBetInRound(), level) - previousLevel;
-                if (contribution > 0) {
-                    potAmount += contribution;
-                }
-                if (p.getTotalBetInRound() >= level) {
-                    eligibleIds.add(p.getId());
-                }
-            }
-
-            if (potAmount > 0) {
-                pots.add(new PotInfo(potAmount, eligibleIds));
-            }
-            previousLevel = level;
-        }
-
-        int maxAllIn = allInAmounts.get(allInAmounts.size() - 1);
-        int mainPotAmount = 0;
-        List<UUID> mainPotEligible = new ArrayList<>();
-
-        for (Player p : playersInHand) {
-            int extraContribution = p.getTotalBetInRound() - maxAllIn;
-            if (extraContribution > 0) {
-                mainPotAmount += extraContribution;
-                mainPotEligible.add(p.getId());
-            } else if (p.getTotalBetInRound() >= maxAllIn) {
-                mainPotEligible.add(p.getId());
-            }
-        }
-
-        if (mainPotAmount > 0 && !mainPotEligible.isEmpty()) {
-            pots.add(new PotInfo(mainPotAmount, mainPotEligible));
-        }
-
-        return pots;
+        return PotMath.calculate(contributions, game.getCurrentPot()).stream()
+                .map(pot -> new PotInfo(pot.amount(), pot.eligiblePlayerIds()))
+                .toList();
     }
 
     private Map<Player, HandRanking> evaluateHands(List<Player> players, List<Card> communityCards) {

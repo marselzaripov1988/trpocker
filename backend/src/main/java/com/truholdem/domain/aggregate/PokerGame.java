@@ -7,6 +7,7 @@ import com.truholdem.domain.exception.PlayerNotFoundException;
 import com.truholdem.domain.value.Chips;
 import com.truholdem.domain.value.HandRanker;
 import com.truholdem.domain.value.Pot;
+import com.truholdem.domain.value.PotMath;
 import com.truholdem.model.*;
 
 import java.time.Duration;
@@ -958,7 +959,7 @@ public class PokerGame {
 
     
     private List<HandCompleted.PotResult> distributePots(List<Player> playersInHand) {
-        List<PotShare> pots = calculateSidePots(playersInHand);
+        List<PotShare> pots = calculateSidePots();
         List<HandCompleted.PotResult> results = new ArrayList<>();
 
         List<UUID> allWinnerIds = new ArrayList<>();
@@ -1029,59 +1030,18 @@ public class PokerGame {
     }
 
     
-    private List<PotShare> calculateSidePots(List<Player> playersInHand) {
-        List<Integer> allInLevels = playersInHand.stream()
-                .filter(Player::isAllIn)
-                .map(Player::getTotalBetInRound)
-                .distinct()
-                .sorted()
+    private List<PotShare> calculateSidePots() {
+        // Side-pot math lives in the shared PotMath (single source of truth with the legacy engine). Amounts
+        // include folded players' dead money; eligibility is limited to players still in the hand.
+        List<PotMath.Contribution> contributions = players.stream()
+                .map(p -> new PotMath.Contribution(
+                        p.getId(), p.getTotalBetInRound(), p.isFolded(), p.isAllIn()))
                 .collect(Collectors.toList());
-
+        List<PotMath.Pot> computed = PotMath.calculate(contributions, potAmount);
         List<PotShare> pots = new ArrayList<>();
-
-        if (allInLevels.isEmpty()) {
-            List<UUID> eligibleIds = playersInHand.stream()
-                    .map(Player::getId)
-                    .collect(Collectors.toList());
-            pots.add(new PotShare(potAmount, eligibleIds, false));
-            return pots;
+        for (int i = 0; i < computed.size(); i++) {
+            pots.add(new PotShare(computed.get(i).amount(), computed.get(i).eligiblePlayerIds(), i > 0));
         }
-
-        int previousLevel = 0;
-        for (int level : allInLevels) {
-            int amount = 0;
-            List<UUID> eligibleIds = new ArrayList<>();
-            for (Player p : playersInHand) {
-                int contribution = Math.min(p.getTotalBetInRound(), level) - previousLevel;
-                if (contribution > 0) {
-                    amount += contribution;
-                }
-                if (p.getTotalBetInRound() >= level) {
-                    eligibleIds.add(p.getId());
-                }
-            }
-            if (amount > 0) {
-                pots.add(new PotShare(amount, eligibleIds, !pots.isEmpty()));
-            }
-            previousLevel = level;
-        }
-
-        int maxAllIn = allInLevels.get(allInLevels.size() - 1);
-        int topPotAmount = 0;
-        List<UUID> topPotEligible = new ArrayList<>();
-        for (Player p : playersInHand) {
-            int extraContribution = p.getTotalBetInRound() - maxAllIn;
-            if (extraContribution > 0) {
-                topPotAmount += extraContribution;
-                topPotEligible.add(p.getId());
-            } else if (p.getTotalBetInRound() >= maxAllIn) {
-                topPotEligible.add(p.getId());
-            }
-        }
-        if (topPotAmount > 0 && !topPotEligible.isEmpty()) {
-            pots.add(new PotShare(topPotAmount, topPotEligible, !pots.isEmpty()));
-        }
-
         return pots;
     }
 
